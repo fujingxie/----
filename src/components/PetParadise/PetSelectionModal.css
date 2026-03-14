@@ -1,0 +1,98 @@
+.pet-selection-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.pet-selection-container .subtitle {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.pet-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 25px;
+  max-height: 250px;
+  overflow-y: auto;
+  padding: 5px;
+}
+
+.pet-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid transparent;
+}
+
+.pet-option:hover {
+  background: rgba(0,0,0,0.03);
+}
+
+.pet-option.active {
+  background: white;
+  border-color: var(--accent-mint);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+}
+
+.pet-icon-wrapper {
+  width: 50px;
+  height: 50px;
+  background: rgba(0,0,0,0.02);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pet-icon-wrapper img {
+  width: 32px;
+}
+
+.pet-option span {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pet-naming-section {
+  margin-bottom: 20px;
+}
+
+.pet-naming-section label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.confirm-activation-btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: none;
+  background: var(--accent-mint);
+  color: white;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.confirm-activation-btn:disabled {
+  background: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.confirm-activation-btn:not(:disabled):hover {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+}

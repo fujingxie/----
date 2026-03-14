@@ -1,0 +1,55 @@
+import React, { useState } from 'react';
+import Modal from '../Common/Modal';
+import './InteractionModal.css';
+
+const InteractionModal = ({ isOpen, onClose, student, onInteract, rules = [] }) => {
+  const [activeType, setActiveType] = useState('positive'); // positive, negative
+
+  const filteredRules = rules.filter(r => r.type === activeType);
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={`对 ${student?.name} 的宠物进行互动`}>
+      <div className="interaction-container">
+        <div className="interaction-tabs">
+          <button 
+            className={activeType === 'positive' ? 'active' : ''} 
+            onClick={() => setActiveType('positive')}
+          >
+            表现活跃
+          </button>
+          <button 
+            className={activeType === 'negative' ? 'active negative' : ''} 
+            onClick={() => setActiveType('negative')}
+          >
+            需要改进
+          </button>
+        </div>
+
+        <div className="rules-grid">
+          {filteredRules.length === 0 ? (
+            <p className="empty-hint">暂无此类规则，请在系统设置中添加</p>
+          ) : (
+            filteredRules.map(rule => (
+              <div 
+                key={rule.id} 
+                className={`rule-card ${activeType}`}
+                onClick={() => onInteract(rule)}
+              >
+                <div className="rule-icon">{rule.icon}</div>
+                <div className="rule-info">
+                  <span className="rule-name">{rule.name}</span>
+                  <div className="rule-changes">
+                    <span className="exp-change">{rule.exp > 0 ? `+${rule.exp}` : rule.exp} EXP</span>
+                    <span className="coin-change">{rule.coins > 0 ? `+${rule.coins}` : rule.coins} 金币</span>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+export default InteractionModal;

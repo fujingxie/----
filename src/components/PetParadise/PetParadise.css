@@ -1,0 +1,83 @@
+.pet-paradise-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 25px;
+  width: 100%;
+  padding: 20px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: 50px;
+  text-align: center;
+}
+
+.empty-illustration {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+
+.empty-state h2 {
+  font-size: 24px;
+  color: var(--text-main);
+  margin-bottom: 10px;
+}
+
+.empty-state p {
+  color: var(--text-muted);
+  margin-bottom: 30px;
+}
+
+.import-btn-large {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--accent-mint);
+  color: white;
+  padding: 14px 28px;
+  border-radius: 16px;
+  border: none;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.import-btn-large:hover {
+  transform: scale(1.05);
+  box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+}
+
+.import-overlay {
+  margin-top: 30px;
+  width: 100%;
+  max-width: 500px;
+  padding: 25px;
+  text-align: left;
+}
+
+.import-overlay h3 {
+  margin-bottom: 15px;
+  font-size: 18px;
+}
+
+.import-overlay textarea {
+  width: 100%;
+  margin-bottom: 20px;
+  resize: vertical;
+}
+
+.import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 15px;
+}
+
+.import-actions button {
+  padding: 8px 20px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+}

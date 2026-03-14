@@ -1,0 +1,10 @@
+name = "class-pets-api"
+main = "src-server/index.js"
+compatibility_date = "2024-03-01"
+
+# D1 数据库绑定
+[[d1_databases]]
+binding = "DB"
+database_name = "class_pets_db"
+database_id = "00000000-0000-0000-0000-000000000000"
+preview_database_id = "00000000-0000-0000-0000-000000000000"
