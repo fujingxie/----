@@ -31,6 +31,7 @@ CREATE TABLE students (
     coins INTEGER DEFAULT 0,
     total_exp INTEGER DEFAULT 0,
     total_coins INTEGER DEFAULT 0,
+    pet_collection TEXT DEFAULT '[]',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (class_id) REFERENCES classes(id)
 );

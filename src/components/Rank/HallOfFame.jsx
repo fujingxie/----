@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
 import './HallOfFame.css';
 import { Crown, Medal } from 'lucide-react';
-import { getPetImagePath } from '../../api/petLibrary';
+import { getPetImagePath, getPetNameById, PET_IMAGE_FALLBACK } from '../../api/petLibrary';
 
 const HallOfFame = ({ students }) => {
   const [activeRank, setActiveRank] = useState('pet'); // pet, coin
+
+  const handleImageError = (event) => {
+    event.currentTarget.onerror = null;
+    event.currentTarget.src = PET_IMAGE_FALLBACK;
+  };
 
   const petRanking = [...students].sort((a, b) => (b.pet_points || 0) - (a.pet_points || 0));
   const coinRanking = [...students].sort((a, b) => (b.coins || 0) - (a.coins || 0));
@@ -41,7 +46,11 @@ const HallOfFame = ({ students }) => {
                 </div>
                 <div className="champion-visual">
                   {activeRank === 'pet' ? (
-                    <img src={getPetImagePath(champion.pet_type_id, champion.pet_level)} alt="champion" />
+                    <img
+                      src={getPetImagePath(champion.pet_type_id, champion.pet_level)}
+                      alt="champion"
+                      onError={handleImageError}
+                    />
                   ) : (
                     <div className="coin-champion-avatar">💰</div>
                   )}
@@ -49,7 +58,9 @@ const HallOfFame = ({ students }) => {
                 <div className="champion-info">
                   <h2 className="title-gradient">{champion.name}</h2>
                   <p className="champion-honor">
-                    {activeRank === 'pet' ? `LV.${champion.pet_level || 0} ${champion.pet_type_name || '探索者'}` : '班级首富'}
+                    {activeRank === 'pet'
+                      ? `LV.${champion.pet_level || 0} ${champion.pet_type_name || getPetNameById(champion.pet_type_id)}`
+                      : '班级首富'}
                   </p>
                   <div className="champion-stats">
                     <div className="stat">

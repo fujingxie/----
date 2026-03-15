@@ -183,3 +183,21 @@
   padding: 100px;
   color: var(--text-muted);
 }
+
+@media (max-width: 960px) {
+  .hof-content {
+    flex-direction: column;
+  }
+
+  .champion-card {
+    padding: 28px 22px;
+  }
+
+  .champion-stats {
+    flex-direction: column;
+  }
+
+  .ranking-list {
+    max-width: none;
+  }
+}

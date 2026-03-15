@@ -206,3 +206,25 @@
   color: var(--brand-color);
   font-weight: 800;
 }
+
+@media (max-width: 960px) {
+  .shop-header,
+  .header-info {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .form-row,
+  .student-selection-grid,
+  .redeem-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .student-selection-grid {
+    display: grid;
+  }
+
+  .redeem-summary {
+    display: grid;
+  }
+}

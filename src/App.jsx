@@ -346,6 +346,14 @@ function App() {
     });
   };
 
+  const handleGraduatePet = async (originalStudent, nextStudent) => {
+    await handleUpdateStudent({
+      student: nextStudent,
+      actionType: '宠物毕业',
+      detail: `${originalStudent.name} 的宠物 ${originalStudent.pet_name} 已满级毕业，并获得了一颗新的神秘蛋`,
+    });
+  };
+
   const handleInteractStudent = async (originalStudent, rule, updatedStudent) => {
     await handleUpdateStudent({
       student: updatedStudent,
@@ -619,6 +627,7 @@ function App() {
               levelThresholds={currentThresholds}
               onImportStudents={handleImportStudents}
               onActivatePet={handleActivatePet}
+              onGraduatePet={handleGraduatePet}
               onInteractStudent={handleInteractStudent}
             />
           )}

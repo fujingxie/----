@@ -194,3 +194,24 @@
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
+
+@media (max-width: 768px) {
+  .toolbox-container {
+    padding-inline: 12px;
+  }
+
+  .toolbox-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .timer-display,
+  .lucky-name {
+    font-size: 44px;
+  }
+
+  .timer-presets,
+  .timer-controls {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}

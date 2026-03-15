@@ -1,9 +1,11 @@
 .pet-card {
-  width: 200px;
+  width: 100%;
+  min-height: 360px;
   padding: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: space-between;
   position: relative;
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -24,12 +26,54 @@
   border-radius: 8px;
 }
 
-.pet-visual {
-  height: 120px;
+.pet-collection-trigger {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 42px;
+  height: 42px;
+  border: none;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 20px;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.pet-collection-count {
+  position: absolute;
+  top: -6px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent-rose);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pet-visual {
+  width: 100%;
+  min-height: 156px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.pet-visual-trigger {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
 }
 
 .egg-display {
@@ -40,8 +84,17 @@
 }
 
 .egg-float {
-  width: 80px;
+  width: 120px;
+  max-width: 100%;
   animation: float 3s ease-in-out infinite;
+}
+
+.pet-image {
+  width: 136px;
+  height: 136px;
+  max-width: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 18px rgba(30, 41, 59, 0.12));
 }
 
 .egg-shadow {
@@ -57,6 +110,7 @@
 .student-info {
   text-align: center;
   margin-bottom: 20px;
+  width: 100%;
 }
 
 .pet-type-label {
@@ -70,6 +124,8 @@
   font-size: 18px;
   font-weight: 700;
   color: var(--text-main);
+  line-height: 1.25;
+  word-break: break-word;
 }
 
 .pet-action-btn {
@@ -81,6 +137,7 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+  margin-top: auto;
 }
 
 .pet-action-btn.activate {
@@ -101,4 +158,17 @@
 @keyframes shadowScale {
   0%, 100% { transform: scale(1); opacity: 0.5; }
   50% { transform: scale(0.8); opacity: 0.2; }
+}
+
+@media (max-width: 768px) {
+  .pet-card {
+    min-height: 340px;
+    padding: 20px;
+  }
+
+  .pet-image,
+  .egg-float {
+    width: 112px;
+    height: auto;
+  }
 }

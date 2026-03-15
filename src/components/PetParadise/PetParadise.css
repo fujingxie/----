@@ -1,9 +1,104 @@
+.pet-paradise-page {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 8px 20px 20px;
+}
+
+.pet-paradise-hero {
+  display: grid;
+  grid-template-columns: 1.5fr auto;
+  gap: 24px;
+  padding: 28px;
+  align-items: center;
+}
+
+.pet-paradise-hero-copy h2 {
+  font-size: 32px;
+  margin-bottom: 10px;
+}
+
+.pet-paradise-hero-copy p {
+  color: var(--text-muted);
+  max-width: 620px;
+  line-height: 1.7;
+}
+
+.pet-paradise-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--accent-mint);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.pet-paradise-hero-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.import-btn-large.compact {
+  padding: 12px 22px;
+  border-radius: 14px;
+}
+
+.pet-paradise-stats {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.pet-stat-card {
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-radius: 20px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pet-stat-card strong {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.pet-stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.inline-import-panel {
+  width: 100%;
+  max-width: 860px;
+  align-self: center;
+}
+
+.inline-import-head p {
+  margin-top: 6px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.pet-paradise-grid-wrap {
+  width: 100%;
+  padding: 24px;
+}
+
 .pet-paradise-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 240px));
   gap: 25px;
   width: 100%;
-  padding: 20px;
+  justify-content: center;
 }
 
 .empty-state {
@@ -51,7 +146,6 @@
 }
 
 .import-overlay {
-  margin-top: 30px;
   width: 100%;
   max-width: 500px;
   padding: 25px;
@@ -80,4 +174,44 @@
   border-radius: 10px;
   border: none;
   cursor: pointer;
+}
+
+@media (max-width: 960px) {
+  .pet-paradise-page {
+    padding-inline: 0;
+  }
+
+  .pet-paradise-hero {
+    grid-template-columns: 1fr;
+    padding: 22px;
+  }
+
+  .pet-paradise-hero-copy h2 {
+    font-size: 28px;
+  }
+
+  .pet-paradise-hero-actions {
+    justify-content: stretch;
+  }
+
+  .import-btn-large.compact {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .pet-paradise-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .pet-paradise-grid-wrap {
+    padding: 18px;
+  }
+
+  .pet-paradise-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inline-import-panel {
+    max-width: none;
+  }
 }

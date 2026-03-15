@@ -29,6 +29,12 @@ body {
   min-height: 100vh;
   color: var(--text-main);
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  background-attachment: fixed;
+}
+
+#root {
+  min-height: 100vh;
 }
 
 /* 玻璃拟态基础样式 */

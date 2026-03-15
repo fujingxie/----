@@ -31,6 +31,23 @@ const parseId = (value) => {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 };
 
+const parsePetCollection = (value) => {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value !== 'string' || !value.trim()) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
 const normalizeClass = (row) => ({
   id: Number(row.id),
   name: row.name,
@@ -49,6 +66,7 @@ const normalizeStudent = (row) => ({
   coins: Number(row.coins || 0),
   total_exp: Number(row.total_exp || 0),
   total_coins: Number(row.total_coins || 0),
+  pet_collection: parsePetCollection(row.pet_collection),
 });
 
 const normalizeShopItem = (row) => ({
@@ -202,6 +220,7 @@ async function getStudentsByClassId(db, classId) {
   const result = await db
     .prepare(
       `SELECT id, class_id, name, pet_status, pet_name, pet_type_id, pet_level, pet_points, coins, total_exp, total_coins
+       , pet_collection
        FROM students
        WHERE class_id = ?
        ORDER BY created_at ASC, id ASC`,
@@ -540,12 +559,13 @@ async function handleUpdateStudent(db, request, studentId) {
     coins: Math.max(0, Number(updates.coins ?? currentStudent.coins ?? 0)),
     total_exp: Math.max(0, Number(updates.total_exp ?? currentStudent.total_exp ?? 0)),
     total_coins: Math.max(0, Number(updates.total_coins ?? currentStudent.total_coins ?? 0)),
+    pet_collection: parsePetCollection(updates.pet_collection ?? currentStudent.pet_collection ?? '[]'),
   };
 
   await db
     .prepare(
       `UPDATE students
-       SET name = ?, pet_status = ?, pet_name = ?, pet_type_id = ?, pet_level = ?, pet_points = ?, coins = ?, total_exp = ?, total_coins = ?
+       SET name = ?, pet_status = ?, pet_name = ?, pet_type_id = ?, pet_level = ?, pet_points = ?, coins = ?, total_exp = ?, total_coins = ?, pet_collection = ?
        WHERE id = ?`,
     )
     .bind(
@@ -558,6 +578,7 @@ async function handleUpdateStudent(db, request, studentId) {
       nextStudent.coins,
       nextStudent.total_exp,
       nextStudent.total_coins,
+      JSON.stringify(nextStudent.pet_collection),
       studentId,
     )
     .run();
@@ -574,6 +595,7 @@ async function handleUpdateStudent(db, request, studentId) {
   const refreshedStudent = await db
     .prepare(
       `SELECT id, class_id, name, pet_status, pet_name, pet_type_id, pet_level, pet_points, coins, total_exp, total_coins
+       , pet_collection
        FROM students
        WHERE id = ?`,
     )
@@ -654,6 +676,7 @@ async function handleRedeemShopItem(db, request, itemId) {
   const selectedStudents = await db
     .prepare(
       `SELECT id, class_id, name, pet_status, pet_name, pet_type_id, pet_level, pet_points, coins, total_exp, total_coins
+       , pet_collection
        FROM students
        WHERE class_id = ? AND id IN (${placeholders})`,
     )

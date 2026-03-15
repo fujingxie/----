@@ -1,24 +1,21 @@
 import React, { useState } from 'react';
 import Modal from '../Common/Modal';
-import { PET_LIBRARY } from '../../api/petLibrary';
+import { PET_LIBRARY, PET_IMAGE_FALLBACK } from '../../api/petLibrary';
+import { activateStudentPet } from '../../lib/petCollection';
 import './PetSelectionModal.css';
 
 const PetSelectionModal = ({ isOpen, onClose, student, onConfirm }) => {
   const [selectedPet, setSelectedPet] = useState(null);
   const [petName, setPetName] = useState('');
 
+  const handleImageError = (event) => {
+    event.currentTarget.onerror = null;
+    event.currentTarget.src = PET_IMAGE_FALLBACK;
+  };
+
   const handleConfirm = () => {
     if (!selectedPet) return;
-    onConfirm({
-      ...student,
-      pet_status: 'active',
-      pet_type_id: selectedPet.id, // 关键：存储 ID
-      pet_type_name: selectedPet.name,
-      pet_name: petName || selectedPet.name,
-      pet_level: 1,
-      pet_points: 0,
-      coins: student.coins || 0
-    });
+    onConfirm(activateStudentPet(student, selectedPet, petName));
   };
 
   return (
@@ -34,7 +31,7 @@ const PetSelectionModal = ({ isOpen, onClose, student, onConfirm }) => {
               onClick={() => setSelectedPet(pet)}
             >
               <div className="pet-icon-wrapper">
-                <img src={pet.icon} alt={pet.name} />
+                <img src={pet.icon} alt={pet.name} onError={handleImageError} />
               </div>
               <span>{pet.name}</span>
             </div>
