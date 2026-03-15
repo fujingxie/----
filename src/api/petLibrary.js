@@ -1,7 +1,8 @@
 /**
  * 宠物资源命名规范说明：
- * 1. 宠物头像图标: /assets/pets/[id]_icon.png
- * 2. 宠物成长阶段图片: /assets/pets/[id]_lv[level].png (例如: white_cat_lv1.png)
+ * 1. 宠物图片统一放在 /assets/pets/
+ * 2. 宠物成长阶段图片命名为 /assets/pets/[id][level].png
+ * 3. 例如白猫 1-7 级分别为 /assets/pets/baimao1.png 到 /assets/pets/baimao7.png
  */
 
 export const PET_LIBRARY = [

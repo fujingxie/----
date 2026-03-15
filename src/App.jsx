@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Briefcase,
   ChevronDown,
@@ -21,12 +21,18 @@ import {
   createClass,
   createRule,
   createShopItem,
-  createStudent,
+  archiveClassStudents,
+  deleteStudentsBatch,
+  deleteShopItem,
   deleteRule,
   fetchBootstrap,
   importStudents,
   loginUser,
+  resetClassProgress,
   redeemShopItem,
+  updatePassword,
+  updateRule,
+  updateShopItem,
   updateClass,
   updateStudent,
   updateThresholds,
@@ -34,6 +40,28 @@ import {
 import './App.css';
 
 const DEFAULT_LEVEL_THRESHOLDS = [10, 20, 30, 50, 70, 100];
+const STORAGE_KEYS = {
+  user: 'classPets.user',
+  currentClassId: 'classPets.currentClassId',
+};
+
+const readStoredUser = () => {
+  try {
+    const rawUser = window.localStorage.getItem(STORAGE_KEYS.user);
+    return rawUser ? JSON.parse(rawUser) : null;
+  } catch {
+    return null;
+  }
+};
+
+const readStoredClassId = () => {
+  try {
+    const rawClassId = window.localStorage.getItem(STORAGE_KEYS.currentClassId);
+    return rawClassId ? Number(rawClassId) : null;
+  } catch {
+    return null;
+  }
+};
 
 const tabs = [
   { id: 'pet', label: '宠物乐园', icon: <Gamepad2 size={20} /> },
@@ -44,13 +72,13 @@ const tabs = [
 ];
 
 function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => readStoredUser());
   const [activeTab, setActiveTab] = useState('pet');
   const [classDropdownOpen, setClassDropdownOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [classNameInput, setClassNameInput] = useState('');
   const [classes, setClasses] = useState([]);
-  const [currentClassId, setCurrentClassId] = useState(null);
+  const [currentClassId, setCurrentClassId] = useState(() => readStoredClassId());
   const [studentsByClassId, setStudentsByClassId] = useState({});
   const [shopItemsByClassId, setShopItemsByClassId] = useState({});
   const [rulesByClassId, setRulesByClassId] = useState({});
@@ -61,6 +89,7 @@ function App() {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [isLoadingClassData, setIsLoadingClassData] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
+  const [isRestoringSession, setIsRestoringSession] = useState(() => Boolean(readStoredUser()));
 
   const currentClass = useMemo(
     () => classes.find((item) => item.id === currentClassId) || null,
@@ -104,21 +133,72 @@ function App() {
     }));
   };
 
-  const loadDashboard = async (userId, classId) => {
+  const persistSession = useCallback((nextUser, nextClassId = null) => {
+    if (!nextUser) {
+      window.localStorage.removeItem(STORAGE_KEYS.user);
+      window.localStorage.removeItem(STORAGE_KEYS.currentClassId);
+      return;
+    }
+
+    window.localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(nextUser));
+
+    if (nextClassId) {
+      window.localStorage.setItem(STORAGE_KEYS.currentClassId, String(nextClassId));
+    } else {
+      window.localStorage.removeItem(STORAGE_KEYS.currentClassId);
+    }
+  }, []);
+
+  const loadDashboard = useCallback(async (userId, classId) => {
     setIsLoadingClassData(true);
     setAppErrorMessage('');
 
     try {
       const bundle = await fetchBootstrap({ userId, classId });
+      if (bundle.user) {
+        setUser(bundle.user);
+      }
       setClasses(bundle.classes || []);
       setCurrentClassId(bundle.currentClassId || null);
       syncClassBundle(bundle);
+      persistSession(bundle.user || readStoredUser(), bundle.currentClassId || null);
+      return bundle;
     } catch (error) {
+      if (error.message?.includes('重新登录') || error.message?.includes('教师账号不存在')) {
+        persistSession(null);
+        setUser(null);
+      }
       setAppErrorMessage(error.message);
+      throw error;
     } finally {
       setIsLoadingClassData(false);
     }
-  };
+  }, [persistSession]);
+
+  useEffect(() => {
+    const restoreSession = async () => {
+      const savedUser = readStoredUser();
+      const savedClassId = readStoredClassId();
+
+      if (!savedUser?.id) {
+        setIsRestoringSession(false);
+        return;
+      }
+
+      try {
+        setUser(savedUser);
+        await loadDashboard(savedUser.id, savedClassId);
+      } catch {
+        persistSession(null);
+        setUser(null);
+        setCurrentClassId(null);
+      } finally {
+        setIsRestoringSession(false);
+      }
+    };
+
+    restoreSession();
+  }, [loadDashboard, persistSession]);
 
   const updateCurrentStudent = (student) => {
     if (!currentClassId || !student) {
@@ -140,6 +220,7 @@ function App() {
     try {
       const response = await loginUser(credentials);
       setUser(response.user);
+      persistSession(response.user, response.currentClassId || null);
       await loadDashboard(response.user.id, response.currentClassId);
     } catch (error) {
       setAuthErrorMessage(error.message);
@@ -160,6 +241,35 @@ function App() {
     setClassDropdownOpen(false);
     setAuthErrorMessage('');
     setAppErrorMessage('');
+    persistSession(null);
+  };
+
+  useEffect(() => {
+    if (isCreateModalOpen) {
+      setClassDropdownOpen(false);
+    }
+  }, [isCreateModalOpen]);
+
+  const handleUpdatePassword = async ({ currentPassword, nextPassword }) => {
+    if (!user) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+
+    try {
+      await updatePassword({
+        userId: user.id,
+        currentPassword,
+        nextPassword,
+      });
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
   };
 
   const handleClassSwitch = async (classId) => {
@@ -169,6 +279,7 @@ function App() {
     }
 
     setClassDropdownOpen(false);
+    window.localStorage.setItem(STORAGE_KEYS.currentClassId, String(classId));
     await loadDashboard(user.id, classId);
   };
 
@@ -192,6 +303,12 @@ function App() {
       setClasses(response.classes || []);
       setClassNameInput('');
       setIsCreateModalOpen(false);
+      if (response.currentClassId || response.class?.id) {
+        window.localStorage.setItem(
+          STORAGE_KEYS.currentClassId,
+          String(response.currentClassId || response.class?.id),
+        );
+      }
       await loadDashboard(user.id, response.currentClassId || response.class?.id);
     } catch (error) {
       setAppErrorMessage(error.message);
@@ -213,36 +330,6 @@ function App() {
         userId: user.id,
         classId: currentClassId,
         names,
-      });
-      setStudentsByClassId((prev) => ({
-        ...prev,
-        [currentClassId]: response.students || [],
-      }));
-      setLogsByClassId((prev) => ({
-        ...prev,
-        [currentClassId]: response.logs || [],
-      }));
-    } catch (error) {
-      setAppErrorMessage(error.message);
-      throw error;
-    } finally {
-      setIsMutating(false);
-    }
-  };
-
-  const handleCreateStudent = async (name) => {
-    if (!user || !currentClassId || !name.trim()) {
-      return;
-    }
-
-    setIsMutating(true);
-    setAppErrorMessage('');
-
-    try {
-      const response = await createStudent({
-        userId: user.id,
-        classId: currentClassId,
-        name: name.trim(),
       });
       setStudentsByClassId((prev) => ({
         ...prev,
@@ -338,6 +425,36 @@ function App() {
     }));
   };
 
+  const handleBatchRemoveStudents = async (studentIds) => {
+    if (!user || !currentClassId || studentIds.length === 0) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+
+    try {
+      const response = await deleteStudentsBatch({
+        userId: user.id,
+        classId: currentClassId,
+        studentIds,
+      });
+      setStudentsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.students || [],
+      }));
+      setLogsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.logs || [],
+      }));
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
   const handleActivatePet = async (student) => {
     await handleUpdateStudent({
       student,
@@ -375,6 +492,67 @@ function App() {
         userId: user.id,
         classId: currentClassId,
         item,
+      });
+      setShopItemsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.shopItems || [],
+      }));
+      setLogsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.logs || [],
+      }));
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleUpdateShopItem = async (item) => {
+    if (!user || !currentClassId) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+
+    try {
+      const response = await updateShopItem({
+        userId: user.id,
+        classId: currentClassId,
+        itemId: item.id,
+        item,
+      });
+      setShopItemsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.shopItems || [],
+      }));
+      setLogsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.logs || [],
+      }));
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleDeleteShopItem = async (item) => {
+    if (!user || !currentClassId) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+
+    try {
+      const response = await deleteShopItem({
+        userId: user.id,
+        classId: currentClassId,
+        itemId: item.id,
       });
       setShopItemsByClassId((prev) => ({
         ...prev,
@@ -460,6 +638,37 @@ function App() {
     }
   };
 
+  const handleUpdateRule = async (rule) => {
+    if (!user || !currentClassId) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+
+    try {
+      const response = await updateRule({
+        userId: user.id,
+        classId: currentClassId,
+        ruleId: rule.id,
+        rule,
+      });
+      setRulesByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.rules || [],
+      }));
+      setLogsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.logs || [],
+      }));
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
   const handleDeleteRule = async (ruleId) => {
     if (!user || !currentClassId) {
       return;
@@ -519,6 +728,74 @@ function App() {
       setIsMutating(false);
     }
   };
+
+  const handleResetClassProgress = async () => {
+    if (!user || !currentClassId) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+
+    try {
+      const response = await resetClassProgress({
+        userId: user.id,
+        classId: currentClassId,
+      });
+      setStudentsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.students || [],
+      }));
+      setLogsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.logs || [],
+      }));
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleArchiveClassStudents = async () => {
+    if (!user || !currentClassId) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+
+    try {
+      const response = await archiveClassStudents({
+        userId: user.id,
+        classId: currentClassId,
+      });
+      setStudentsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.students || [],
+      }));
+      setLogsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.logs || [],
+      }));
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  if (isRestoringSession) {
+    return (
+      <div className="login-page">
+        <div className="login-card glass-card">
+          <p className="login-hint">正在恢复登录状态...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -608,10 +885,6 @@ function App() {
               <LogOut size={16} />
             </button>
           </div>
-          <button className="batch-action" type="button" onClick={() => setActiveTab('settings')}>
-            <span className="batch-icon">⚙️</span>
-            <span>总控台</span>
-          </button>
         </div>
       </nav>
 
@@ -637,6 +910,8 @@ function App() {
               items={currentItems}
               students={currentStudents}
               onAddItem={handleAddShopItem}
+              onUpdateItem={handleUpdateShopItem}
+              onDeleteItem={handleDeleteShopItem}
               onRedeem={handleRedeemShopItem}
             />
           )}
@@ -654,11 +929,19 @@ function App() {
               logs={currentLogs}
               levelThresholds={currentThresholds}
               onUpdateClass={handleRenameClass}
-              onAddStudent={handleCreateStudent}
+              onImportStudents={handleImportStudents}
               onRemoveStudent={handleRemoveStudent}
+              onBatchRemoveStudents={handleBatchRemoveStudents}
               onAddRule={handleAddRule}
+              onUpdateRule={handleUpdateRule}
               onDeleteRule={handleDeleteRule}
               onSaveThresholds={handleSaveThresholds}
+              onUpdateStudent={(student, actionType, detail) =>
+                handleUpdateStudent({ student, actionType, detail })
+              }
+              onUpdatePassword={handleUpdatePassword}
+              onResetClassProgress={handleResetClassProgress}
+              onArchiveClassStudents={handleArchiveClassStudents}
             />
           )}
         </section>

@@ -31,6 +31,7 @@ CREATE TABLE students (
     coins INTEGER DEFAULT 0,
     total_exp INTEGER DEFAULT 0,
     total_coins INTEGER DEFAULT 0,
+    reward_count INTEGER DEFAULT 0,
     pet_collection TEXT DEFAULT '[]',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (class_id) REFERENCES classes(id)
@@ -78,8 +79,22 @@ CREATE TABLE logs (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 激活码表
+CREATE TABLE activation_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
+    level TEXT NOT NULL DEFAULT 'vip1',
+    expires_in_days INTEGER,
+    used_by_user_id INTEGER,
+    used_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (used_by_user_id) REFERENCES users(id)
+);
+
 CREATE INDEX idx_classes_user_id ON classes(user_id);
 CREATE INDEX idx_students_class_id ON students(class_id);
 CREATE INDEX idx_shop_items_class_id ON shop_items(class_id);
 CREATE INDEX idx_rules_class_id ON rules(class_id);
 CREATE INDEX idx_logs_class_id_created_at ON logs(class_id, created_at DESC);
+CREATE INDEX idx_activation_codes_code ON activation_codes(code);
+CREATE INDEX idx_activation_codes_used_by_user_id ON activation_codes(used_by_user_id);

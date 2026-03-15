@@ -14,6 +14,7 @@ const Login = ({ onLogin, isSubmitting = false, errorMessage = '' }) => {
   const [formData, setFormData] = useState({
     ...initialFormState,
   });
+  const exampleActivationCodes = ['CLASS-VIP1-2026', 'CLASS-VIP2-2026', 'CLASS-PERM-2026'];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -62,6 +63,12 @@ const Login = ({ onLogin, isSubmitting = false, errorMessage = '' }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
+          <p className="login-hint">
+            {activeMode === 'login'
+              ? '请输入已注册的教师账号和密码登录。'
+              : `注册时需要一个未使用的激活码，例如：${exampleActivationCodes.join(' / ')}`}
+          </p>
+
           {activeMode === 'register' && (
             <div className="form-group">
               <label>专属激活码</label>

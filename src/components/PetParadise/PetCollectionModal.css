@@ -1,7 +1,16 @@
+.pet-collection-modal-shell {
+  width: min(92vw, 920px);
+  max-width: 920px;
+}
+
+.pet-collection-modal-body {
+  min-width: 0;
+}
+
 .pet-collection-modal {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 22px;
 }
 
 .pet-collection-total {
@@ -12,8 +21,8 @@
 
 .pet-collection-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(164px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
+  gap: 18px;
 }
 
 .pet-collection-card {
@@ -26,13 +35,14 @@
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(226, 232, 240, 0.9);
-  min-height: 214px;
+  min-height: 226px;
 }
 
 .pet-collection-card.active,
 .pet-collection-card.active-egg {
   border-color: rgba(16, 185, 129, 0.45);
   box-shadow: 0 12px 24px rgba(16, 185, 129, 0.12);
+  background: rgba(236, 255, 252, 0.92);
 }
 
 .pet-collection-status,
@@ -58,8 +68,8 @@
 }
 
 .pet-collection-visual {
-  width: 84px;
-  height: 84px;
+  width: 92px;
+  height: 92px;
   margin-top: 18px;
   display: flex;
   align-items: center;
@@ -80,4 +90,33 @@
 .pet-collection-card span:last-child {
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.pet-collection-upgrade-btn {
+  width: 100%;
+  margin-top: 8px;
+  min-height: 78px;
+  border: none;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #ffbc1f, #ff7a18);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  cursor: pointer;
+  box-shadow: 0 18px 28px rgba(255, 122, 24, 0.28);
+}
+
+@media (max-width: 720px) {
+  .pet-collection-modal-shell {
+    width: min(94vw, 94vw);
+    max-width: none;
+  }
+
+  .pet-collection-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }

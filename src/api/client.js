@@ -25,6 +25,12 @@ export const loginUser = (payload) =>
     body: JSON.stringify(payload),
   });
 
+export const updatePassword = ({ userId, currentPassword, nextPassword }) =>
+  request('/auth/password', {
+    method: 'PUT',
+    body: JSON.stringify({ userId, currentPassword, nextPassword }),
+  });
+
 export const fetchBootstrap = ({ userId, classId }) => {
   const params = new URLSearchParams({ userId: String(userId) });
 
@@ -59,6 +65,12 @@ export const createStudent = ({ userId, classId, name }) =>
     body: JSON.stringify({ userId, name }),
   });
 
+export const deleteStudentsBatch = ({ userId, classId, studentIds }) =>
+  request(`/classes/${classId}/students/batch-delete`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, studentIds }),
+  });
+
 export const updateStudent = ({ userId, classId, studentId, updates, actionType, detail }) =>
   request(`/students/${studentId}`, {
     method: 'PATCH',
@@ -69,6 +81,18 @@ export const createShopItem = ({ userId, classId, item }) =>
   request(`/classes/${classId}/shop-items`, {
     method: 'POST',
     body: JSON.stringify({ userId, item }),
+  });
+
+export const updateShopItem = ({ userId, classId, itemId, item }) =>
+  request(`/shop-items/${itemId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ userId, classId, item }),
+  });
+
+export const deleteShopItem = ({ userId, classId, itemId }) =>
+  request(`/shop-items/${itemId}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ userId, classId }),
   });
 
 export const redeemShopItem = ({ userId, classId, itemId, studentIds }) =>
@@ -83,6 +107,12 @@ export const createRule = ({ userId, classId, rule }) =>
     body: JSON.stringify({ userId, rule }),
   });
 
+export const updateRule = ({ userId, classId, ruleId, rule }) =>
+  request(`/rules/${ruleId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ userId, classId, rule }),
+  });
+
 export const deleteRule = ({ userId, classId, ruleId }) =>
   request(`/rules/${ruleId}`, {
     method: 'DELETE',
@@ -93,4 +123,16 @@ export const updateThresholds = ({ userId, classId, thresholds }) =>
   request(`/classes/${classId}/settings/thresholds`, {
     method: 'PUT',
     body: JSON.stringify({ userId, thresholds }),
+  });
+
+export const resetClassProgress = ({ userId, classId }) =>
+  request(`/classes/${classId}/reset-progress`, {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+
+export const archiveClassStudents = ({ userId, classId }) =>
+  request(`/classes/${classId}/archive-students`, {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
   });

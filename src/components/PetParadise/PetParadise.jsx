@@ -1,12 +1,22 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import PetCard from './PetCard';
 import PetSelectionModal from './PetSelectionModal';
 import InteractionModal from './InteractionModal';
 import PetCollectionModal from './PetCollectionModal';
 import './PetParadise.css';
-import { UserPlus } from 'lucide-react';
+import { CheckCircle2, UserPlus } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { getAdoptionCount, graduateToNewEgg, isStudentAtMaxLevel, syncStudentCollectionProgress } from '../../lib/petCollection';
+
+const POSITIVE_EFFECT_ICONS = ['✨', '💖', '🌟', '🍗', '🎉'];
+const NEGATIVE_EFFECT_ICONS = ['💩', '😵', '⚠️', '🌧️', '🥀'];
+const BULK_FEED_RULE = {
+  id: 'bulk-feed',
+  name: '批量喂养',
+  exp: 1,
+  coins: 0,
+  type: 'positive',
+};
 
 const resolvePetLevel = (totalExp, thresholds) => {
   let nextLevel = 1;
@@ -35,9 +45,28 @@ const PetParadise = ({
   const [selectingStudent, setSelectingStudent] = useState(null);
   const [interactingStudent, setInteractingStudent] = useState(null);
   const [collectionStudent, setCollectionStudent] = useState(null);
+  const [petEffects, setPetEffects] = useState({});
+  const [selectedStudentIds, setSelectedStudentIds] = useState([]);
+  const [isBulkMode, setIsBulkMode] = useState(false);
+  const [isBulkFeeding, setIsBulkFeeding] = useState(false);
   const activePetsCount = students.filter((student) => student.pet_status !== 'egg').length;
   const totalAdoptions = students.reduce((sum, student) => sum + getAdoptionCount(student), 0);
   const classCoins = students.reduce((sum, student) => sum + (student.coins || 0), 0);
+  const feedableStudents = useMemo(
+    () => students.filter((student) => student.pet_status !== 'egg' && !isStudentAtMaxLevel(student, levelThresholds)),
+    [students, levelThresholds],
+  );
+
+  useEffect(() => {
+    const feedableIds = new Set(feedableStudents.map((student) => student.id));
+    setSelectedStudentIds((prev) => prev.filter((id) => feedableIds.has(id)));
+  }, [feedableStudents]);
+
+  useEffect(() => {
+    if (!isBulkMode) {
+      setSelectedStudentIds([]);
+    }
+  }, [isBulkMode]);
 
   const handlePetPrimaryAction = async (student) => {
     if (student.pet_status === 'egg') {
@@ -46,8 +75,7 @@ const PetParadise = ({
     }
 
     if (isStudentAtMaxLevel(student, levelThresholds)) {
-      const graduatedStudent = graduateToNewEgg(student);
-      await onGraduatePet(student, graduatedStudent);
+      setCollectionStudent(student);
       return;
     }
 
@@ -61,6 +89,85 @@ const PetParadise = ({
     await onImportStudents(names);
     setImportText('');
     setIsImporting(false);
+  };
+
+  const triggerPetEffect = (studentId, type, rule) => {
+    const icons = type === 'positive' ? POSITIVE_EFFECT_ICONS : NEGATIVE_EFFECT_ICONS;
+    const nextEffect = {
+      type,
+      deltaExp: rule.exp,
+      icons: icons.map((icon, index) => ({
+        id: `${studentId}-${type}-${Date.now()}-${index}`,
+        icon,
+      })),
+    };
+
+    setPetEffects((prev) => ({
+      ...prev,
+      [studentId]: nextEffect,
+    }));
+
+    window.setTimeout(() => {
+      setPetEffects((prev) => {
+        const next = { ...prev };
+        delete next[studentId];
+        return next;
+      });
+    }, 1500);
+  };
+
+  const toggleSelectStudent = (student) => {
+    if (student.pet_status === 'egg' || isStudentAtMaxLevel(student, levelThresholds)) {
+      return;
+    }
+
+    setSelectedStudentIds((prev) =>
+      prev.includes(student.id) ? prev.filter((id) => id !== student.id) : [...prev, student.id],
+    );
+  };
+
+  const handleSelectAllFeedable = () => {
+    const allFeedableIds = feedableStudents.map((student) => student.id);
+    setSelectedStudentIds((prev) =>
+      prev.length === allFeedableIds.length ? [] : allFeedableIds,
+    );
+  };
+
+  const handleBulkFeed = async () => {
+    if (selectedStudentIds.length === 0 || isBulkFeeding) {
+      return;
+    }
+
+    const selectedStudents = feedableStudents.filter((student) => selectedStudentIds.includes(student.id));
+
+    if (selectedStudents.length === 0) {
+      return;
+    }
+
+    setIsBulkFeeding(true);
+
+    try {
+      for (const student of selectedStudents) {
+        const nextPetPoints = Math.max(0, (student.pet_points || 0) + BULK_FEED_RULE.exp);
+        const nextTotalExp = (student.total_exp || 0) + BULK_FEED_RULE.exp;
+        const updated = {
+          ...student,
+          pet_points: nextPetPoints,
+          total_exp: nextTotalExp,
+          reward_count: (student.reward_count || 0) + 1,
+          pet_level: resolvePetLevel(nextTotalExp, levelThresholds),
+        };
+        updated.pet_collection = syncStudentCollectionProgress(updated);
+
+        triggerPetEffect(student.id, 'positive', BULK_FEED_RULE);
+        await onInteractStudent(student, BULK_FEED_RULE, updated);
+      }
+
+      setSelectedStudentIds([]);
+      setIsBulkMode(false);
+    } finally {
+      setIsBulkFeeding(false);
+    }
   };
 
   if (!currentClass) {
@@ -113,6 +220,15 @@ const PetParadise = ({
         </div>
 
         <div className="pet-paradise-hero-actions">
+          {feedableStudents.length > 0 && (
+            <button
+              className={`bulk-mode-btn ${isBulkMode ? 'active' : ''}`}
+              onClick={() => setIsBulkMode((prev) => !prev)}
+              type="button"
+            >
+              {isBulkMode ? '退出批量' : '批量喂养'}
+            </button>
+          )}
           <button className="import-btn-large compact" onClick={() => setIsImporting(true)} type="button">
             <UserPlus size={18} />
             <span>继续导入学生</span>
@@ -169,12 +285,43 @@ const PetParadise = ({
               student={student} 
               adoptionCount={getAdoptionCount(student)}
               isReadyForNewPet={isStudentAtMaxLevel(student, levelThresholds)}
+              levelThresholds={levelThresholds}
+              effect={petEffects[student.id] || null}
               onOpenCollection={setCollectionStudent}
               onActivate={handlePetPrimaryAction}
+              isSelectable={isBulkMode && student.pet_status !== 'egg' && !isStudentAtMaxLevel(student, levelThresholds)}
+              isSelected={selectedStudentIds.includes(student.id)}
+              onToggleSelect={toggleSelectStudent}
             />
           ))}
         </div>
       </section>
+
+      {isBulkMode && feedableStudents.length > 0 && (
+        <div className="bulk-feed-toolbar">
+          <div className="bulk-feed-summary">
+            <span className="bulk-feed-dot" />
+            <span>已选</span>
+            <strong>{selectedStudentIds.length}</strong>
+            <span>人</span>
+          </div>
+          <button className="bulk-feed-select-all" onClick={handleSelectAllFeedable} type="button">
+            <CheckCircle2 size={18} />
+            <span>{selectedStudentIds.length === feedableStudents.length ? '取消全选' : '全选可用宠物'}</span>
+          </button>
+          <button className="bulk-feed-cancel" onClick={() => setIsBulkMode(false)} type="button">
+            取消
+          </button>
+          <button
+            className="bulk-feed-action"
+            onClick={handleBulkFeed}
+            disabled={selectedStudentIds.length === 0 || isBulkFeeding}
+            type="button"
+          >
+            {isBulkFeeding ? '喂养中...' : '批量喂养'}
+          </button>
+        </div>
+      )}
 
       {selectingStudent && (
         <PetSelectionModal 
@@ -213,10 +360,13 @@ const PetParadise = ({
               coins: nextCoins,
               total_exp: nextTotalExp,
               total_coins: nextTotalCoins,
+              reward_count:
+                (interactingStudent.reward_count || 0) + (rule.type === 'positive' ? 1 : 0),
               pet_level: resolvePetLevel(nextTotalExp, levelThresholds),
             };
             updated.pet_collection = syncStudentCollectionProgress(updated);
 
+            triggerPetEffect(interactingStudent.id, rule.type, rule);
             await onInteractStudent(interactingStudent, rule, updated);
             setInteractingStudent(null);
           }}
@@ -229,6 +379,12 @@ const PetParadise = ({
           onClose={() => setCollectionStudent(null)}
           student={collectionStudent}
           collection={collectionStudent.pet_collection || []}
+          canAdoptNewEgg={isStudentAtMaxLevel(collectionStudent, levelThresholds)}
+          onAdoptNewEgg={async () => {
+            const graduatedStudent = graduateToNewEgg(collectionStudent);
+            await onGraduatePet(collectionStudent, graduatedStudent);
+            setCollectionStudent(null);
+          }}
         />
       )}
     </div>

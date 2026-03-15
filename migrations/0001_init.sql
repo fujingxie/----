@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS students (
     coins INTEGER DEFAULT 0,
     total_exp INTEGER DEFAULT 0,
     total_coins INTEGER DEFAULT 0,
+    reward_count INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (class_id) REFERENCES classes(id)
 );
@@ -70,8 +71,27 @@ CREATE TABLE IF NOT EXISTS logs (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS activation_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
+    level TEXT NOT NULL DEFAULT 'vip1',
+    expires_in_days INTEGER,
+    used_by_user_id INTEGER,
+    used_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (used_by_user_id) REFERENCES users(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_classes_user_id ON classes(user_id);
 CREATE INDEX IF NOT EXISTS idx_students_class_id ON students(class_id);
 CREATE INDEX IF NOT EXISTS idx_shop_items_class_id ON shop_items(class_id);
 CREATE INDEX IF NOT EXISTS idx_rules_class_id ON rules(class_id);
 CREATE INDEX IF NOT EXISTS idx_logs_class_id_created_at ON logs(class_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activation_codes_code ON activation_codes(code);
+CREATE INDEX IF NOT EXISTS idx_activation_codes_used_by_user_id ON activation_codes(used_by_user_id);
+
+INSERT OR IGNORE INTO activation_codes (code, level, expires_in_days)
+VALUES
+    ('CLASS-VIP1-2026', 'vip1', 30),
+    ('CLASS-VIP2-2026', 'vip2', 90),
+    ('CLASS-PERM-2026', 'permanent', NULL);

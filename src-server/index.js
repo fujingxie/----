@@ -1,4 +1,9 @@
 const DEFAULT_LEVEL_THRESHOLDS = [10, 20, 30, 50, 70, 100];
+const ACTIVATION_CODE_SEEDS = [
+  { code: 'CLASS-VIP1-2026', level: 'vip1', expiresInDays: 30 },
+  { code: 'CLASS-VIP2-2026', level: 'vip2', expiresInDays: 90 },
+  { code: 'CLASS-PERM-2026', level: 'permanent', expiresInDays: null },
+];
 
 const SYSTEM_RULES = [
   { name: '字迹工整', icon: '✍️', exp: 2, coins: 5, type: 'positive' },
@@ -24,6 +29,18 @@ const json = (data, status = 200) =>
   });
 
 const error = (message, status = 400) => json({ error: message }, status);
+
+const textEncoder = new TextEncoder();
+
+const isExpired = (value) => {
+  if (!value) {
+    return false;
+  }
+
+  const timestamp = new Date(value);
+
+  return !Number.isNaN(timestamp.getTime()) && timestamp.getTime() < Date.now();
+};
 
 const parseId = (value) => {
   const parsed = Number(value);
@@ -66,6 +83,7 @@ const normalizeStudent = (row) => ({
   coins: Number(row.coins || 0),
   total_exp: Number(row.total_exp || 0),
   total_coins: Number(row.total_coins || 0),
+  reward_count: Number(row.reward_count || 0),
   pet_collection: parsePetCollection(row.pet_collection),
 });
 
@@ -88,6 +106,15 @@ const normalizeRule = (row) => ({
   isSystem: row.class_id === null,
 });
 
+const normalizeActivationCode = (row) => ({
+  id: Number(row.id),
+  code: row.code,
+  level: row.level,
+  expires_in_days: row.expires_in_days === null ? null : Number(row.expires_in_days),
+  used_by_user_id: row.used_by_user_id === null ? null : Number(row.used_by_user_id),
+  used_at: row.used_at,
+});
+
 const formatLogTime = (createdAt) => {
   const timestamp = new Date(createdAt);
 
@@ -103,6 +130,7 @@ const normalizeLog = (row) => ({
   action: row.action_type,
   detail: row.detail,
   time: formatLogTime(row.created_at),
+  created_at: row.created_at,
   operator: row.operator || '系统',
 });
 
@@ -134,6 +162,46 @@ function getDb(env) {
   return env.DB;
 }
 
+async function sha256(value) {
+  const digest = await crypto.subtle.digest('SHA-256', textEncoder.encode(value));
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function hashPassword(password) {
+  return sha256(`class-pets::${password}`);
+}
+
+async function verifyPassword(password, passwordHash) {
+  if (!passwordHash) {
+    return false;
+  }
+
+  if (passwordHash === password) {
+    return true;
+  }
+
+  const hashed = await hashPassword(password);
+  return hashed === passwordHash;
+}
+
+function computeExpireAt(expiresInDays) {
+  if (!Number.isFinite(expiresInDays) || expiresInDays <= 0) {
+    return null;
+  }
+
+  return new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function validateUsername(value) {
+  return /^[a-zA-Z0-9_-]{3,24}$/.test(value);
+}
+
+function validatePassword(value) {
+  return typeof value === 'string' && value.length >= 6;
+}
+
 async function ensureSystemRules(db) {
   const countRow = await db.prepare('SELECT COUNT(*) AS count FROM rules WHERE class_id IS NULL').first();
 
@@ -145,6 +213,16 @@ async function ensureSystemRules(db) {
     db
       .prepare('INSERT INTO rules (class_id, name, icon, exp, coins, type) VALUES (NULL, ?, ?, ?, ?, ?)')
       .bind(rule.name, rule.icon, rule.exp, rule.coins, rule.type),
+  );
+
+  await db.batch(statements);
+}
+
+async function ensureActivationCodes(db) {
+  const statements = ACTIVATION_CODE_SEEDS.map((seed) =>
+    db
+      .prepare('INSERT OR IGNORE INTO activation_codes (code, level, expires_in_days) VALUES (?, ?, ?)')
+      .bind(seed.code, seed.level, seed.expiresInDays),
   );
 
   await db.batch(statements);
@@ -163,17 +241,63 @@ async function ensureClassSettings(db, classId) {
     .run();
 }
 
+async function refreshMembershipIfNeeded(db, user) {
+  if (!user) {
+    return null;
+  }
+
+  if ((user.level === 'vip1' || user.level === 'vip2') && isExpired(user.expire_at)) {
+    const refreshed = await db
+      .prepare(
+        `UPDATE users
+         SET level = 'temporary', expire_at = NULL
+         WHERE id = ?
+         RETURNING id, username, nickname, level, expire_at`,
+      )
+      .bind(user.id)
+      .first();
+
+    return refreshed;
+  }
+
+  return user;
+}
+
 async function getUserById(db, userId) {
-  const user = await db
+  const rawUser = await db
     .prepare('SELECT id, username, nickname, level, expire_at FROM users WHERE id = ?')
     .bind(userId)
     .first();
 
-  if (!user) {
+  if (!rawUser) {
     throw new Error('教师账号不存在，请重新登录');
   }
 
-  return user;
+  return refreshMembershipIfNeeded(db, rawUser);
+}
+
+async function getUserWithPassword(db, username) {
+  const rawUser = await db
+    .prepare(
+      'SELECT id, username, password_hash, nickname, level, expire_at FROM users WHERE username = ?',
+    )
+    .bind(username)
+    .first();
+
+  if (!rawUser) {
+    return null;
+  }
+
+  const refreshed = await refreshMembershipIfNeeded(db, rawUser);
+
+  if (refreshed.password_hash) {
+    return refreshed;
+  }
+
+  return {
+    ...refreshed,
+    password_hash: rawUser.password_hash,
+  };
 }
 
 async function getClassesByUserId(db, userId) {
@@ -220,7 +344,7 @@ async function getStudentsByClassId(db, classId) {
   const result = await db
     .prepare(
       `SELECT id, class_id, name, pet_status, pet_name, pet_type_id, pet_level, pet_points, coins, total_exp, total_coins
-       , pet_collection
+       , reward_count, pet_collection
        FROM students
        WHERE class_id = ?
        ORDER BY created_at ASC, id ASC`,
@@ -309,10 +433,10 @@ async function appendLog(db, { classId, userId, actionType, detail }) {
 
 async function getBootstrapPayload(db, userId, requestedClassId) {
   await ensureSystemRules(db);
+  await ensureActivationCodes(db);
 
   const user = normalizeUser(await getUserById(db, userId));
   const classes = await getClassesByUserId(db, userId);
-
   const resolvedClassId =
     classes.find((item) => item.id === requestedClassId)?.id || classes[0]?.id || null;
 
@@ -342,35 +466,100 @@ async function getBootstrapPayload(db, userId, requestedClassId) {
 }
 
 async function handleLogin(db, request) {
+  await ensureActivationCodes(db);
+
   const body = await readBody(request);
-  const username = String(body.username || 'demo_teacher').trim() || 'demo_teacher';
-  const nickname = String(body.nickname || body.username || '谢先生').trim() || '谢先生';
+  const mode = body.mode === 'register' ? 'register' : 'login';
+  const username = String(body.username || '').trim();
+  const password = String(body.password || '');
 
-  let user = await db
-    .prepare('SELECT id, username, nickname, level, expire_at FROM users WHERE username = ?')
-    .bind(username)
-    .first();
+  if (!validateUsername(username)) {
+    return error('账号需为 3-24 位字母、数字、下划线或中划线');
+  }
 
-  if (!user) {
-    const inserted = await db
-      .prepare(
-        `INSERT INTO users (username, password_hash, nickname, level)
-         VALUES (?, ?, ?, ?) RETURNING id, username, nickname, level, expire_at`,
-      )
-      .bind(username, 'demo-password', nickname, 'permanent')
+  if (!validatePassword(password)) {
+    return error('密码至少需要 6 位');
+  }
+
+  if (mode === 'register') {
+    const nickname = String(body.nickname || '').trim();
+    const activationCodeValue = String(body.activationCode || '').trim().toUpperCase();
+
+    if (!nickname) {
+      return error('请输入展示昵称');
+    }
+
+    if (!activationCodeValue) {
+      return error('请输入有效的激活码');
+    }
+
+    const existingUser = await db
+      .prepare('SELECT id FROM users WHERE username = ?')
+      .bind(username)
       .first();
 
-    user = inserted;
-  } else if (body.mode === 'register' && nickname !== user.nickname) {
-    user = await db
+    if (existingUser) {
+      return error('该账号已存在，请更换用户名');
+    }
+
+    const activationCode = await db
       .prepare(
-        `UPDATE users
-         SET nickname = ?
-         WHERE id = ?
+        `SELECT id, code, level, expires_in_days, used_by_user_id, used_at
+         FROM activation_codes
+         WHERE code = ?`,
+      )
+      .bind(activationCodeValue)
+      .first();
+
+    if (!activationCode) {
+      return error('激活码不存在，请联系管理员确认');
+    }
+
+    if (activationCode.used_by_user_id) {
+      return error('该激活码已被使用');
+    }
+
+    const passwordHash = await hashPassword(password);
+    const expireAt = computeExpireAt(
+      activationCode.expires_in_days === null ? null : Number(activationCode.expires_in_days),
+    );
+
+    const createdUser = await db
+      .prepare(
+        `INSERT INTO users (username, password_hash, nickname, level, expire_at)
+         VALUES (?, ?, ?, ?, ?)
          RETURNING id, username, nickname, level, expire_at`,
       )
-      .bind(nickname, user.id)
+      .bind(username, passwordHash, nickname, activationCode.level, expireAt)
       .first();
+
+    await db
+      .prepare(
+        `UPDATE activation_codes
+         SET used_by_user_id = ?, used_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+      )
+      .bind(createdUser.id, activationCode.id)
+      .run();
+
+    return json({
+      user: normalizeUser(createdUser),
+      currentClassId: null,
+    });
+  }
+
+  const user = await getUserWithPassword(db, username);
+
+  if (!user || !(await verifyPassword(password, user.password_hash))) {
+    return error('账号或密码错误', 401);
+  }
+
+  // 兼容早期演示数据，将明文密码平滑升级为哈希。
+  if (user.password_hash === password) {
+    await db
+      .prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+      .bind(await hashPassword(password), user.id)
+      .run();
   }
 
   const classes = await getClassesByUserId(db, user.id);
@@ -379,6 +568,47 @@ async function handleLogin(db, request) {
     user: normalizeUser(user),
     currentClassId: classes[0]?.id || null,
   });
+}
+
+async function handleUpdatePassword(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const currentPassword = String(body.currentPassword || '');
+  const nextPassword = String(body.nextPassword || '');
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  if (!validatePassword(currentPassword) || !validatePassword(nextPassword)) {
+    return error('密码至少需要 6 位');
+  }
+
+  if (currentPassword === nextPassword) {
+    return error('新密码不能与当前密码相同');
+  }
+
+  const user = await db
+    .prepare('SELECT id, password_hash FROM users WHERE id = ?')
+    .bind(userId)
+    .first();
+
+  if (!user) {
+    return error('教师账号不存在，请重新登录', 404);
+  }
+
+  const verified = await verifyPassword(currentPassword, user.password_hash);
+
+  if (!verified) {
+    return error('当前密码不正确', 401);
+  }
+
+  await db
+    .prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+    .bind(await hashPassword(nextPassword), userId)
+    .run();
+
+  return json({ success: true });
 }
 
 async function handleCreateClass(db, request) {
@@ -390,7 +620,12 @@ async function handleCreateClass(db, request) {
     return error('请输入有效的班级名称');
   }
 
-  await getUserById(db, userId);
+  const user = await getUserById(db, userId);
+  const classes = await getClassesByUserId(db, userId);
+
+  if (user.level === 'temporary' && classes.length >= 1) {
+    return error('临时账户只能创建一个班级，请升级账户享用无限特权', 403);
+  }
 
   const createdClass = await db
     .prepare(
@@ -515,6 +750,55 @@ async function handleCreateStudent(db, request, classId) {
   });
 }
 
+async function handleBatchDeleteStudents(db, request, classId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const studentIds = Array.isArray(body.studentIds)
+    ? Array.from(new Set(body.studentIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)))
+    : [];
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  if (studentIds.length === 0) {
+    return error('请至少选择一名学生');
+  }
+
+  await assertClassOwnership(db, userId, classId);
+
+  const placeholders = studentIds.map(() => '?').join(', ');
+  const result = await db
+    .prepare(`SELECT id, name FROM students WHERE class_id = ? AND id IN (${placeholders})`)
+    .bind(classId, ...studentIds)
+    .all();
+
+  const targetStudents = result.results || [];
+
+  if (targetStudents.length !== studentIds.length) {
+    return error('部分学生不存在或已被移除');
+  }
+
+  await db
+    .prepare(`DELETE FROM students WHERE class_id = ? AND id IN (${placeholders})`)
+    .bind(classId, ...studentIds)
+    .run();
+
+  const summaryNames = targetStudents.slice(0, 6).map((student) => student.name).join('、');
+  const suffix = targetStudents.length > 6 ? ' 等学生' : '';
+  await appendLog(db, {
+    classId,
+    userId,
+    actionType: '学生管理',
+    detail: `批量移除了 ${targetStudents.length} 名学生：${summaryNames}${suffix}`,
+  });
+
+  return json({
+    students: await getStudentsByClassId(db, classId),
+    logs: await getLogsByClassId(db, classId),
+  });
+}
+
 async function handleUpdateStudent(db, request, studentId) {
   const body = await readBody(request);
   const userId = parseId(body.userId);
@@ -549,23 +833,30 @@ async function handleUpdateStudent(db, request, studentId) {
     });
   }
 
+  const nextName = String(updates.name ?? currentStudent.name).trim();
+
+  if (!nextName) {
+    return error('学生姓名不能为空');
+  }
+
   const nextStudent = {
-    name: String(updates.name ?? currentStudent.name),
+    name: nextName,
     pet_status: String(updates.pet_status ?? currentStudent.pet_status ?? 'egg'),
     pet_name: updates.pet_name ?? currentStudent.pet_name,
     pet_type_id: updates.pet_type_id ?? currentStudent.pet_type_id,
-    pet_level: Number(updates.pet_level ?? currentStudent.pet_level ?? 0),
-    pet_points: Number(updates.pet_points ?? currentStudent.pet_points ?? 0),
+    pet_level: Math.max(0, Number(updates.pet_level ?? currentStudent.pet_level ?? 0)),
+    pet_points: Math.max(0, Number(updates.pet_points ?? currentStudent.pet_points ?? 0)),
     coins: Math.max(0, Number(updates.coins ?? currentStudent.coins ?? 0)),
     total_exp: Math.max(0, Number(updates.total_exp ?? currentStudent.total_exp ?? 0)),
     total_coins: Math.max(0, Number(updates.total_coins ?? currentStudent.total_coins ?? 0)),
+    reward_count: Math.max(0, Number(updates.reward_count ?? currentStudent.reward_count ?? 0)),
     pet_collection: parsePetCollection(updates.pet_collection ?? currentStudent.pet_collection ?? '[]'),
   };
 
   await db
     .prepare(
       `UPDATE students
-       SET name = ?, pet_status = ?, pet_name = ?, pet_type_id = ?, pet_level = ?, pet_points = ?, coins = ?, total_exp = ?, total_coins = ?, pet_collection = ?
+       SET name = ?, pet_status = ?, pet_name = ?, pet_type_id = ?, pet_level = ?, pet_points = ?, coins = ?, total_exp = ?, total_coins = ?, reward_count = ?, pet_collection = ?
        WHERE id = ?`,
     )
     .bind(
@@ -578,6 +869,7 @@ async function handleUpdateStudent(db, request, studentId) {
       nextStudent.coins,
       nextStudent.total_exp,
       nextStudent.total_coins,
+      nextStudent.reward_count,
       JSON.stringify(nextStudent.pet_collection),
       studentId,
     )
@@ -595,7 +887,7 @@ async function handleUpdateStudent(db, request, studentId) {
   const refreshedStudent = await db
     .prepare(
       `SELECT id, class_id, name, pet_status, pet_name, pet_type_id, pet_level, pet_points, coins, total_exp, total_coins
-       , pet_collection
+       , reward_count, pet_collection
        FROM students
        WHERE id = ?`,
     )
@@ -641,6 +933,83 @@ async function handleCreateShopItem(db, request, classId) {
   });
 }
 
+async function handleUpdateShopItem(db, request, itemId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const classId = parseId(body.classId);
+  const item = body.item && typeof body.item === 'object' ? body.item : {};
+  const name = String(item.name || '').trim();
+  const icon = String(item.icon || '🎁').trim() || '🎁';
+  const price = Number(item.price || 0);
+  const stock = Math.max(0, Number(item.stock || 0));
+
+  if (!userId || !classId || !name || price <= 0) {
+    return error('请填写有效的商品名称与价格');
+  }
+
+  await assertClassOwnership(db, userId, classId);
+
+  const existing = await db
+    .prepare('SELECT id, class_id, name FROM shop_items WHERE id = ? AND class_id = ?')
+    .bind(itemId, classId)
+    .first();
+
+  if (!existing) {
+    return error('商品不存在或已下架');
+  }
+
+  await db
+    .prepare('UPDATE shop_items SET name = ?, icon = ?, price = ?, stock = ? WHERE id = ?')
+    .bind(name, icon, price, stock, itemId)
+    .run();
+
+  await appendLog(db, {
+    classId,
+    userId,
+    actionType: '商品管理',
+    detail: `更新了商品 ${name}，价格 ${price}，库存 ${stock}`,
+  });
+
+  return json({
+    shopItems: await getShopItemsByClassId(db, classId),
+    logs: await getLogsByClassId(db, classId),
+  });
+}
+
+async function handleDeleteShopItem(db, request, itemId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const classId = parseId(body.classId);
+
+  if (!userId || !classId) {
+    return error('缺少有效的商品上下文');
+  }
+
+  await assertClassOwnership(db, userId, classId);
+
+  const item = await db
+    .prepare('SELECT id, class_id, name FROM shop_items WHERE id = ? AND class_id = ?')
+    .bind(itemId, classId)
+    .first();
+
+  if (!item) {
+    return error('商品不存在或已下架');
+  }
+
+  await db.prepare('DELETE FROM shop_items WHERE id = ?').bind(itemId).run();
+  await appendLog(db, {
+    classId,
+    userId,
+    actionType: '商品管理',
+    detail: `下架了商品 ${item.name}`,
+  });
+
+  return json({
+    shopItems: await getShopItemsByClassId(db, classId),
+    logs: await getLogsByClassId(db, classId),
+  });
+}
+
 async function handleRedeemShopItem(db, request, itemId) {
   const body = await readBody(request);
   const userId = parseId(body.userId);
@@ -676,7 +1045,7 @@ async function handleRedeemShopItem(db, request, itemId) {
   const selectedStudents = await db
     .prepare(
       `SELECT id, class_id, name, pet_status, pet_name, pet_type_id, pet_level, pet_points, coins, total_exp, total_coins
-       , pet_collection
+       , reward_count, pet_collection
        FROM students
        WHERE class_id = ? AND id IN (${placeholders})`,
     )
@@ -748,6 +1117,50 @@ async function handleCreateRule(db, request, classId) {
     userId,
     actionType: '规则修改',
     detail: `新增规则 ${name}`,
+  });
+
+  return json({
+    rules: await getRulesByClassId(db, classId),
+    logs: await getLogsByClassId(db, classId),
+  });
+}
+
+async function handleUpdateRule(db, request, ruleId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const classId = parseId(body.classId);
+  const rule = body.rule && typeof body.rule === 'object' ? body.rule : {};
+  const name = String(rule.name || '').trim();
+  const icon = String(rule.icon || '⭐').trim() || '⭐';
+  const exp = Number(rule.exp || 0);
+  const coins = Number(rule.coins || 0);
+  const type = rule.type === 'negative' ? 'negative' : 'positive';
+
+  if (!userId || !classId || !name) {
+    return error('请输入规则名称');
+  }
+
+  await assertClassOwnership(db, userId, classId);
+
+  const existing = await db
+    .prepare('SELECT id, class_id, name FROM rules WHERE id = ? AND class_id = ?')
+    .bind(ruleId, classId)
+    .first();
+
+  if (!existing) {
+    return error('系统预设规则不可编辑，或目标规则不存在');
+  }
+
+  await db
+    .prepare('UPDATE rules SET name = ?, icon = ?, exp = ?, coins = ?, type = ? WHERE id = ?')
+    .bind(name, icon, exp, coins, type, ruleId)
+    .run();
+
+  await appendLog(db, {
+    classId,
+    userId,
+    actionType: '规则修改',
+    detail: `更新规则 ${name}`,
   });
 
   return json({
@@ -840,6 +1253,128 @@ async function handleUpdateThresholds(db, request, classId) {
   });
 }
 
+async function handleResetClassProgress(db, request, classId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  await assertClassOwnership(db, userId, classId);
+
+  const result = await db
+    .prepare(
+      `SELECT id, class_id, name, pet_status, pet_name, pet_type_id, pet_level, pet_points, coins, total_exp, total_coins
+       , reward_count, pet_collection
+       FROM students
+       WHERE class_id = ?`,
+    )
+    .bind(classId)
+    .all();
+
+  const students = (result.results || []).map(normalizeStudent);
+
+  if (students.length === 0) {
+    return error('当前班级还没有学生，无法执行重置');
+  }
+
+  const statements = students.map((student) =>
+    db
+      .prepare(
+        `UPDATE students
+         SET pet_status = 'egg',
+             pet_name = NULL,
+             pet_type_id = NULL,
+             pet_level = 0,
+             pet_points = 0,
+             coins = 0,
+             total_exp = 0,
+             reward_count = 0,
+             pet_collection = '[]'
+         WHERE id = ?`,
+      )
+      .bind(student.id),
+  );
+
+  await db.batch(statements);
+  await appendLog(db, {
+    classId,
+    userId,
+    actionType: '班级重置',
+    detail: `执行了全班新学期重置，保留 ${students.length} 名学生名册并清空当前宠物进度`,
+  });
+
+  return json({
+    students: await getStudentsByClassId(db, classId),
+    logs: await getLogsByClassId(db, classId),
+  });
+}
+
+async function handleArchiveClassStudents(db, request, classId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  await assertClassOwnership(db, userId, classId);
+
+  const countRow = await db
+    .prepare('SELECT COUNT(*) AS count FROM students WHERE class_id = ?')
+    .bind(classId)
+    .first();
+
+  const studentCount = Number(countRow?.count || 0);
+
+  if (studentCount === 0) {
+    return error('当前班级没有可归档的学生');
+  }
+
+  await db.prepare('DELETE FROM students WHERE class_id = ?').bind(classId).run();
+  await appendLog(db, {
+    classId,
+    userId,
+    actionType: '毕业归档',
+    detail: `一键归档并移除了当前班级的 ${studentCount} 名学生`,
+  });
+
+  return json({
+    students: [],
+    logs: await getLogsByClassId(db, classId),
+  });
+}
+
+async function handleListActivationCodes(db, request) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  const user = await getUserById(db, userId);
+
+  if (user.level !== 'permanent') {
+    return error('仅永久账号可查看激活码库存', 403);
+  }
+
+  await ensureActivationCodes(db);
+
+  const result = await db
+    .prepare(
+      `SELECT id, code, level, expires_in_days, used_by_user_id, used_at
+       FROM activation_codes
+       ORDER BY created_at ASC, id ASC`,
+    )
+    .all();
+
+  return json({
+    activationCodes: (result.results || []).map(normalizeActivationCode),
+  });
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') {
@@ -855,6 +1390,10 @@ export default {
         return await handleLogin(db, request);
       }
 
+      if (path === '/api/auth/password' && request.method === 'PUT') {
+        return await handleUpdatePassword(db, request);
+      }
+
       if (path === '/api/bootstrap' && request.method === 'GET') {
         const userId = parseId(url.searchParams.get('userId'));
         const classId = parseId(url.searchParams.get('classId'));
@@ -864,6 +1403,10 @@ export default {
         }
 
         return json(await getBootstrapPayload(db, userId, classId));
+      }
+
+      if (path === '/api/activation-codes' && request.method === 'GET') {
+        return await handleListActivationCodes(db, request);
       }
 
       if (path === '/api/classes' && request.method === 'POST') {
@@ -885,14 +1428,28 @@ export default {
         return await handleCreateStudent(db, request, Number(createStudentMatch[1]));
       }
 
+      const batchDeleteStudentsMatch = path.match(/^\/api\/classes\/(\d+)\/students\/batch-delete$/);
+      if (batchDeleteStudentsMatch && request.method === 'POST') {
+        return await handleBatchDeleteStudents(db, request, Number(batchDeleteStudentsMatch[1]));
+      }
+
       const studentMatch = path.match(/^\/api\/students\/(\d+)$/);
       if (studentMatch && request.method === 'PATCH') {
         return await handleUpdateStudent(db, request, Number(studentMatch[1]));
       }
 
-      const shopItemMatch = path.match(/^\/api\/classes\/(\d+)\/shop-items$/);
-      if (shopItemMatch && request.method === 'POST') {
-        return await handleCreateShopItem(db, request, Number(shopItemMatch[1]));
+      const shopItemsMatch = path.match(/^\/api\/classes\/(\d+)\/shop-items$/);
+      if (shopItemsMatch && request.method === 'POST') {
+        return await handleCreateShopItem(db, request, Number(shopItemsMatch[1]));
+      }
+
+      const shopItemMatch = path.match(/^\/api\/shop-items\/(\d+)$/);
+      if (shopItemMatch && request.method === 'PATCH') {
+        return await handleUpdateShopItem(db, request, Number(shopItemMatch[1]));
+      }
+
+      if (shopItemMatch && request.method === 'DELETE') {
+        return await handleDeleteShopItem(db, request, Number(shopItemMatch[1]));
       }
 
       const redeemMatch = path.match(/^\/api\/shop-items\/(\d+)\/redeem$/);
@@ -905,14 +1462,28 @@ export default {
         return await handleCreateRule(db, request, Number(rulesMatch[1]));
       }
 
-      const deleteRuleMatch = path.match(/^\/api\/rules\/(\d+)$/);
-      if (deleteRuleMatch && request.method === 'DELETE') {
-        return await handleDeleteRule(db, request, Number(deleteRuleMatch[1]));
+      const ruleMatch = path.match(/^\/api\/rules\/(\d+)$/);
+      if (ruleMatch && request.method === 'PATCH') {
+        return await handleUpdateRule(db, request, Number(ruleMatch[1]));
+      }
+
+      if (ruleMatch && request.method === 'DELETE') {
+        return await handleDeleteRule(db, request, Number(ruleMatch[1]));
       }
 
       const thresholdMatch = path.match(/^\/api\/classes\/(\d+)\/settings\/thresholds$/);
       if (thresholdMatch && request.method === 'PUT') {
         return await handleUpdateThresholds(db, request, Number(thresholdMatch[1]));
+      }
+
+      const resetProgressMatch = path.match(/^\/api\/classes\/(\d+)\/reset-progress$/);
+      if (resetProgressMatch && request.method === 'POST') {
+        return await handleResetClassProgress(db, request, Number(resetProgressMatch[1]));
+      }
+
+      const archiveStudentsMatch = path.match(/^\/api\/classes\/(\d+)\/archive-students$/);
+      if (archiveStudentsMatch && request.method === 'POST') {
+        return await handleArchiveClassStudents(db, request, Number(archiveStudentsMatch[1]));
       }
 
       return error('Not Found', 404);

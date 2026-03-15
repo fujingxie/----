@@ -1,57 +1,98 @@
 .pet-card {
   width: 100%;
-  min-height: 360px;
-  padding: 24px;
+  min-height: 266px;
+  padding: 14px 14px 12px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
   position: relative;
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  overflow: hidden;
+}
+
+.pet-card.selected {
+  border: 1px solid rgba(34, 197, 184, 0.4);
+  box-shadow: 0 22px 44px rgba(45, 212, 191, 0.18);
 }
 
 .pet-card:hover {
   transform: translateY(-8px);
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.1);
+}
+
+.pet-card.is-positive {
+  box-shadow: 0 18px 42px rgba(45, 212, 191, 0.2);
+}
+
+.pet-card.is-negative {
+  box-shadow: 0 18px 42px rgba(251, 113, 133, 0.2);
 }
 
 .pet-lv-badge {
   position: absolute;
-  top: 15px;
-  left: 15px;
-  background: var(--accent-mint);
+  top: 14px;
+  left: 14px;
+  background: #22b8b0;
   color: white;
   font-size: 11px;
   font-weight: 800;
-  padding: 2px 8px;
-  border-radius: 8px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  z-index: 3;
 }
 
 .pet-collection-trigger {
   position: absolute;
   top: 14px;
   right: 14px;
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   border: none;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--text-muted);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #64748b;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
+  z-index: 3;
+}
+
+.pet-collection-trigger.with-selector {
+  top: 64px;
+}
+
+.pet-select-toggle {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 2px solid #cbd5e1;
+  background: rgba(255, 255, 255, 0.98);
+  cursor: pointer;
+  z-index: 4;
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.pet-select-toggle.selected {
+  border-color: #23c6b5;
+  background: radial-gradient(circle at center, #23c6b5 0 46%, #ffffff 47% 100%);
 }
 
 .pet-collection-count {
   position: absolute;
   top: -6px;
-  right: -4px;
+  right: -6px;
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
   border-radius: 999px;
-  background: var(--accent-rose);
+  background: #ff5a5f;
   color: white;
   font-size: 11px;
   font-weight: 800;
@@ -61,20 +102,81 @@
 }
 
 .pet-visual {
+  position: relative;
   width: 100%;
-  min-height: 156px;
+  min-height: 124px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 24px;
+  border: none;
+  background: transparent;
+  padding: 18px 0 2px;
+  cursor: pointer;
 }
 
 .pet-visual-trigger {
   border: none;
   background: transparent;
-  cursor: pointer;
-  padding: 0;
 }
+
+.pet-image {
+  width: 126px;
+  height: 126px;
+  object-fit: contain;
+  filter: drop-shadow(0 18px 24px rgba(15, 23, 42, 0.08));
+}
+
+.shake-positive {
+  animation: petCelebrate 0.75s ease;
+}
+
+.shake-negative {
+  animation: petShake 0.75s ease;
+}
+
+.pet-exp-burst {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 44px;
+  font-weight: 900;
+  opacity: 0;
+  letter-spacing: 0.04em;
+  animation: expBurst 1s ease forwards;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.pet-exp-burst.positive {
+  color: rgba(45, 212, 191, 0.75);
+}
+
+.pet-exp-burst.negative {
+  color: rgba(248, 113, 113, 0.72);
+}
+
+.pet-effect-icons {
+  position: absolute;
+  inset: 18px 0 0;
+  pointer-events: none;
+}
+
+.pet-effect-icon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  font-size: 54px;
+  transform: translate(-50%, -50%);
+  animation: floatBurst 1.2s ease forwards;
+  filter: drop-shadow(0 8px 18px rgba(15, 23, 42, 0.16));
+}
+
+.pet-effect-icon.orbit-1 { --dx: -86px; --dy: -32px; --delay: 0s; }
+.pet-effect-icon.orbit-2 { --dx: 68px; --dy: -76px; --delay: 0.05s; }
+.pet-effect-icon.orbit-3 { --dx: -18px; --dy: -102px; --delay: 0.1s; }
+.pet-effect-icon.orbit-4 { --dx: 84px; --dy: 8px; --delay: 0.15s; }
+.pet-effect-icon.orbit-5 { --dx: -72px; --dy: 42px; --delay: 0.2s; }
 
 .egg-display {
   position: relative;
@@ -84,22 +186,14 @@
 }
 
 .egg-float {
-  width: 120px;
+  width: 96px;
   max-width: 100%;
   animation: float 3s ease-in-out infinite;
 }
 
-.pet-image {
-  width: 136px;
-  height: 136px;
-  max-width: 100%;
-  object-fit: contain;
-  filter: drop-shadow(0 12px 18px rgba(30, 41, 59, 0.12));
-}
-
 .egg-shadow {
-  width: 40px;
-  height: 6px;
+  width: 48px;
+  height: 8px;
   background: rgba(0,0,0,0.05);
   border-radius: 50%;
   margin-top: 10px;
@@ -108,46 +202,88 @@
 }
 
 .student-info {
-  text-align: center;
-  margin-bottom: 20px;
-  width: 100%;
+  margin-top: auto;
+}
+
+.student-info-main {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .pet-type-label {
   font-size: 12px;
-  color: var(--text-muted);
+  color: #94a3b8;
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  font-weight: 700;
 }
 
 .student-name {
-  font-size: 18px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.18;
+}
+
+.reward-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #0f9f96;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.pet-level-caption {
+  margin: 8px 0 8px;
+  color: #64748b;
+  font-size: 11px;
   font-weight: 700;
-  color: var(--text-main);
-  line-height: 1.25;
-  word-break: break-word;
+}
+
+.pet-progress-track {
+  width: 100%;
+  height: 8px;
+  background: #ececec;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.pet-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #35d6ca, #42c79e);
+  transition: width 0.35s ease;
 }
 
 .pet-action-btn {
   width: 100%;
-  padding: 10px;
-  border-radius: 12px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
   border: none;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s;
-  margin-top: auto;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .pet-action-btn.activate {
-  background: rgba(0,0,0,0.03);
-  color: var(--text-muted);
+  background: #f1f5f9;
+  color: #475569;
 }
 
-.pet-action-btn.activate:hover {
-  background: var(--text-main);
-  color: white;
+.pet-action-btn.activate:hover,
+.pet-action-btn.interact:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(45, 212, 191, 0.18);
+}
+
+.pet-action-btn.interact {
+  background: rgba(34, 184, 176, 0.1);
+  color: #0f766e;
 }
 
 @keyframes float {
@@ -160,15 +296,58 @@
   50% { transform: scale(0.8); opacity: 0.2; }
 }
 
+@keyframes petCelebrate {
+  0% { transform: scale(1) rotate(0deg); }
+  20% { transform: scale(1.06) rotate(-4deg); }
+  40% { transform: scale(0.98) rotate(4deg); }
+  60% { transform: scale(1.04) rotate(-3deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+@keyframes petShake {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  20% { transform: translateX(-10px) rotate(-6deg); }
+  40% { transform: translateX(10px) rotate(6deg); }
+  60% { transform: translateX(-8px) rotate(-5deg); }
+  80% { transform: translateX(8px) rotate(5deg); }
+}
+
+@keyframes expBurst {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.5); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -90%) scale(1.05); }
+}
+
+@keyframes floatBurst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.05);
+  }
+}
+
 @media (max-width: 768px) {
   .pet-card {
-    min-height: 340px;
-    padding: 20px;
+    min-height: 376px;
+    padding: 18px 18px 16px;
   }
 
-  .pet-image,
-  .egg-float {
-    width: 112px;
-    height: auto;
+  .pet-image {
+    width: 150px;
+    height: 150px;
+  }
+
+  .student-name {
+    font-size: 20px;
+  }
+
+  .pet-effect-icon {
+    font-size: 44px;
   }
 }

@@ -10,6 +10,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "verify:pets": "node scripts/verify-pet-assets.mjs",
+    "verify:contracts": "node scripts/verify-contracts.mjs",
     "db:init:local": "wrangler d1 migrations apply class_pets_db --local",
     "db:init:remote": "wrangler d1 migrations apply class_pets_db --remote"
   },

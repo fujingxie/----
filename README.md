@@ -4,10 +4,11 @@
 
 ## 当前能力
 
+- 教师账号注册/登录，激活码校验与会员等级返回
 - 多班级切换与创建
-- 学生导入、宠物唤醒、课堂互动
-- 商店补货与兑换，含库存校验
-- 奖惩规则管理、等级阈值管理、操作日志
+- 学生导入、改名、宠物唤醒、课堂互动、宠物重置
+- 商店补货、编辑、下架与兑换，含库存校验
+- 奖惩规则新增、编辑、删除，等级阈值管理、操作日志
 - 前端已接入 Worker API，数据可落到 D1
 
 ## 本地开发
@@ -40,7 +41,8 @@ npm run dev
 
 - 前端默认通过 `vite.config.js` 中的代理把 `/api` 请求转发到 `http://127.0.0.1:8787`
 - Worker 本地运行依赖 `wrangler`
-- 首次登录会自动创建一个演示教师账号
+- 本地默认预置了 3 个激活码：`CLASS-VIP1-2026`、`CLASS-VIP2-2026`、`CLASS-PERM-2026`
+- 新账号需要先用激活码注册，之后再使用账号密码登录
 
 ## D1 结构
 
@@ -84,8 +86,7 @@ public/assets/pets/
 命名规则：
 
 - `egg.png`
-- `[pet_id]_icon.png`
-- `[pet_id]_lv1.png` 到 `[pet_id]_lv7.png`
+- `[pet_id]1.png` 到 `[pet_id]7.png`
 
 当前使用的 `pet_id` 定义在 `src/api/petLibrary.js`
 
@@ -94,4 +95,6 @@ public/assets/pets/
 ```bash
 npm run lint
 npm run build
+npm run verify:pets
+npm run verify:contracts
 ```
