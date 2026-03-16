@@ -78,6 +78,52 @@
   gap: 8px;
 }
 
+.pet-achievement-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pet-achievement-card {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.7);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 88px;
+}
+
+.pet-achievement-card.unlocked {
+  border-color: rgba(34, 197, 184, 0.3);
+  background: rgba(240, 253, 250, 0.92);
+}
+
+.pet-achievement-card.locked {
+  opacity: 0.82;
+}
+
+.pet-achievement-kicker,
+.pet-achievement-progress {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.pet-achievement-card strong {
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+.pet-achievement-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .pet-stat-card {
   background: rgba(255, 255, 255, 0.68);
   border: 1px solid rgba(255, 255, 255, 0.65);
@@ -313,6 +359,10 @@
   }
 
   .pet-paradise-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .pet-achievement-row {
     grid-template-columns: 1fr;
   }
 

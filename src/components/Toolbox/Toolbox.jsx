@@ -107,9 +107,53 @@ const RandomPickerTool = ({ students }) => {
   const [pickedStudents, setPickedStudents] = useState([]);
   const [recentPicks, setRecentPicks] = useState([]);
   const [isRolling, setIsRolling] = useState(false);
+  const [repeatMode, setRepeatMode] = useState('recent-5');
+  const [roundPool, setRoundPool] = useState([]);
 
   const maxPickCount = Math.min(5, Math.max(1, students.length));
   const activePickCount = Math.min(pickCount, maxPickCount);
+
+  const pickUniqueStudents = (source, count) => {
+    const pool = [...source];
+    const winners = [];
+
+    while (pool.length > 0 && winners.length < count) {
+      const nextIndex = Math.floor(Math.random() * pool.length);
+      winners.push(pool.splice(nextIndex, 1)[0]);
+    }
+
+    return winners;
+  };
+
+  const resolveCandidateStudents = (count) => {
+    if (repeatMode === 'round-robin') {
+      let nextRoundPool = roundPool.filter((studentId) =>
+        students.some((student) => student.id === studentId),
+      );
+      if (nextRoundPool.length < count) {
+        nextRoundPool = students.map((student) => student.id);
+      }
+      const poolStudents = students.filter((student) => nextRoundPool.includes(student.id));
+      const winners = pickUniqueStudents(poolStudents, count);
+      const remainingIds = nextRoundPool.filter((studentId) => !winners.some((student) => student.id === studentId));
+
+      setRoundPool(remainingIds);
+      return winners;
+    }
+
+    if (repeatMode === 'recent-5') {
+      const recentIds = new Set(
+        recentPicks
+          .slice(0, 5)
+          .flatMap((entry) => entry.students.map((student) => student.id)),
+      );
+      const filteredStudents = students.filter((student) => !recentIds.has(student.id));
+      const candidateStudents = filteredStudents.length >= count ? filteredStudents : students;
+      return pickUniqueStudents(candidateStudents, count);
+    }
+
+    return pickUniqueStudents(students, count);
+  };
 
   const startRandomSelect = () => {
     if (students.length === 0) {
@@ -119,19 +163,22 @@ const RandomPickerTool = ({ students }) => {
     const safeCount = Math.min(activePickCount, students.length);
     setIsRolling(true);
     let count = 0;
+    let finalWinners = [];
     const interval = setInterval(() => {
-      const shuffled = [...students].sort(() => Math.random() - 0.5);
-      setPickedStudents(shuffled.slice(0, safeCount));
+      const rollingWinners = pickUniqueStudents(students, safeCount);
+      setPickedStudents(rollingWinners);
       count += 1;
 
       if (count > 18) {
         clearInterval(interval);
-        const winners = shuffled.slice(0, safeCount);
-        setPickedStudents(winners);
+        finalWinners = resolveCandidateStudents(safeCount);
+        setPickedStudents(finalWinners);
         setRecentPicks((prev) => {
           const nextEntry = {
-            id: `${Date.now()}-${winners.map((student) => student.id).join('-')}`,
-            students: winners,
+            id: `${Date.now()}-${finalWinners.map((student) => student.id).join('-')}`,
+            students: finalWinners,
+            mode: repeatMode,
+            createdAt: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
           };
 
           return [nextEntry, ...prev].slice(0, 6);
@@ -157,6 +204,23 @@ const RandomPickerTool = ({ students }) => {
               {value}
             </button>
           ))}
+        </div>
+
+        <div className="random-mode-tabs">
+          <button
+            className={`random-mode-tab ${repeatMode === 'recent-5' ? 'active' : ''}`}
+            onClick={() => setRepeatMode('recent-5')}
+            type="button"
+          >
+            最近 5 次不重复
+          </button>
+          <button
+            className={`random-mode-tab ${repeatMode === 'round-robin' ? 'active' : ''}`}
+            onClick={() => setRepeatMode('round-robin')}
+            type="button"
+          >
+            本轮全员点完再重置
+          </button>
         </div>
 
         <div className="random-picked-board">
@@ -192,8 +256,13 @@ const RandomPickerTool = ({ students }) => {
           <div className="random-history-list">
             {recentPicks.map((entry) => (
               <div key={entry.id} className="random-history-item">
-                <div className="random-history-names">
-                  {entry.students.map((student) => student.name).join('、')}
+                <div className="random-history-copy">
+                  <div className="random-history-names">
+                    {entry.students.map((student) => student.name).join('、')}
+                  </div>
+                  <span className="random-history-meta">
+                    {entry.mode === 'round-robin' ? '轮询模式' : '最近去重'} · {entry.createdAt}
+                  </span>
                 </div>
                 <Trophy size={16} />
               </div>
@@ -341,15 +410,18 @@ const TimerTool = ({ onClose }) => {
 
           <div className="timer-custom-setter">
             <Settings2 size={18} />
-            <input
-              className="timer-custom-input"
-              type="number"
-              min="1"
-              step="1"
-              placeholder="自定义"
-              value={customMinutes}
-              onChange={(event) => setCustomMinutes(event.target.value)}
-            />
+            <div className="timer-custom-field">
+              <input
+                className="timer-custom-input"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="输入分钟"
+                value={customMinutes}
+                onChange={(event) => setCustomMinutes(event.target.value)}
+              />
+              <span className="timer-custom-unit">min</span>
+            </div>
             <button className="timer-set-btn" onClick={handleCustomApply} type="button">
               设定
             </button>

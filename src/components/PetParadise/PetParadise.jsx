@@ -33,6 +33,7 @@ const resolvePetLevel = (totalExp, thresholds) => {
 const PetParadise = ({
   currentClass,
   students,
+  logs,
   onImportStudents,
   onActivatePet,
   onGraduatePet,
@@ -52,10 +53,41 @@ const PetParadise = ({
   const activePetsCount = students.filter((student) => student.pet_status !== 'egg').length;
   const totalAdoptions = students.reduce((sum, student) => sum + getAdoptionCount(student), 0);
   const classCoins = students.reduce((sum, student) => sum + (student.coins || 0), 0);
+  const totalRewards = students.reduce((sum, student) => sum + (student.reward_count || 0), 0);
   const feedableStudents = useMemo(
     () => students.filter((student) => student.pet_status !== 'egg' && !isStudentAtMaxLevel(student, levelThresholds)),
     [students, levelThresholds],
   );
+  const achievements = useMemo(() => {
+    const rewardMaster = totalRewards >= 10;
+    const firstGraduate = students.some((student) => isStudentAtMaxLevel(student, levelThresholds))
+      || (logs || []).some((log) => log.actionType === '宠物毕业');
+    const adoptionCollector = totalAdoptions >= 20;
+
+    return [
+      {
+        id: 'reward-master',
+        title: '奖励达人',
+        description: '累计奖励 10 次',
+        unlocked: rewardMaster,
+        progress: `${Math.min(totalRewards, 10)}/10`,
+      },
+      {
+        id: 'first-graduate',
+        title: '首次满级',
+        description: '班级诞生第一只满级宠物',
+        unlocked: firstGraduate,
+        progress: firstGraduate ? '已达成' : '进行中',
+      },
+      {
+        id: 'adoption-collector',
+        title: '领养收藏家',
+        description: '班级累计领养 20 只',
+        unlocked: adoptionCollector,
+        progress: `${Math.min(totalAdoptions, 20)}/20`,
+      },
+    ];
+  }, [levelThresholds, logs, students, totalAdoptions, totalRewards]);
 
   useEffect(() => {
     const feedableIds = new Set(feedableStudents.map((student) => student.id));
@@ -252,6 +284,20 @@ const PetParadise = ({
             <span className="pet-stat-label">班级金币</span>
             <strong>{classCoins}</strong>
           </div>
+        </div>
+
+        <div className="pet-achievement-row">
+          {achievements.map((achievement) => (
+            <article
+              key={achievement.id}
+              className={`pet-achievement-card ${achievement.unlocked ? 'unlocked' : 'locked'}`}
+            >
+              <span className="pet-achievement-kicker">{achievement.unlocked ? '已达成' : '成长成就'}</span>
+              <strong>{achievement.title}</strong>
+              <p>{achievement.description}</p>
+              <span className="pet-achievement-progress">{achievement.progress}</span>
+            </article>
+          ))}
         </div>
       </section>
 

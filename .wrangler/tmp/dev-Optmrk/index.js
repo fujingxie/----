@@ -132,14 +132,29 @@ var formatLogTime = /* @__PURE__ */ __name((createdAt) => {
   }
   return timestamp.toLocaleTimeString("zh-CN", { hour12: false });
 }, "formatLogTime");
-var normalizeLog = /* @__PURE__ */ __name((row) => ({
-  id: Number(row.id),
-  action: row.action_type,
-  detail: row.detail,
-  time: formatLogTime(row.created_at),
-  created_at: row.created_at,
-  operator: row.operator || "\u7CFB\u7EDF"
-}), "normalizeLog");
+var parseLogMeta = /* @__PURE__ */ __name((value) => {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}, "parseLogMeta");
+var normalizeLog = /* @__PURE__ */ __name((row) => {
+  const meta = parseLogMeta(row.meta);
+  return {
+    id: Number(row.id),
+    action: row.action_type,
+    detail: row.detail,
+    time: formatLogTime(row.created_at),
+    created_at: row.created_at,
+    operator: row.operator || "\u7CFB\u7EDF",
+    canUndo: Boolean(meta?.undoable && !meta?.undone),
+    meta
+  };
+}, "normalizeLog");
 var normalizeUser = /* @__PURE__ */ __name((row) => ({
   id: Number(row.id),
   username: row.username,
@@ -326,7 +341,7 @@ async function getRulesByClassId(db, classId) {
 __name(getRulesByClassId, "getRulesByClassId");
 async function getLogsByClassId(db, classId) {
   const result = await db.prepare(
-    `SELECT l.id, l.action_type, l.detail, l.created_at, u.nickname AS operator
+    `SELECT l.id, l.action_type, l.detail, l.meta, l.created_at, u.nickname AS operator
        FROM logs l
        LEFT JOIN users u ON u.id = l.user_id
        WHERE l.class_id = ?
@@ -353,10 +368,29 @@ async function getThresholdsByClassId(db, classId) {
   return DEFAULT_LEVEL_THRESHOLDS;
 }
 __name(getThresholdsByClassId, "getThresholdsByClassId");
-async function appendLog(db, { classId, userId, actionType, detail }) {
-  await db.prepare("INSERT INTO logs (class_id, user_id, action_type, detail) VALUES (?, ?, ?, ?)").bind(classId, userId, actionType, detail).run();
+async function appendLog(db, { classId, userId, actionType, detail, meta = null }) {
+  await db.prepare("INSERT INTO logs (class_id, user_id, action_type, detail, meta) VALUES (?, ?, ?, ?, ?)").bind(classId, userId, actionType, detail, meta ? JSON.stringify(meta) : null).run();
 }
 __name(appendLog, "appendLog");
+async function getRawLogById(db, classId, logId) {
+  return db.prepare("SELECT id, class_id, user_id, action_type, detail, meta, created_at FROM logs WHERE id = ? AND class_id = ?").bind(logId, classId).first();
+}
+__name(getRawLogById, "getRawLogById");
+async function getLatestUndoableLog(db, classId) {
+  const result = await db.prepare(
+    `SELECT id, class_id, user_id, action_type, detail, meta, created_at
+       FROM logs
+       WHERE class_id = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT 50`
+  ).bind(classId).all();
+  const rows = result.results || [];
+  return rows.find((row) => {
+    const meta = parseLogMeta(row.meta);
+    return Boolean(meta?.undoable && !meta?.undone);
+  }) || null;
+}
+__name(getLatestUndoableLog, "getLatestUndoableLog");
 async function getBootstrapPayload(db, userId, requestedClassId) {
   await ensureSystemRules(db);
   await ensureActivationCodes(db);
@@ -628,6 +662,7 @@ async function handleUpdateStudent(db, request, studentId) {
   const userId = parseId(body.userId);
   const classId = parseId(body.classId);
   const updates = body.updates && typeof body.updates === "object" ? body.updates : {};
+  const undoMeta = body.undoMeta && typeof body.undoMeta === "object" ? body.undoMeta : null;
   if (!userId || !classId) {
     return error("\u7F3A\u5C11\u6709\u6548\u7684\u73ED\u7EA7\u4E0A\u4E0B\u6587");
   }
@@ -690,7 +725,8 @@ async function handleUpdateStudent(db, request, studentId) {
       classId,
       userId,
       actionType: body.actionType,
-      detail: body.detail
+      detail: body.detail,
+      meta: undoMeta
     });
   }
   const refreshedStudent = await db.prepare(
@@ -830,7 +866,26 @@ async function handleRedeemShopItem(db, request, itemId) {
     classId,
     userId,
     actionType: "\u5546\u54C1\u5151\u6362",
-    detail: `\u4E3A ${students.map((student) => student.name).join("\u3001")} \u5151\u6362\u4E86 ${item.name}`
+    detail: `\u4E3A ${students.map((student) => student.name).join("\u3001")} \u5151\u6362\u4E86 ${item.name}`,
+    meta: {
+      undoable: true,
+      kind: "shop-redeem",
+      item: {
+        id: Number(item.id),
+        name: item.name,
+        stockBefore: Number(item.stock || 0),
+        stockAfter: Number(item.stock || 0) - studentIds.length
+      },
+      studentsBefore: students.map((student) => ({
+        id: student.id,
+        name: student.name,
+        coins: student.coins || 0
+      })),
+      studentsAfter: students.map((student) => ({
+        id: student.id,
+        coins: (student.coins || 0) - Number(item.price || 0)
+      }))
+    }
   });
   return json({
     students: await getStudentsByClassId(db, classId),
@@ -1029,6 +1084,83 @@ async function handleArchiveClassStudents(db, request, classId) {
   });
 }
 __name(handleArchiveClassStudents, "handleArchiveClassStudents");
+async function handleUndoLog(db, request, logId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const classId = parseId(body.classId);
+  if (!userId || !classId) {
+    return error("\u7F3A\u5C11\u6709\u6548\u7684\u64A4\u9500\u4E0A\u4E0B\u6587");
+  }
+  await assertClassOwnership(db, userId, classId);
+  const targetLog = await getRawLogById(db, classId, logId);
+  if (!targetLog) {
+    return error("\u672A\u627E\u5230\u5BF9\u5E94\u65E5\u5FD7");
+  }
+  const meta = parseLogMeta(targetLog.meta);
+  if (!meta?.undoable || meta?.undone) {
+    return error("\u8BE5\u64CD\u4F5C\u5F53\u524D\u4E0D\u53EF\u64A4\u9500");
+  }
+  const latestUndoableLog = await getLatestUndoableLog(db, classId);
+  if (!latestUndoableLog || Number(latestUndoableLog.id) !== logId) {
+    return error("\u4EC5\u652F\u6301\u64A4\u9500\u6700\u8FD1\u4E00\u6B21\u53EF\u56DE\u6EDA\u64CD\u4F5C");
+  }
+  if (meta.kind === "student-update") {
+    const snapshot = meta.before;
+    if (!snapshot?.id) {
+      return error("\u7F3A\u5C11\u5B66\u751F\u56DE\u6EDA\u5FEB\u7167");
+    }
+    await db.prepare(
+      `UPDATE students
+         SET name = ?, pet_status = ?, pet_name = ?, pet_type_id = ?, pet_level = ?, pet_points = ?, coins = ?, total_exp = ?, total_coins = ?, reward_count = ?, pet_collection = ?
+         WHERE id = ? AND class_id = ?`
+    ).bind(
+      snapshot.name,
+      snapshot.pet_status,
+      snapshot.pet_name,
+      snapshot.pet_type_id,
+      snapshot.pet_level,
+      snapshot.pet_points,
+      snapshot.coins,
+      snapshot.total_exp,
+      snapshot.total_coins,
+      snapshot.reward_count,
+      JSON.stringify(snapshot.pet_collection || []),
+      snapshot.id,
+      classId
+    ).run();
+  } else if (meta.kind === "shop-redeem") {
+    const studentStatements = (meta.studentsBefore || []).map(
+      (student) => db.prepare("UPDATE students SET coins = ? WHERE id = ? AND class_id = ?").bind(student.coins, student.id, classId)
+    );
+    if (studentStatements.length === 0 || !meta.item?.id) {
+      return error("\u7F3A\u5C11\u5546\u54C1\u5151\u6362\u56DE\u6EDA\u5FEB\u7167");
+    }
+    studentStatements.push(
+      db.prepare("UPDATE shop_items SET stock = ? WHERE id = ? AND class_id = ?").bind(meta.item.stockBefore, meta.item.id, classId)
+    );
+    await db.batch(studentStatements);
+  } else {
+    return error("\u5F53\u524D\u4EC5\u652F\u6301\u64A4\u9500\u4E92\u52A8\u548C\u5546\u54C1\u5151\u6362\u64CD\u4F5C");
+  }
+  const nextMeta = {
+    ...meta,
+    undone: true,
+    undone_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  await db.prepare("UPDATE logs SET meta = ? WHERE id = ?").bind(JSON.stringify(nextMeta), logId).run();
+  await appendLog(db, {
+    classId,
+    userId,
+    actionType: "\u64CD\u4F5C\u64A4\u9500",
+    detail: `\u64A4\u9500\u4E86\u300C${targetLog.action_type}\u300D\uFF1A${targetLog.detail}`
+  });
+  return json({
+    students: await getStudentsByClassId(db, classId),
+    shopItems: await getShopItemsByClassId(db, classId),
+    logs: await getLogsByClassId(db, classId)
+  });
+}
+__name(handleUndoLog, "handleUndoLog");
 async function handleListActivationCodes(db, request) {
   const url = new URL(request.url);
   const userId = parseId(url.searchParams.get("userId"));
@@ -1136,6 +1268,10 @@ var src_server_default = {
       const archiveStudentsMatch = path.match(/^\/api\/classes\/(\d+)\/archive-students$/);
       if (archiveStudentsMatch && request.method === "POST") {
         return await handleArchiveClassStudents(db, request, Number(archiveStudentsMatch[1]));
+      }
+      const undoLogMatch = path.match(/^\/api\/logs\/(\d+)\/undo$/);
+      if (undoLogMatch && request.method === "POST") {
+        return await handleUndoLog(db, request, Number(undoLogMatch[1]));
       }
       return error("Not Found", 404);
     } catch (caughtError) {

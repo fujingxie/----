@@ -3,6 +3,7 @@ import './Settings.css';
 import {
   CheckSquare,
   ClipboardList,
+  Download,
   GraduationCap,
   Key,
   PenSquare,
@@ -617,7 +618,7 @@ const parseLogDateValue = (value) => {
   return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
 };
 
-const LogsPanel = ({ logs }) => {
+const LogsPanel = ({ logs, onUndoLog, isMutating }) => {
   const [startAt, setStartAt] = useState('');
   const [endAt, setEndAt] = useState('');
   const startDate = useMemo(() => (startAt ? new Date(startAt) : null), [startAt]);
@@ -715,7 +716,19 @@ const LogsPanel = ({ logs }) => {
                 <span>{formatLogDate(log.created_at) || log.time}</span>
               </div>
               <p>{log.detail}</p>
-              <span className="log-operator">{log.operator}</span>
+              <div className="log-footer">
+                <span className="log-operator">{log.operator}</span>
+                {log.canUndo && (
+                  <button
+                    className="log-undo-btn"
+                    disabled={isMutating}
+                    onClick={() => onUndoLog(log.id)}
+                    type="button"
+                  >
+                    {isMutating ? '撤销中...' : '撤销最近一次'}
+                  </button>
+                )}
+              </div>
             </article>
           ))}
         </div>
@@ -936,6 +949,59 @@ const DangerZonePanel = ({ currentClass, onResetClassProgress, onArchiveClassStu
   );
 };
 
+const ExportPanel = ({ currentClass, students, rules, logs, onExportClassData }) => {
+  const redemptionLogs = useMemo(
+    () => logs.filter((log) => log.actionType === '商品兑换'),
+    [logs],
+  );
+
+  return (
+    <div className="settings-section export-section">
+      <div className="export-panel glass-card">
+        <div className="export-panel-head">
+          <div>
+            <h3>班级数据导出</h3>
+            <p>导出当前班级的学生、宠物、规则和兑换记录，方便留档或交接。</p>
+          </div>
+          <button className="confirm-btn export-btn" onClick={onExportClassData} type="button">
+            <Download size={16} />
+            <span>导出 JSON</span>
+          </button>
+        </div>
+
+        <div className="export-summary-grid">
+          <div className="export-summary-card">
+            <label>当前班级</label>
+            <strong>{currentClass?.name || '未命名班级'}</strong>
+          </div>
+          <div className="export-summary-card">
+            <label>学生名单</label>
+            <strong>{students.length} 人</strong>
+          </div>
+          <div className="export-summary-card">
+            <label>规则数量</label>
+            <strong>{rules.length} 条</strong>
+          </div>
+          <div className="export-summary-card">
+            <label>兑换记录</label>
+            <strong>{redemptionLogs.length} 条</strong>
+          </div>
+        </div>
+
+        <div className="export-scope-card">
+          <span className="account-side-label">将包含以下内容</span>
+          <ul className="account-side-list">
+            <li>学生名单、金币、经验和当前宠物状态。</li>
+            <li>宠物图鉴记录、奖励次数和毕业进度。</li>
+            <li>课堂规则、等级阈值和小卖部商品。</li>
+            <li>独立的商品兑换日志，便于复盘发货情况。</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Settings = ({
   user,
   currentClass,
@@ -955,6 +1021,9 @@ const Settings = ({
   onUpdatePassword,
   onResetClassProgress,
   onArchiveClassStudents,
+  onUndoLog,
+  onExportClassData,
+  isMutating,
 }) => {
   const [activeMenu, setActiveMenu] = useState('account');
 
@@ -963,6 +1032,7 @@ const Settings = ({
     { id: 'class', label: '班级学生', icon: <Users size={18} /> },
     { id: 'rules', label: '分值规则', icon: <Scale size={18} /> },
     { id: 'logs', label: '操作日志', icon: <ClipboardList size={18} /> },
+    { id: 'export', label: '数据导出', icon: <Download size={18} /> },
     { id: 'danger', label: '危险操作区', icon: <Skull size={18} />, danger: true },
   ];
 
@@ -1054,7 +1124,23 @@ const Settings = ({
           </div>
         )}
 
-        {activeMenu === 'logs' && <LogsPanel logs={logs} />}
+        {activeMenu === 'logs' && <LogsPanel logs={logs} onUndoLog={onUndoLog} isMutating={isMutating} />}
+
+        {activeMenu === 'export' && (
+          <div className="settings-section">
+            {!hasClass ? (
+              <div className="empty-settings-state">请先创建班级，再导出完整数据。</div>
+            ) : (
+              <ExportPanel
+                currentClass={currentClass}
+                students={students}
+                rules={rules}
+                logs={logs}
+                onExportClassData={onExportClassData}
+              />
+            )}
+          </div>
+        )}
 
         {activeMenu === 'danger' && (
           <div className="settings-section">

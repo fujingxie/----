@@ -1,0 +1,5 @@
+ALTER TABLE logs ADD COLUMN meta TEXT;
+
+UPDATE logs
+SET meta = NULL
+WHERE meta IS NOT NULL;

@@ -14,7 +14,7 @@ const toSafeNonNegativeInteger = (value) => {
   return String(Math.max(0, parseInt(value, 10) || 0));
 };
 
-const MiniShop = ({ items, onAddItem, onUpdateItem, onDeleteItem, onRedeem, students }) => {
+const MiniShop = ({ items, logs = [], onAddItem, onUpdateItem, onDeleteItem, onRedeem, students }) => {
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [selectedItemForRedeem, setSelectedItemForRedeem] = useState(null);
@@ -25,6 +25,10 @@ const MiniShop = ({ items, onAddItem, onUpdateItem, onDeleteItem, onRedeem, stud
 
   const selectedCount = selectedStudents.length;
   const remainingSlots = Math.max((selectedItemForRedeem?.stock || 0) - selectedCount, 0);
+  const redemptionLogs = useMemo(
+    () => logs.filter((log) => log.actionType === '商品兑换').slice(0, 8),
+    [logs],
+  );
   const affordableStudents = useMemo(
     () =>
       students.filter((student) => (student.coins || 0) >= (selectedItemForRedeem?.price || 0)).length,
@@ -116,7 +120,8 @@ const MiniShop = ({ items, onAddItem, onUpdateItem, onDeleteItem, onRedeem, stud
         </button>
       </div>
 
-      <div className="shop-items-grid">
+      <div className="shop-content-grid">
+        <div className="shop-items-grid">
         {items.length === 0 ? (
           <EmptyState
             className="empty-shop"
@@ -183,6 +188,33 @@ const MiniShop = ({ items, onAddItem, onUpdateItem, onDeleteItem, onRedeem, stud
             </div>
           ))
         )}
+        </div>
+
+        <aside className="shop-records-panel glass-card">
+          <div className="shop-records-head">
+            <h3>最近兑换记录</h3>
+            <span>{redemptionLogs.length} 条</span>
+          </div>
+          {redemptionLogs.length === 0 ? (
+            <EmptyState
+              icon={<Gift size={28} />}
+              title="还没有兑换记录"
+              description="学生兑换过商品后，这里会按时间顺序显示明细。"
+            />
+          ) : (
+            <div className="shop-record-list">
+              {redemptionLogs.map((log) => (
+                <article key={log.id} className="shop-record-item">
+                  <div>
+                    <strong>{log.detail}</strong>
+                    <p>{log.user_nickname || '系统'} · {log.created_at || log.time}</p>
+                  </div>
+                  <span className="shop-record-tag">兑换</span>
+                </article>
+              ))}
+            </div>
+          )}
+        </aside>
       </div>
 
       <Modal isOpen={isAddingItem} onClose={() => setIsAddingItem(false)} title="商品补货上架">

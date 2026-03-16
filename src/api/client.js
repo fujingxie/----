@@ -71,10 +71,10 @@ export const deleteStudentsBatch = ({ userId, classId, studentIds }) =>
     body: JSON.stringify({ userId, studentIds }),
   });
 
-export const updateStudent = ({ userId, classId, studentId, updates, actionType, detail }) =>
+export const updateStudent = ({ userId, classId, studentId, updates, actionType, detail, undoMeta }) =>
   request(`/students/${studentId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ userId, classId, updates, actionType, detail }),
+    body: JSON.stringify({ userId, classId, updates, actionType, detail, undoMeta }),
   });
 
 export const createShopItem = ({ userId, classId, item }) =>
@@ -135,4 +135,10 @@ export const archiveClassStudents = ({ userId, classId }) =>
   request(`/classes/${classId}/archive-students`, {
     method: 'POST',
     body: JSON.stringify({ userId }),
+  });
+
+export const undoLog = ({ userId, classId, logId }) =>
+  request(`/logs/${logId}/undo`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, classId }),
   });

@@ -31,6 +31,7 @@ import {
   loginUser,
   resetClassProgress,
   redeemShopItem,
+  undoLog,
   updatePassword,
   updateRule,
   updateShopItem,
@@ -372,7 +373,7 @@ function App() {
     }
   };
 
-  const handleUpdateStudent = async ({ student, actionType, detail }) => {
+  const handleUpdateStudent = async ({ student, actionType, detail, undoMeta = null }) => {
     if (!user || !currentClassId) {
       return;
     }
@@ -388,6 +389,7 @@ function App() {
         updates: student,
         actionType,
         detail,
+        undoMeta,
       });
 
       updateCurrentStudent(response.student);
@@ -501,7 +503,60 @@ function App() {
       student: updatedStudent,
       actionType: '课堂互动',
       detail: `为 ${originalStudent.name} 应用了规则 "${rule.name}" (EXP: ${rule.exp}, 金币: ${rule.coins})`,
+      undoMeta: {
+        undoable: true,
+        kind: 'student-update',
+        before: {
+          id: originalStudent.id,
+          name: originalStudent.name,
+          pet_status: originalStudent.pet_status,
+          pet_name: originalStudent.pet_name,
+          pet_type_id: originalStudent.pet_type_id,
+          pet_level: originalStudent.pet_level,
+          pet_points: originalStudent.pet_points,
+          coins: originalStudent.coins,
+          total_exp: originalStudent.total_exp,
+          total_coins: originalStudent.total_coins,
+          reward_count: originalStudent.reward_count,
+          pet_collection: originalStudent.pet_collection || [],
+        },
+      },
     });
+  };
+
+  const handleUndoLog = async (logId) => {
+    if (!user || !currentClassId || !logId) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+
+    try {
+      const response = await undoLog({
+        userId: user.id,
+        classId: currentClassId,
+        logId,
+      });
+      setStudentsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.students || [],
+      }));
+      setShopItemsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.shopItems || [],
+      }));
+      setLogsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.logs || [],
+      }));
+      notify('已撤销最近一次操作');
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
   };
 
   const handleAddShopItem = async (item) => {
@@ -812,6 +867,52 @@ function App() {
     }
   };
 
+  const handleExportClassData = () => {
+    if (!currentClass) {
+      return;
+    }
+
+    const exportedAt = new Date().toISOString();
+    const redemptionLogs = currentLogs.filter((log) => log.actionType === '商品兑换');
+    const payload = {
+      exportedAt,
+      class: currentClass,
+      students: currentStudents.map((student) => ({
+        id: student.id,
+        name: student.name,
+        coins: student.coins || 0,
+        total_exp: student.total_exp || 0,
+        total_coins: student.total_coins || 0,
+        pet_status: student.pet_status,
+        pet_name: student.pet_name,
+        pet_type_id: student.pet_type_id,
+        pet_level: student.pet_level || 0,
+        pet_points: student.pet_points || 0,
+        reward_count: student.reward_count || 0,
+        pet_collection: student.pet_collection || [],
+      })),
+      rules: currentRules,
+      levelThresholds: currentThresholds,
+      shopItems: currentItems,
+      redemptionLogs,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: 'application/json;charset=utf-8',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    const safeClassName = (currentClass.name || 'class').replace(/[^\w\u4e00-\u9fa5-]+/g, '-');
+
+    anchor.href = url;
+    anchor.download = `${safeClassName}-export-${exportedAt.slice(0, 10)}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.URL.revokeObjectURL(url);
+    notify(`已导出 ${currentClass.name} 的班级数据`);
+  };
+
   if (isRestoringSession) {
     return (
       <div className="login-page">
@@ -923,6 +1024,7 @@ function App() {
               currentClass={currentClass}
               students={currentStudents}
               rules={currentRules}
+              logs={currentLogs}
               levelThresholds={currentThresholds}
               onImportStudents={handleImportStudents}
               onActivatePet={handleActivatePet}
@@ -935,6 +1037,7 @@ function App() {
             <MiniShop
               items={currentItems}
               students={currentStudents}
+              logs={currentLogs}
               onAddItem={handleAddShopItem}
               onUpdateItem={handleUpdateShopItem}
               onDeleteItem={handleDeleteShopItem}
@@ -968,6 +1071,9 @@ function App() {
               onUpdatePassword={handleUpdatePassword}
               onResetClassProgress={handleResetClassProgress}
               onArchiveClassStudents={handleArchiveClassStudents}
+              onUndoLog={handleUndoLog}
+              onExportClassData={handleExportClassData}
+              isMutating={isMutating}
             />
           )}
         </section>

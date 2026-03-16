@@ -88,18 +88,22 @@
 .random-picker-modal {
   max-width: 1120px;
   width: min(92vw, 1120px);
-  padding: 26px 28px 24px;
+  max-height: calc(100vh - 140px);
+  margin-top: 56px;
+  padding: 22px 24px 22px;
 }
 
 .random-picker-modal-body {
   min-width: 0;
+  overflow: hidden;
 }
 
 .random-picker-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) 320px;
+  grid-template-columns: minmax(0, 1.86fr) 286px;
   gap: 22px;
-  padding: 8px 6px 14px;
+  padding: 4px 2px 6px;
+  align-items: start;
 }
 
 .random-picker-main,
@@ -107,7 +111,7 @@
   border-radius: 30px;
   border: 1px solid rgba(226, 232, 240, 0.9);
   background: rgba(250, 252, 255, 0.92);
-  padding: 26px 28px;
+  padding: 24px 24px;
 }
 
 .random-count-tabs {
@@ -120,6 +124,31 @@
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(226, 232, 240, 0.85);
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+}
+
+.random-mode-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 22px;
+}
+
+.random-mode-tab {
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.92);
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.random-mode-tab.active {
+  border-color: rgba(59, 130, 246, 0.28);
+  background: rgba(239, 246, 255, 0.96);
+  color: #2563eb;
 }
 
 .random-count-tab {
@@ -141,7 +170,7 @@
 }
 
 .random-picked-board {
-  min-height: 262px;
+  min-height: 228px;
   border-radius: 34px;
   border: 4px solid rgba(191, 219, 254, 0.8);
   background: rgba(255, 255, 255, 0.96);
@@ -181,7 +210,7 @@
 
 .roll-btn {
   width: 260px;
-  margin: 28px auto 0;
+  margin: 22px auto 0;
   padding: 18px 22px;
   border-radius: 26px;
   border: none;
@@ -213,8 +242,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding-bottom: 20px;
-  margin-bottom: 20px;
+  padding-bottom: 16px;
+  margin-bottom: 14px;
   border-bottom: 1px solid rgba(241, 245, 249, 1);
 }
 
@@ -228,7 +257,7 @@
 }
 
 .random-history-empty {
-  min-height: 180px;
+  min-height: 110px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -240,7 +269,9 @@
 .random-history-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  max-height: 320px;
+  overflow-y: auto;
 }
 
 .random-history-item {
@@ -248,16 +279,29 @@
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 16px 18px;
-  border-radius: 18px;
+  padding: 13px 14px;
+  border-radius: 16px;
   background: rgba(248, 250, 252, 0.95);
 }
 
 .random-history-names {
   color: #0f172a;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
   line-height: 1.5;
+}
+
+.random-history-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.random-history-meta {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 700;
 }
 
 .random-history-item svg {
@@ -296,11 +340,14 @@
 .timer-modal {
   width: min(92vw, 980px);
   max-width: 980px;
-  padding: 18px;
+  max-height: calc(100vh - 140px);
+  margin-top: 52px;
+  padding: 14px;
 }
 
 .timer-modal-body {
   min-width: 0;
+  overflow: hidden;
 }
 
 .timer-shell {
@@ -311,7 +358,7 @@
   border-radius: 32px;
   border: 1px solid rgba(226, 232, 240, 0.86);
   background: rgba(250, 252, 255, 0.96);
-  padding: 32px 34px 28px;
+  padding: 28px 30px 24px;
 }
 
 .timer-topbar {
@@ -347,13 +394,15 @@
   border: none;
   background: transparent;
   color: #94a3b8;
-  font-size: 42px;
+  font-size: 36px;
   line-height: 1;
   cursor: pointer;
+  padding: 6px;
+  border-radius: 999px;
 }
 
 .timer-center-stage {
-  padding: 34px 0 42px;
+  padding: 24px 0 30px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -371,7 +420,7 @@
 .timer-progress-track {
   width: min(100%, 370px);
   height: 8px;
-  margin-top: 26px;
+  margin-top: 18px;
   border-radius: 999px;
   background: #dbe4f0;
   overflow: hidden;
@@ -388,7 +437,7 @@
   display: flex;
   align-items: center;
   gap: 22px;
-  margin-top: 42px;
+  margin-top: 28px;
 }
 
 .timer-circle-btn {
@@ -430,7 +479,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding-top: 24px;
+  padding-top: 18px;
   border-top: 1px solid rgba(226, 232, 240, 0.82);
 }
 
@@ -477,16 +526,31 @@
   color: #94a3b8;
 }
 
+.timer-custom-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
 .timer-custom-input {
-  width: 136px;
+  width: 168px;
   min-height: 58px;
-  padding: 0 18px;
+  padding: 0 56px 0 18px;
   border-radius: 18px;
   border: 1px solid rgba(203, 213, 225, 0.85);
   background: #fff;
   color: #0f172a;
   font-size: 18px;
   font-weight: 700;
+}
+
+.timer-custom-unit {
+  position: absolute;
+  right: 18px;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 800;
+  pointer-events: none;
 }
 
 .timer-set-btn {
@@ -649,8 +713,12 @@
     justify-content: space-between;
   }
 
-  .timer-custom-input {
+  .timer-custom-field {
     flex: 1;
+  }
+
+  .timer-custom-input {
+    width: 100%;
   }
 
   .random-picker-layout {
@@ -660,6 +728,12 @@
   .random-picker-modal {
     width: 94vw;
     padding: 22px 18px 18px;
+  }
+
+  .timer-modal {
+    width: 94vw;
+    margin-top: 18px;
+    max-height: calc(100vh - 48px);
   }
 
   .random-picker-history {

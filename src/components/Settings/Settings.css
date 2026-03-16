@@ -149,6 +149,70 @@
   font-weight: 800;
 }
 
+.export-panel {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.export-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.export-panel-head h3 {
+  margin: 0 0 10px;
+}
+
+.export-panel-head p {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.7;
+}
+
+.export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.export-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.export-summary-card {
+  padding: 18px 16px;
+  border-radius: 20px;
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.export-summary-card label {
+  display: block;
+  margin-bottom: 8px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.export-summary-card strong {
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.export-scope-card {
+  padding: 24px 22px;
+  border-radius: 24px;
+  background: rgba(250, 252, 255, 0.92);
+  border: 1px solid rgba(226, 232, 240, 0.88);
+}
+
 .danger-zone-shell {
   padding-top: 6px;
 }
@@ -1100,6 +1164,29 @@
 }
 .log-detail { flex: 1; font-weight: 600; }
 .log-user { color: var(--text-muted); font-size: 11px; }
+.log-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.log-undo-btn {
+  border: none;
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.log-undo-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
 
 .empty-settings-state {
   display: flex;
@@ -1133,6 +1220,14 @@
 
   .account-layout {
     grid-template-columns: 1fr;
+  }
+
+  .export-panel-head {
+    flex-direction: column;
+  }
+
+  .export-summary-grid {
+    grid-template-columns: 1fr 1fr;
   }
 
   .thresholds-grid {
@@ -1198,7 +1293,8 @@
 
   .rules-create-grid,
   .rule-card-grid,
-  .thresholds-grid {
+  .thresholds-grid,
+  .export-summary-grid {
     grid-template-columns: 1fr;
   }
 
