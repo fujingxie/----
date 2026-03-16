@@ -17,6 +17,7 @@ import MiniShop from './components/Shop/MiniShop';
 import HallOfFame from './components/Rank/HallOfFame';
 import Toolbox from './components/Toolbox/Toolbox';
 import Settings from './components/Settings/Settings';
+import { notify } from './lib/notify';
 import {
   createClass,
   createRule,
@@ -90,6 +91,7 @@ function App() {
   const [isLoadingClassData, setIsLoadingClassData] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
   const [isRestoringSession, setIsRestoringSession] = useState(() => Boolean(readStoredUser()));
+  const [toast, setToast] = useState(null);
 
   const currentClass = useMemo(
     () => classes.find((item) => item.id === currentClassId) || null,
@@ -200,6 +202,29 @@ function App() {
     restoreSession();
   }, [loadDashboard, persistSession]);
 
+  useEffect(() => {
+    let timer = null;
+
+    const handleNotify = (event) => {
+      const detail = event.detail || {};
+      setToast({
+        id: Date.now(),
+        message: detail.message || '',
+        type: detail.type || 'success',
+      });
+
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setToast(null), 2600);
+    };
+
+    window.addEventListener('app-notify', handleNotify);
+
+    return () => {
+      window.removeEventListener('app-notify', handleNotify);
+      window.clearTimeout(timer);
+    };
+  }, []);
+
   const updateCurrentStudent = (student) => {
     if (!currentClassId || !student) {
       return;
@@ -291,7 +316,7 @@ function App() {
     }
 
     if (user.level === 'temporary' && classes.length >= 1) {
-      window.alert('临时账户只能创建一个班级，请升级账户享用无限特权');
+      notify('临时账户只能创建一个班级，请升级账户享用无限特权', 'warning');
       return;
     }
 
@@ -599,7 +624,7 @@ function App() {
         [currentClassId]: response.logs || [],
       }));
 
-      window.alert(`成功为 ${studentIds.length} 名学生兑换了 ${item.name}`);
+      notify(`已为 ${studentIds.length} 名学生兑换 ${item.name}`);
     } catch (error) {
       setAppErrorMessage(error.message);
       throw error;
@@ -889,6 +914,7 @@ function App() {
       </nav>
 
       {appErrorMessage && <div className="app-error-banner">{appErrorMessage}</div>}
+      {toast && <div className={`app-toast ${toast.type}`}>{toast.message}</div>}
 
       <main className="content-area">
         <section className="view-container" style={{ width: '100%' }}>

@@ -8,7 +8,13 @@ const InteractionModal = ({ isOpen, onClose, student, onInteract, rules = [] }) 
   const filteredRules = rules.filter(r => r.type === activeType);
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`对 ${student?.name} 的宠物进行互动`}>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`对 ${student?.name} 的宠物进行互动`}
+      contentClassName="interaction-modal-shell"
+      bodyClassName="interaction-modal-body"
+    >
       <div className="interaction-container">
         <div className="interaction-tabs">
           <button 

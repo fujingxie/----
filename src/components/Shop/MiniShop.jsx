@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import './MiniShop.css';
 import { Gift, Package, PenSquare, Plus, ShoppingCart, Sparkles, Trash2 } from 'lucide-react';
 import Modal from '../Common/Modal';
+import EmptyState from '../Common/EmptyState';
+import { notify } from '../../lib/notify';
 
 const EMPTY_ITEM = { name: '', price: '', stock: '', icon: '🎁' };
 const toSafeNonNegativeInteger = (value) => {
@@ -39,7 +41,7 @@ const MiniShop = ({ items, onAddItem, onUpdateItem, onDeleteItem, onRedeem, stud
     const normalized = normalizeItem(newItem);
 
     if (!newItem.name || !newItem.price || normalized.price <= 0) {
-      window.alert('商品价格必须大于 0，库存不能为负数');
+      notify('商品价格必须大于 0，库存不能为负数', 'warning');
       return;
     }
 
@@ -52,7 +54,7 @@ const MiniShop = ({ items, onAddItem, onUpdateItem, onDeleteItem, onRedeem, stud
     const normalized = normalizeItem(editDraft);
 
     if (!editingItem || !editDraft.name || !editDraft.price || normalized.price <= 0) {
-      window.alert('商品价格必须大于 0，库存不能为负数');
+      notify('商品价格必须大于 0，库存不能为负数', 'warning');
       return;
     }
 
@@ -116,10 +118,18 @@ const MiniShop = ({ items, onAddItem, onUpdateItem, onDeleteItem, onRedeem, stud
 
       <div className="shop-items-grid">
         {items.length === 0 ? (
-          <div className="empty-shop">
-            <Package size={48} />
-            <p>货架空空的，快去补货吧</p>
-          </div>
+          <EmptyState
+            className="empty-shop"
+            icon={<Package size={34} />}
+            title="货架还空着"
+            description="先补几样课堂奖励上架吧，学生兑换后会自动扣减金币和库存。"
+            action={
+              <button className="add-item-btn" onClick={() => setIsAddingItem(true)} type="button">
+                <Plus size={18} />
+                <span>立即补货</span>
+              </button>
+            }
+          />
         ) : (
           items.map((item) => (
             <div key={item.id} className="shop-item-card glass-card">

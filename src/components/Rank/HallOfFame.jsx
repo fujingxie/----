@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import './HallOfFame.css';
 import { Crown, Medal } from 'lucide-react';
 import { getPetImagePath, getPetNameById, PET_IMAGE_FALLBACK } from '../../api/petLibrary';
+import EmptyState from '../Common/EmptyState';
 
 const HallOfFame = ({ students }) => {
   const [activeRank, setActiveRank] = useState('pet'); // pet, coin
@@ -93,10 +94,12 @@ const HallOfFame = ({ students }) => {
           </div>
         </div>
       ) : (
-        <div className="empty-hof">
-          <Medal size={64} />
-          <p>载入排名中，请确保班级已有学生...</p>
-        </div>
+        <EmptyState
+          className="empty-hof"
+          icon={<Medal size={36} />}
+          title="光荣榜暂未点亮"
+          description="当前班级还没有足够数据生成榜单，先去添加学生、互动成长或积累金币吧。"
+        />
       )}
     </div>
   );

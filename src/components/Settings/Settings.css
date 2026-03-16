@@ -1102,12 +1102,18 @@
 .log-user { color: var(--text-muted); font-size: 11px; }
 
 .empty-settings-state {
-  background: rgba(255,255,255,0.6);
-  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+  background: rgba(255,255,255,0.72);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 24px;
   padding: 32px;
   color: var(--text-muted);
-  font-weight: 600;
+  font-weight: 700;
   text-align: center;
+  line-height: 1.7;
 }
 
 @media (max-width: 960px) {

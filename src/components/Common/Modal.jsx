@@ -1,8 +1,20 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
 import './Modal.css';
 
 const Modal = ({ isOpen, onClose, title, children, showHeader = true, contentClassName = '', bodyClassName = '' }) => {
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    document.body.classList.add('modal-open');
+
+    return () => {
+      document.body.classList.remove('modal-open');
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (

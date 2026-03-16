@@ -15,6 +15,12 @@
   
   --card-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
   --border-radius: 24px;
+  --app-shell-width: 1440px;
+  --app-content-width: 1200px;
+  --z-nav: 80;
+  --z-dropdown: 120;
+  --z-floating: 180;
+  --z-modal: 3000;
 }
 
 * {
@@ -35,6 +41,10 @@ body {
 
 #root {
   min-height: 100vh;
+}
+
+body.modal-open {
+  overflow: hidden;
 }
 
 /* 玻璃拟态基础样式 */

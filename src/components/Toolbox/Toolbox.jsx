@@ -17,6 +17,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import Modal from '../Common/Modal';
+import { notify } from '../../lib/notify';
 
 const Toolbox = ({ user, students }) => {
   const [activeTool, setActiveTool] = useState(null);
@@ -32,12 +33,12 @@ const Toolbox = ({ user, students }) => {
 
   const handleToolClick = (tool) => {
     if (tool.type === 'advanced' && !isVip2) {
-      window.alert('🔒 此工具需要 VIP 2 或永久账号才可使用');
+      notify('此工具需要 VIP 2 或永久账号才可使用', 'warning');
       return;
     }
 
     if (tool.status !== 'ready') {
-      window.alert('这个高级工具正在打磨中，本轮已优先完成“静心自习”');
+      notify('这个高级工具正在打磨中，本轮已优先完成“静心自习”', 'warning');
       return;
     }
 
@@ -222,7 +223,7 @@ const TimerTool = ({ onClose }) => {
         if (prev <= 1) {
           window.setTimeout(() => {
             setIsRunning(false);
-            window.alert('⏰ 时间到！');
+            notify('时间到！');
           }, 0);
           return 0;
         }
@@ -283,7 +284,7 @@ const TimerTool = ({ onClose }) => {
         await shellRef.current.requestFullscreen();
       }
     } catch {
-      window.alert('当前环境暂不支持全屏模式');
+      notify('当前环境暂不支持全屏模式', 'warning');
     }
   };
 

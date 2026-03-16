@@ -185,9 +185,9 @@
 }
 
 .empty-hof {
-  text-align: center;
-  padding: 100px;
-  color: var(--text-muted);
+  max-width: 900px;
+  margin: 0 auto;
+  padding-block: 96px;
 }
 
 @media (max-width: 960px) {
