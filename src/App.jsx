@@ -1023,7 +1023,7 @@ function App() {
     }
 
     const exportedAt = new Date().toISOString();
-    const redemptionLogs = currentLogs.filter((log) => log.actionType === '商品兑换');
+    const redemptionLogs = currentLogs.filter((log) => (log.actionType || log.action) === '商品兑换');
     const payload = {
       exportedAt,
       class: currentClass,

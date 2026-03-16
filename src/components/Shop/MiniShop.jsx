@@ -35,7 +35,7 @@ const MiniShop = ({
   const selectedCount = selectedStudents.length;
   const remainingSlots = Math.max((selectedItemForRedeem?.stock || 0) - selectedCount, 0);
   const redemptionLogs = useMemo(
-    () => logs.filter((log) => log.actionType === '商品兑换').slice(0, 8),
+    () => logs.filter((log) => (log.actionType || log.action) === '商品兑换').slice(0, 8),
     [logs],
   );
   const affordableStudents = useMemo(
@@ -225,7 +225,7 @@ const MiniShop = ({
                 <article key={log.id} className="shop-record-item">
                   <div>
                     <strong>{log.detail}</strong>
-                    <p>{log.user_nickname || '系统'} · {log.created_at || log.time}</p>
+                    <p>{log.user_nickname || log.operator || '系统'} · {log.created_at || log.time}</p>
                   </div>
                   <span className="shop-record-tag">兑换</span>
                 </article>

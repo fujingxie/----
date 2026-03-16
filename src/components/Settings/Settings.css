@@ -1491,3 +1491,63 @@
     border-radius: 24px;
   }
 }
+
+:root[data-theme='night'] .settings-sidebar {
+  background: linear-gradient(180deg, rgba(9, 20, 37, 0.92), rgba(8, 18, 33, 0.9));
+  border-right-color: rgba(80, 116, 176, 0.16);
+}
+
+:root[data-theme='night'] .menu-item:hover {
+  background: rgba(138, 180, 255, 0.08);
+}
+
+:root[data-theme='night'] .menu-item.active {
+  background: linear-gradient(135deg, rgba(238, 244, 255, 0.98), rgba(188, 211, 255, 0.96));
+  color: #0c1830;
+  box-shadow: 0 12px 26px rgba(90, 136, 219, 0.2);
+}
+
+:root[data-theme='night'] .account-side-card,
+:root[data-theme='night'] .export-panel,
+:root[data-theme='night'] .export-summary-card,
+:root[data-theme='night'] .export-scope-card,
+:root[data-theme='night'] .students-rename-panel,
+:root[data-theme='night'] .students-bulk-panel,
+:root[data-theme='night'] .password-reset {
+  background: linear-gradient(180deg, rgba(11, 23, 42, 0.94), rgba(8, 18, 33, 0.9));
+  border-color: rgba(80, 116, 176, 0.16);
+}
+
+:root[data-theme='night'] .theme-option-card,
+:root[data-theme='night'] .density-chip,
+:root[data-theme='night'] .account-side-metrics div {
+  background: linear-gradient(180deg, rgba(14, 28, 49, 0.92), rgba(10, 22, 39, 0.88));
+  border-color: rgba(80, 116, 176, 0.18);
+}
+
+:root[data-theme='night'] .theme-option-card.active,
+:root[data-theme='night'] .density-chip.active {
+  border-color: rgba(138, 180, 255, 0.3);
+  box-shadow: 0 14px 24px rgba(40, 81, 150, 0.18);
+}
+
+:root[data-theme='night'] .export-summary-card strong,
+:root[data-theme='night'] .membership-card strong,
+:root[data-theme='night'] .account-side-metrics strong {
+  color: #eef4ff;
+}
+
+:root[data-theme='night'] .danger-zone-panel {
+  background: linear-gradient(180deg, rgba(49, 12, 18, 0.92), rgba(28, 9, 13, 0.9));
+  border-color: rgba(248, 113, 113, 0.24);
+  box-shadow: inset 0 0 0 4px rgba(127, 29, 29, 0.22);
+}
+
+:root[data-theme='night'] .danger-zone-warning,
+:root[data-theme='night'] .danger-action-card {
+  background: linear-gradient(180deg, rgba(24, 11, 16, 0.92), rgba(14, 9, 12, 0.9));
+}
+
+:root[data-theme='night'] .danger-action-card.destructive {
+  border-color: rgba(80, 116, 176, 0.16);
+}

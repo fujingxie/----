@@ -1066,7 +1066,7 @@ const DangerZonePanel = ({ currentClass, onResetClassProgress, onArchiveClassStu
 
 const ExportPanel = ({ currentClass, students, rules, logs, onExportClassData }) => {
   const redemptionLogs = useMemo(
-    () => logs.filter((log) => log.actionType === '商品兑换'),
+    () => logs.filter((log) => (log.actionType || log.action) === '商品兑换'),
     [logs],
   );
 

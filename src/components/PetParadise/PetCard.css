@@ -286,6 +286,55 @@
   color: #0f766e;
 }
 
+:root[data-theme='night'] .pet-card {
+  background: linear-gradient(180deg, rgba(15, 29, 52, 0.96), rgba(10, 22, 40, 0.92));
+  border: 1px solid rgba(82, 119, 176, 0.18);
+  box-shadow:
+    0 18px 36px rgba(2, 8, 23, 0.36),
+    inset 0 1px 0 rgba(166, 193, 237, 0.04);
+}
+
+:root[data-theme='night'] .pet-card:hover {
+  box-shadow:
+    0 24px 48px rgba(2, 8, 23, 0.42),
+    0 0 0 1px rgba(130, 170, 235, 0.12);
+}
+
+:root[data-theme='night'] .pet-collection-trigger,
+:root[data-theme='night'] .pet-select-toggle {
+  background: rgba(14, 28, 49, 0.96);
+  color: #c6d8f2;
+  border-color: rgba(86, 125, 184, 0.24);
+}
+
+:root[data-theme='night'] .pet-type-label {
+  color: #8fa4c4;
+}
+
+:root[data-theme='night'] .student-name {
+  color: #eef4ff;
+}
+
+:root[data-theme='night'] .pet-level-caption {
+  color: #9bb0cd;
+}
+
+:root[data-theme='night'] .pet-progress-track {
+  background: rgba(129, 148, 181, 0.2);
+}
+
+:root[data-theme='night'] .pet-action-btn.activate {
+  background: rgba(15, 29, 51, 0.94);
+  color: #d7e6ff;
+  border: 1px solid rgba(84, 121, 178, 0.18);
+}
+
+:root[data-theme='night'] .pet-action-btn.interact {
+  background: linear-gradient(135deg, rgba(17, 69, 75, 0.92), rgba(11, 41, 49, 0.94));
+  color: #e7ffff;
+  border: 1px solid rgba(57, 209, 198, 0.24);
+}
+
 @keyframes float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-10px); }

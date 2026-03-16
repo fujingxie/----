@@ -145,14 +145,18 @@ const parseLogMeta = (value) => {
 
 const normalizeLog = (row) => {
   const meta = parseLogMeta(row.meta);
+  const operator = row.operator || '系统';
+  const actionType = row.action_type;
 
   return {
     id: Number(row.id),
-    action: row.action_type,
+    action: actionType,
+    actionType,
     detail: row.detail,
     time: formatLogTime(row.created_at),
     created_at: row.created_at,
-    operator: row.operator || '系统',
+    operator,
+    user_nickname: operator,
     canUndo: Boolean(meta?.undoable && !meta?.undone),
     meta,
   };

@@ -57,6 +57,24 @@
   overflow-y: auto;
 }
 
+:root[data-theme='night'] .modal-overlay {
+  background: rgba(2, 8, 23, 0.7);
+  backdrop-filter: blur(10px);
+}
+
+:root[data-theme='night'] .modal-content {
+  background: linear-gradient(180deg, rgba(11, 23, 42, 0.98), rgba(8, 18, 33, 0.96));
+  border: 1px solid rgba(80, 116, 176, 0.2);
+  box-shadow:
+    0 30px 80px rgba(2, 8, 23, 0.5),
+    inset 0 1px 0 rgba(166, 193, 237, 0.05);
+}
+
+:root[data-theme='night'] .close-btn:hover {
+  background: rgba(138, 180, 255, 0.08);
+  color: #eef4ff;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
