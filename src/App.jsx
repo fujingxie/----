@@ -6,6 +6,7 @@ import {
   LogOut,
   Plus,
   Settings as SettingsIcon,
+  Shield,
   ShoppingBag,
   Trophy,
   Users,
@@ -17,9 +18,12 @@ import MiniShop from './components/Shop/MiniShop';
 import HallOfFame from './components/Rank/HallOfFame';
 import Toolbox from './components/Toolbox/Toolbox';
 import Settings from './components/Settings/Settings';
+import AdminConsole from './components/Admin/AdminConsole';
 import { notify } from './lib/notify';
 import { setSoundPreferences } from './lib/sounds';
 import {
+  createAdminCodesBatch,
+  createAdminCode,
   createClass,
   createRule,
   createShopItem,
@@ -27,13 +31,22 @@ import {
   deleteStudentsBatch,
   deleteShopItem,
   deleteRule,
+  fetchAdminCodes,
+  fetchAdminLogs,
+  fetchAdminUsers,
   fetchBootstrap,
   importStudents,
   loginUser,
   resetClassProgress,
   redeemShopItem,
+  resetAdminUserPassword,
+  revokeAdminCodesBatch,
   undoLog,
   updatePassword,
+  updateAdminCodesBatch,
+  updateAdminCode,
+  updateAdminUsersBatch,
+  updateAdminUser,
   updateRule,
   updateShopItem,
   updateClass,
@@ -63,6 +76,13 @@ const DENSITY_OPTIONS = [
   { id: 'cozy', name: '舒展' },
   { id: 'compact', name: '紧凑' },
 ];
+
+const MEMBERSHIP_LABELS = {
+  temporary: '临时体验',
+  vip1: '会员一级',
+  vip2: '会员二级',
+  permanent: '永久会员',
+};
 
 const readStoredUser = () => {
   try {
@@ -124,6 +144,7 @@ const tabs = [
   { id: 'toolbox', label: '百宝箱', icon: <Briefcase size={20} /> },
   { id: 'settings', label: '系统设置', icon: <SettingsIcon size={20} /> },
 ];
+const ADMIN_TAB = { id: 'admin', label: '超管后台', icon: <Shield size={20} /> };
 
 function App() {
   const [user, setUser] = useState(() => readStoredUser());
@@ -149,6 +170,9 @@ function App() {
   const [density, setDensity] = useState(() => readStoredDensity());
   const [soundEnabled, setSoundEnabled] = useState(() => readStoredSoundEnabled());
   const [soundVolume, setSoundVolume] = useState(() => readStoredSoundVolume());
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminCodes, setAdminCodes] = useState([]);
+  const [adminLogs, setAdminLogs] = useState([]);
   const [confirmState, setConfirmState] = useState({
     isOpen: false,
     title: '',
@@ -175,6 +199,12 @@ function App() {
   const currentThresholds = currentClassId
     ? thresholdsByClassId[currentClassId] || DEFAULT_LEVEL_THRESHOLDS
     : DEFAULT_LEVEL_THRESHOLDS;
+  const isSuperAdmin = user?.role === 'super_admin';
+  const membershipLabel = user?.level ? MEMBERSHIP_LABELS[user.level] || user.level : '';
+  const visibleTabs = useMemo(
+    () => (isSuperAdmin ? [...tabs, ADMIN_TAB] : tabs),
+    [isSuperAdmin],
+  );
 
   const syncClassBundle = (bundle) => {
     if (!bundle?.currentClassId) {
@@ -1033,6 +1063,215 @@ function App() {
     notify(`已导出 ${currentClass.name} 的班级数据`);
   };
 
+  const refreshAdminConsole = useCallback(async () => {
+    if (!user || user.role !== 'super_admin') {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+
+    try {
+      const [usersResponse, codesResponse, logsResponse] = await Promise.all([
+        fetchAdminUsers({ userId: user.id }),
+        fetchAdminCodes({ userId: user.id }),
+        fetchAdminLogs({ userId: user.id }),
+      ]);
+      setAdminUsers(usersResponse.users || []);
+      setAdminCodes(codesResponse.activationCodes || []);
+      setAdminLogs(logsResponse.logs || []);
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (activeTab === 'admin' && isSuperAdmin) {
+      refreshAdminConsole();
+    }
+  }, [activeTab, isSuperAdmin, refreshAdminConsole]);
+
+  useEffect(() => {
+    if (!isSuperAdmin && activeTab === 'admin') {
+      setActiveTab('pet');
+    }
+  }, [activeTab, isSuperAdmin]);
+
+  const handleAdminUpdateUser = async (targetUserId, updates) => {
+    if (!user || !isSuperAdmin) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+    try {
+      await updateAdminUser({ userId: user.id, targetUserId, updates });
+      await refreshAdminConsole();
+      const nextSelf = targetUserId === user.id ? { ...user, ...updates } : null;
+      if (nextSelf) {
+        setUser(nextSelf);
+        persistSession(nextSelf, currentClassId);
+      }
+      notify('账号信息已更新');
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleAdminResetUserPassword = async (targetUserId, nextPassword) => {
+    if (!user || !isSuperAdmin) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+    try {
+      await resetAdminUserPassword({ userId: user.id, targetUserId, nextPassword });
+      notify('密码已重置');
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleAdminCreateCode = async (payload) => {
+    if (!user || !isSuperAdmin) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+    try {
+      await createAdminCode({ userId: user.id, ...payload });
+      await refreshAdminConsole();
+      notify('激活码已创建');
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleAdminCreateCodesBatch = async (payload) => {
+    if (!user || !isSuperAdmin) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+    try {
+      const response = await createAdminCodesBatch({ userId: user.id, ...payload });
+      await refreshAdminConsole();
+      notify(`已批量生成 ${response.createdCodes?.length || 0} 个激活码`);
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleAdminUpdateCode = async (codeId, updates) => {
+    if (!user || !isSuperAdmin) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+    try {
+      await updateAdminCode({ userId: user.id, codeId, updates });
+      await refreshAdminConsole();
+      notify('激活码已更新');
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleAdminBatchUpdateUsers = async (userIds, updates) => {
+    if (!user || !isSuperAdmin || userIds.length === 0) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+    try {
+      await updateAdminUsersBatch({ userId: user.id, userIds, updates });
+      await refreshAdminConsole();
+      if (userIds.includes(user.id)) {
+        const nextSelf = { ...user, ...updates };
+        setUser(nextSelf);
+        persistSession(nextSelf, currentClassId);
+      }
+      notify(`已批量更新 ${userIds.length} 个账号`);
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleAdminBatchUpdateCodes = async (codeIds, updates) => {
+    if (!user || !isSuperAdmin || codeIds.length === 0) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+    try {
+      await updateAdminCodesBatch({ userId: user.id, codeIds, updates });
+      await refreshAdminConsole();
+      notify(`已批量更新 ${codeIds.length} 个激活码`);
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleAdminBatchRevokeCodes = async (codeIds) => {
+    if (!user || !isSuperAdmin || codeIds.length === 0) {
+      return;
+    }
+
+    const confirmed = await requestConfirm({
+      title: '批量作废激活码',
+      message: `确定要批量作废这 ${codeIds.length} 个激活码吗？作废后这些激活码将无法再用于注册。`,
+      tone: 'danger',
+      confirmLabel: '确认作废',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+    try {
+      await revokeAdminCodesBatch({ userId: user.id, codeIds });
+      await refreshAdminConsole();
+      notify(`已作废 ${codeIds.length} 个激活码`);
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
   if (isRestoringSession) {
     return (
       <div className="login-page">
@@ -1107,7 +1346,7 @@ function App() {
         </div>
 
         <div className="nav-center">
-          {tabs.map((tab) => (
+          {visibleTabs.map((tab) => (
             <button
               key={tab.id}
               className={`nav-tab ${activeTab === tab.id ? 'active' : ''}`}
@@ -1126,7 +1365,7 @@ function App() {
           </div>
           <div className="user-profile">
             <span className="user-name">{user.nickname}</span>
-            <span className="user-level">{user.level}</span>
+            <span className="user-level">{membershipLabel}</span>
             <button className="logout-btn" onClick={handleLogout} type="button">
               <LogOut size={16} />
             </button>
@@ -1206,6 +1445,25 @@ function App() {
               onSoundVolumeChange={setSoundVolume}
               onRequestConfirm={requestConfirm}
               isMutating={isMutating}
+            />
+          )}
+
+          {activeTab === 'admin' && isSuperAdmin && (
+            <AdminConsole
+              users={adminUsers}
+              activationCodes={adminCodes}
+              adminLogs={adminLogs}
+              isMutating={isMutating}
+              onRefresh={refreshAdminConsole}
+              onRequestConfirm={requestConfirm}
+              onUpdateUser={handleAdminUpdateUser}
+              onBatchUpdateUsers={handleAdminBatchUpdateUsers}
+              onResetUserPassword={handleAdminResetUserPassword}
+              onCreateCode={handleAdminCreateCode}
+              onCreateCodesBatch={handleAdminCreateCodesBatch}
+              onUpdateCode={handleAdminUpdateCode}
+              onBatchUpdateCodes={handleAdminBatchUpdateCodes}
+              onBatchRevokeCodes={handleAdminBatchRevokeCodes}
             />
           )}
         </section>

@@ -142,3 +142,60 @@ export const undoLog = ({ userId, classId, logId }) =>
     method: 'POST',
     body: JSON.stringify({ userId, classId }),
   });
+
+export const fetchAdminUsers = ({ userId }) =>
+  request(`/admin/users?${new URLSearchParams({ userId: String(userId) }).toString()}`);
+
+export const fetchAdminLogs = ({ userId }) =>
+  request(`/admin/logs?${new URLSearchParams({ userId: String(userId) }).toString()}`);
+
+export const updateAdminUser = ({ userId, targetUserId, updates }) =>
+  request(`/admin/users/${targetUserId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ userId, updates }),
+  });
+
+export const updateAdminUsersBatch = ({ userId, userIds, updates }) =>
+  request('/admin/users/batch-update', {
+    method: 'POST',
+    body: JSON.stringify({ userId, userIds, updates }),
+  });
+
+export const resetAdminUserPassword = ({ userId, targetUserId, nextPassword }) =>
+  request(`/admin/users/${targetUserId}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, nextPassword }),
+  });
+
+export const fetchAdminCodes = ({ userId }) =>
+  request(`/admin/codes?${new URLSearchParams({ userId: String(userId) }).toString()}`);
+
+export const createAdminCode = ({ userId, code, prefix, level, expires_in_days, max_uses }) =>
+  request('/admin/codes', {
+    method: 'POST',
+    body: JSON.stringify({ userId, code, prefix, level, expires_in_days, max_uses }),
+  });
+
+export const createAdminCodesBatch = ({ userId, prefix, level, expires_in_days, max_uses, count }) =>
+  request('/admin/codes/batch', {
+    method: 'POST',
+    body: JSON.stringify({ userId, prefix, level, expires_in_days, max_uses, count }),
+  });
+
+export const revokeAdminCodesBatch = ({ userId, codeIds }) =>
+  request('/admin/codes/batch-revoke', {
+    method: 'POST',
+    body: JSON.stringify({ userId, codeIds }),
+  });
+
+export const updateAdminCodesBatch = ({ userId, codeIds, updates }) =>
+  request('/admin/codes/batch-update', {
+    method: 'POST',
+    body: JSON.stringify({ userId, codeIds, updates }),
+  });
+
+export const updateAdminCode = ({ userId, codeId, updates }) =>
+  request(`/admin/codes/${codeId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ userId, updates }),
+  });

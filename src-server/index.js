@@ -111,8 +111,14 @@ const normalizeActivationCode = (row) => ({
   code: row.code,
   level: row.level,
   expires_in_days: row.expires_in_days === null ? null : Number(row.expires_in_days),
+  max_uses: Number(row.max_uses || 1),
+  used_count: Number(row.used_count || 0),
+  status: row.status || 'active',
   used_by_user_id: row.used_by_user_id === null ? null : Number(row.used_by_user_id),
   used_at: row.used_at,
+  used_by_nickname: row.used_by_nickname || null,
+  created_by_user_id: row.created_by_user_id === null ? null : Number(row.created_by_user_id),
+  created_by_nickname: row.created_by_nickname || null,
 });
 
 const formatLogTime = (createdAt) => {
@@ -158,6 +164,16 @@ const normalizeUser = (row) => ({
   nickname: row.nickname,
   level: row.level,
   expire_at: row.expire_at,
+  role: row.role || 'teacher',
+  status: row.status || 'active',
+});
+
+const normalizeAdminLog = (row) => ({
+  id: Number(row.id),
+  action: row.action_type,
+  detail: row.detail,
+  created_at: row.created_at,
+  operator: row.operator || '系统',
 });
 
 async function readBody(request) {
@@ -270,7 +286,7 @@ async function refreshMembershipIfNeeded(db, user) {
         `UPDATE users
          SET level = 'temporary', expire_at = NULL
          WHERE id = ?
-         RETURNING id, username, nickname, level, expire_at`,
+         RETURNING id, username, nickname, level, expire_at, role, status`,
       )
       .bind(user.id)
       .first();
@@ -283,12 +299,16 @@ async function refreshMembershipIfNeeded(db, user) {
 
 async function getUserById(db, userId) {
   const rawUser = await db
-    .prepare('SELECT id, username, nickname, level, expire_at FROM users WHERE id = ?')
+    .prepare('SELECT id, username, nickname, level, expire_at, role, status FROM users WHERE id = ?')
     .bind(userId)
     .first();
 
   if (!rawUser) {
     throw new Error('教师账号不存在，请重新登录');
+  }
+
+  if (rawUser.status === 'disabled') {
+    throw new Error('该账号已被停用，请联系管理员');
   }
 
   return refreshMembershipIfNeeded(db, rawUser);
@@ -297,7 +317,7 @@ async function getUserById(db, userId) {
 async function getUserWithPassword(db, username) {
   const rawUser = await db
     .prepare(
-      'SELECT id, username, password_hash, nickname, level, expire_at FROM users WHERE username = ?',
+      'SELECT id, username, password_hash, nickname, level, expire_at, role, status FROM users WHERE username = ?',
     )
     .bind(username)
     .first();
@@ -316,6 +336,27 @@ async function getUserWithPassword(db, username) {
     ...refreshed,
     password_hash: rawUser.password_hash,
   };
+}
+
+async function assertSuperAdmin(db, userId) {
+  const user = await getUserById(db, userId);
+
+  if (user.role !== 'super_admin') {
+    throw new Error('仅超管账号可访问该后台');
+  }
+
+  return user;
+}
+
+function sanitizeCodeStatus(value) {
+  return ['active', 'revoked', 'used'].includes(value) ? value : 'active';
+}
+
+function generateActivationCode(prefix = 'CLASS') {
+  const cleanedPrefix = String(prefix || 'CLASS').replace(/[^A-Z0-9-]/g, '').slice(0, 12) || 'CLASS';
+  const seed = Math.random().toString(36).slice(2, 8).toUpperCase();
+  const stamp = Date.now().toString(36).slice(-4).toUpperCase();
+  return `${cleanedPrefix}-${seed}-${stamp}`;
 }
 
 async function getClassesByUserId(db, userId) {
@@ -449,6 +490,27 @@ async function appendLog(db, { classId, userId, actionType, detail, meta = null 
     .run();
 }
 
+async function appendAdminLog(db, { userId, actionType, detail }) {
+  await db
+    .prepare('INSERT INTO admin_logs (user_id, action_type, detail) VALUES (?, ?, ?)')
+    .bind(userId, actionType, detail)
+    .run();
+}
+
+async function getAdminLogs(db) {
+  const result = await db
+    .prepare(
+      `SELECT l.id, l.action_type, l.detail, l.created_at, u.nickname AS operator
+       FROM admin_logs l
+       LEFT JOIN users u ON u.id = l.user_id
+       ORDER BY l.created_at DESC, l.id DESC
+       LIMIT 60`,
+    )
+    .all();
+
+  return (result.results || []).map(normalizeAdminLog);
+}
+
 async function getRawLogById(db, classId, logId) {
   return db
     .prepare('SELECT id, class_id, user_id, action_type, detail, meta, created_at FROM logs WHERE id = ? AND class_id = ?')
@@ -551,7 +613,7 @@ async function handleLogin(db, request) {
 
     const activationCode = await db
       .prepare(
-        `SELECT id, code, level, expires_in_days, used_by_user_id, used_at
+        `SELECT id, code, level, expires_in_days, used_by_user_id, used_at, max_uses, used_count, status
          FROM activation_codes
          WHERE code = ?`,
       )
@@ -562,8 +624,12 @@ async function handleLogin(db, request) {
       return error('激活码不存在，请联系管理员确认');
     }
 
-    if (activationCode.used_by_user_id) {
-      return error('该激活码已被使用');
+    if (activationCode.status === 'revoked') {
+      return error('该激活码已作废');
+    }
+
+    if (Number(activationCode.used_count || 0) >= Number(activationCode.max_uses || 1)) {
+      return error('该激活码已被使用完毕');
     }
 
     const passwordHash = await hashPassword(password);
@@ -573,17 +639,30 @@ async function handleLogin(db, request) {
 
     const createdUser = await db
       .prepare(
-        `INSERT INTO users (username, password_hash, nickname, level, expire_at)
-         VALUES (?, ?, ?, ?, ?)
-         RETURNING id, username, nickname, level, expire_at`,
+        `INSERT INTO users (username, password_hash, nickname, level, expire_at, role)
+         VALUES (?, ?, ?, ?, ?, ?)
+         RETURNING id, username, nickname, level, expire_at, role`,
       )
-      .bind(username, passwordHash, nickname, activationCode.level, expireAt)
+      .bind(
+        username,
+        passwordHash,
+        nickname,
+        activationCode.level,
+        expireAt,
+        activationCode.level === 'permanent' ? 'super_admin' : 'teacher',
+      )
       .first();
 
     await db
       .prepare(
         `UPDATE activation_codes
-         SET used_by_user_id = ?, used_at = CURRENT_TIMESTAMP
+         SET used_by_user_id = ?,
+             used_at = CURRENT_TIMESTAMP,
+             used_count = used_count + 1,
+             status = CASE
+               WHEN used_count + 1 >= max_uses THEN 'used'
+               ELSE status
+             END
          WHERE id = ?`,
       )
       .bind(createdUser.id, activationCode.id)
@@ -1523,25 +1602,520 @@ async function handleListActivationCodes(db, request) {
     return error('缺少有效的教师身份');
   }
 
-  const user = await getUserById(db, userId);
-
-  if (user.level !== 'permanent') {
-    return error('仅永久账号可查看激活码库存', 403);
-  }
+  await assertSuperAdmin(db, userId);
 
   await ensureActivationCodes(db);
 
   const result = await db
     .prepare(
-      `SELECT id, code, level, expires_in_days, used_by_user_id, used_at
-       FROM activation_codes
-       ORDER BY created_at ASC, id ASC`,
+      `SELECT ac.id, ac.code, ac.level, ac.expires_in_days, ac.max_uses, ac.used_count, ac.status,
+              ac.used_by_user_id, ac.used_at, ac.created_by_user_id,
+              used_user.nickname AS used_by_nickname,
+              created_user.nickname AS created_by_nickname
+       FROM activation_codes ac
+       LEFT JOIN users used_user ON used_user.id = ac.used_by_user_id
+       LEFT JOIN users created_user ON created_user.id = ac.created_by_user_id
+       ORDER BY ac.created_at DESC, ac.id DESC`,
     )
     .all();
 
   return json({
     activationCodes: (result.results || []).map(normalizeActivationCode),
   });
+}
+
+async function handleListAdminUsers(db, request) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  const result = await db
+    .prepare(
+      `SELECT id, username, nickname, level, expire_at, role, created_at
+              , status
+       FROM users
+       ORDER BY created_at DESC, id DESC`,
+    )
+    .all();
+
+  return json({
+    users: (result.results || []).map((row) => ({
+      ...normalizeUser(row),
+      created_at: row.created_at,
+    })),
+  });
+}
+
+async function handleListAdminLogs(db, request) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  return json({
+    logs: await getAdminLogs(db),
+  });
+}
+
+async function handleUpdateAdminUser(db, request, targetUserId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const updates = body.updates && typeof body.updates === 'object' ? body.updates : {};
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  const targetUser = await db
+    .prepare('SELECT id, username, nickname, level, expire_at, role, status FROM users WHERE id = ?')
+    .bind(targetUserId)
+    .first();
+
+  if (!targetUser) {
+    return error('目标账号不存在', 404);
+  }
+
+  const nextNickname = String(updates.nickname ?? targetUser.nickname).trim();
+  const nextLevel = ['temporary', 'vip1', 'vip2', 'permanent'].includes(updates.level)
+    ? updates.level
+    : targetUser.level;
+  const nextRole = ['teacher', 'super_admin'].includes(updates.role)
+    ? updates.role
+    : targetUser.role;
+  const nextStatus = ['active', 'disabled'].includes(updates.status)
+    ? updates.status
+    : targetUser.status;
+  const nextExpireAt = updates.expire_at === '' ? null : updates.expire_at ?? targetUser.expire_at;
+
+  if (!nextNickname) {
+    return error('昵称不能为空');
+  }
+
+  await db
+    .prepare('UPDATE users SET nickname = ?, level = ?, expire_at = ?, role = ?, status = ? WHERE id = ?')
+    .bind(nextNickname, nextLevel, nextExpireAt, nextRole, nextStatus, targetUserId)
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '账号管理',
+    detail: `更新账号 ${targetUser.username}：等级 ${targetUser.level} -> ${nextLevel}，角色 ${targetUser.role} -> ${nextRole}，状态 ${targetUser.status} -> ${nextStatus}`,
+  });
+
+  return json({ success: true });
+}
+
+async function handleBatchUpdateAdminUsers(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const userIds = Array.isArray(body.userIds)
+    ? Array.from(new Set(body.userIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)))
+    : [];
+  const updates = body.updates && typeof body.updates === 'object' ? body.updates : {};
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  if (userIds.length === 0) {
+    return error('请至少选择一个账号');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  const placeholders = userIds.map(() => '?').join(', ');
+  const result = await db
+    .prepare(`SELECT id, username, nickname, level, expire_at, role, status FROM users WHERE id IN (${placeholders})`)
+    .bind(...userIds)
+    .all();
+
+  const targetUsers = result.results || [];
+  if (targetUsers.length !== userIds.length) {
+    return error('部分账号不存在');
+  }
+
+  const statements = [];
+  const changedFields = [];
+
+  for (const targetUser of targetUsers) {
+    const nextLevel = ['temporary', 'vip1', 'vip2', 'permanent'].includes(updates.level)
+      ? updates.level
+      : targetUser.level;
+    const nextRole = ['teacher', 'super_admin'].includes(updates.role)
+      ? updates.role
+      : targetUser.role;
+    const nextStatus = ['active', 'disabled'].includes(updates.status)
+      ? updates.status
+      : targetUser.status;
+    const nextExpireAt = updates.expire_at === '' ? null : updates.expire_at ?? targetUser.expire_at;
+
+    statements.push(
+      db
+        .prepare('UPDATE users SET nickname = ?, level = ?, expire_at = ?, role = ?, status = ? WHERE id = ?')
+        .bind(targetUser.nickname, nextLevel, nextExpireAt, nextRole, nextStatus, targetUser.id),
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, 'level')) {
+    changedFields.push(`等级 -> ${updates.level}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'role')) {
+    changedFields.push(`角色 -> ${updates.role}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
+    changedFields.push(`状态 -> ${updates.status}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'expire_at')) {
+    changedFields.push(`有效期 -> ${updates.expire_at || '长期有效'}`);
+  }
+
+  await db.batch(statements);
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '账号管理',
+    detail: `批量更新 ${targetUsers.length} 个账号（${targetUsers.slice(0, 8).map((item) => item.username).join('、')}${targetUsers.length > 8 ? ' 等' : ''}）：${changedFields.join('，') || '基础信息调整'}`,
+  });
+
+  return json({ success: true });
+}
+
+async function handleResetAdminUserPassword(db, request, targetUserId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const nextPassword = String(body.nextPassword || '');
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  if (!validatePassword(nextPassword)) {
+    return error('新密码至少需要 6 位');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  const targetUser = await db
+    .prepare('SELECT id FROM users WHERE id = ?')
+    .bind(targetUserId)
+    .first();
+
+  if (!targetUser) {
+    return error('目标账号不存在', 404);
+  }
+
+  await db
+    .prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+    .bind(await hashPassword(nextPassword), targetUserId)
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '账号管理',
+    detail: `重置了账号 #${targetUserId} 的登录密码`,
+  });
+
+  return json({ success: true });
+}
+
+async function handleCreateActivationCode(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  const rawCode = String(body.code || '').trim().toUpperCase();
+  const prefix = String(body.prefix || 'CLASS').trim().toUpperCase();
+  const code = rawCode || generateActivationCode(prefix);
+  const level = ['vip1', 'vip2', 'permanent'].includes(body.level) ? body.level : 'vip1';
+  const expiresInDays =
+    body.expires_in_days === '' || body.expires_in_days === null || body.expires_in_days === undefined
+      ? null
+      : Math.max(1, Number(body.expires_in_days || 0));
+  const maxUses = Math.max(1, Number(body.max_uses || 1));
+
+  if (!/^[A-Z0-9-]{6,40}$/.test(code)) {
+    return error('激活码需为 6-40 位大写字母、数字或中划线');
+  }
+
+  const existing = await db
+    .prepare('SELECT id FROM activation_codes WHERE code = ?')
+    .bind(code)
+    .first();
+
+  if (existing) {
+    return error('激活码已存在，请更换后再试');
+  }
+
+  await db
+    .prepare(
+      `INSERT INTO activation_codes
+       (code, level, expires_in_days, max_uses, used_count, status, created_by_user_id)
+       VALUES (?, ?, ?, ?, 0, 'active', ?)`,
+    )
+    .bind(code, level, expiresInDays, maxUses, userId)
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '激活码管理',
+    detail: `创建激活码 ${code}，等级 ${level}，可用 ${maxUses} 次`,
+  });
+
+  return json({ success: true });
+}
+
+async function handleBatchCreateActivationCodes(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  const prefix = String(body.prefix || 'CLASS').trim().toUpperCase();
+  const level = ['vip1', 'vip2', 'permanent'].includes(body.level) ? body.level : 'vip1';
+  const expiresInDays =
+    body.expires_in_days === '' || body.expires_in_days === null || body.expires_in_days === undefined
+      ? null
+      : Math.max(1, Number(body.expires_in_days || 0));
+  const maxUses = Math.max(1, Number(body.max_uses || 1));
+  const count = Math.max(1, Math.min(100, Number(body.count || 1)));
+
+  const statements = [];
+  const createdCodes = [];
+
+  for (let index = 0; index < count; index += 1) {
+    let code = generateActivationCode(prefix);
+
+    // Ensure uniqueness for the current batch.
+    while (createdCodes.includes(code)) {
+      code = generateActivationCode(prefix);
+    }
+
+    createdCodes.push(code);
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO activation_codes
+           (code, level, expires_in_days, max_uses, used_count, status, created_by_user_id)
+           VALUES (?, ?, ?, ?, 0, 'active', ?)`,
+        )
+        .bind(code, level, expiresInDays, maxUses, userId),
+    );
+  }
+
+  await db.batch(statements);
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '激活码管理',
+    detail: `批量生成了 ${createdCodes.length} 个 ${level} 激活码，前缀 ${prefix || 'CLASS'}`,
+  });
+
+  return json({
+    success: true,
+    createdCodes,
+  });
+}
+
+async function handleUpdateActivationCode(db, request, codeId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const updates = body.updates && typeof body.updates === 'object' ? body.updates : {};
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  const existing = await db
+    .prepare(
+      `SELECT id, code, level, expires_in_days, max_uses, used_count, status
+       FROM activation_codes
+       WHERE id = ?`,
+    )
+    .bind(codeId)
+    .first();
+
+  if (!existing) {
+    return error('激活码不存在', 404);
+  }
+
+  const nextLevel = ['vip1', 'vip2', 'permanent'].includes(updates.level) ? updates.level : existing.level;
+  const nextStatus = sanitizeCodeStatus(updates.status ?? existing.status);
+  const nextExpiresInDays =
+    updates.expires_in_days === ''
+      ? null
+      : updates.expires_in_days ?? existing.expires_in_days;
+  const nextMaxUses = Math.max(
+    Number(existing.used_count || 0),
+    Math.max(1, Number(updates.max_uses ?? existing.max_uses ?? 1)),
+  );
+
+  await db
+    .prepare(
+      `UPDATE activation_codes
+       SET level = ?, expires_in_days = ?, max_uses = ?, status = ?
+       WHERE id = ?`,
+    )
+    .bind(nextLevel, nextExpiresInDays, nextMaxUses, nextStatus, codeId)
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '激活码管理',
+    detail: `更新激活码 ${existing.code}：等级 ${existing.level} -> ${nextLevel}，状态 ${existing.status} -> ${nextStatus}`,
+  });
+
+  return json({ success: true });
+}
+
+async function handleBatchUpdateActivationCodes(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const codeIds = Array.isArray(body.codeIds)
+    ? Array.from(new Set(body.codeIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)))
+    : [];
+  const updates = body.updates && typeof body.updates === 'object' ? body.updates : {};
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  if (codeIds.length === 0) {
+    return error('请至少选择一个激活码');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  const placeholders = codeIds.map(() => '?').join(', ');
+  const result = await db
+    .prepare(
+      `SELECT id, code, level, expires_in_days, max_uses, used_count, status
+       FROM activation_codes
+       WHERE id IN (${placeholders})`,
+    )
+    .bind(...codeIds)
+    .all();
+
+  const targetCodes = result.results || [];
+  if (targetCodes.length !== codeIds.length) {
+    return error('部分激活码不存在');
+  }
+
+  const statements = [];
+  for (const existing of targetCodes) {
+    const nextLevel = ['vip1', 'vip2', 'permanent'].includes(updates.level) ? updates.level : existing.level;
+    const nextStatus = sanitizeCodeStatus(updates.status ?? existing.status);
+    const nextExpiresInDays =
+      updates.expires_in_days === ''
+        ? null
+        : updates.expires_in_days ?? existing.expires_in_days;
+    const nextMaxUses = Math.max(
+      Number(existing.used_count || 0),
+      Math.max(1, Number(updates.max_uses ?? existing.max_uses ?? 1)),
+    );
+
+    statements.push(
+      db
+        .prepare(
+          `UPDATE activation_codes
+           SET level = ?, expires_in_days = ?, max_uses = ?, status = ?
+           WHERE id = ?`,
+        )
+        .bind(nextLevel, nextExpiresInDays, nextMaxUses, nextStatus, existing.id),
+    );
+  }
+
+  const changedFields = [];
+  if (Object.prototype.hasOwnProperty.call(updates, 'level')) {
+    changedFields.push(`等级 -> ${updates.level}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
+    changedFields.push(`状态 -> ${updates.status}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'expires_in_days')) {
+    changedFields.push(`有效天数 -> ${updates.expires_in_days || '长期有效'}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'max_uses')) {
+    changedFields.push(`可用次数 -> ${updates.max_uses}`);
+  }
+
+  await db.batch(statements);
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '激活码管理',
+    detail: `批量更新 ${targetCodes.length} 个激活码（${targetCodes.slice(0, 8).map((item) => item.code).join('、')}${targetCodes.length > 8 ? ' 等' : ''}）：${changedFields.join('，') || '规则调整'}`,
+  });
+
+  return json({ success: true });
+}
+
+async function handleBatchRevokeActivationCodes(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const codeIds = Array.isArray(body.codeIds)
+    ? Array.from(new Set(body.codeIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)))
+    : [];
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  if (codeIds.length === 0) {
+    return error('请至少选择一个激活码');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  const placeholders = codeIds.map(() => '?').join(', ');
+  const result = await db
+    .prepare(
+      `SELECT id, code, status
+       FROM activation_codes
+       WHERE id IN (${placeholders})`,
+    )
+    .bind(...codeIds)
+    .all();
+
+  const targetCodes = result.results || [];
+
+  if (targetCodes.length !== codeIds.length) {
+    return error('部分激活码不存在');
+  }
+
+  await db
+    .prepare(`UPDATE activation_codes SET status = 'revoked' WHERE id IN (${placeholders})`)
+    .bind(...codeIds)
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '激活码管理',
+    detail: `批量作废了 ${targetCodes.length} 个激活码：${targetCodes.slice(0, 8).map((item) => item.code).join('、')}${targetCodes.length > 8 ? ' 等' : ''}`,
+  });
+
+  return json({ success: true });
 }
 
 export default {
@@ -1576,6 +2150,53 @@ export default {
 
       if (path === '/api/activation-codes' && request.method === 'GET') {
         return await handleListActivationCodes(db, request);
+      }
+
+      if (path === '/api/admin/users' && request.method === 'GET') {
+        return await handleListAdminUsers(db, request);
+      }
+
+      if (path === '/api/admin/users/batch-update' && request.method === 'POST') {
+        return await handleBatchUpdateAdminUsers(db, request);
+      }
+
+      if (path === '/api/admin/logs' && request.method === 'GET') {
+        return await handleListAdminLogs(db, request);
+      }
+
+      const adminUserMatch = path.match(/^\/api\/admin\/users\/(\d+)$/);
+      if (adminUserMatch && request.method === 'PATCH') {
+        return await handleUpdateAdminUser(db, request, Number(adminUserMatch[1]));
+      }
+
+      const adminPasswordMatch = path.match(/^\/api\/admin\/users\/(\d+)\/reset-password$/);
+      if (adminPasswordMatch && request.method === 'POST') {
+        return await handleResetAdminUserPassword(db, request, Number(adminPasswordMatch[1]));
+      }
+
+      if (path === '/api/admin/codes' && request.method === 'GET') {
+        return await handleListActivationCodes(db, request);
+      }
+
+      if (path === '/api/admin/codes' && request.method === 'POST') {
+        return await handleCreateActivationCode(db, request);
+      }
+
+      if (path === '/api/admin/codes/batch-revoke' && request.method === 'POST') {
+        return await handleBatchRevokeActivationCodes(db, request);
+      }
+
+      if (path === '/api/admin/codes/batch-update' && request.method === 'POST') {
+        return await handleBatchUpdateActivationCodes(db, request);
+      }
+
+      if (path === '/api/admin/codes/batch' && request.method === 'POST') {
+        return await handleBatchCreateActivationCodes(db, request);
+      }
+
+      const adminCodeMatch = path.match(/^\/api\/admin\/codes\/(\d+)$/);
+      if (adminCodeMatch && request.method === 'PATCH') {
+        return await handleUpdateActivationCode(db, request, Number(adminCodeMatch[1]));
       }
 
       if (path === '/api/classes' && request.method === 'POST') {

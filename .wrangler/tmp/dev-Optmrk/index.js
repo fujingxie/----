@@ -122,8 +122,14 @@ var normalizeActivationCode = /* @__PURE__ */ __name((row) => ({
   code: row.code,
   level: row.level,
   expires_in_days: row.expires_in_days === null ? null : Number(row.expires_in_days),
+  max_uses: Number(row.max_uses || 1),
+  used_count: Number(row.used_count || 0),
+  status: row.status || "active",
   used_by_user_id: row.used_by_user_id === null ? null : Number(row.used_by_user_id),
-  used_at: row.used_at
+  used_at: row.used_at,
+  used_by_nickname: row.used_by_nickname || null,
+  created_by_user_id: row.created_by_user_id === null ? null : Number(row.created_by_user_id),
+  created_by_nickname: row.created_by_nickname || null
 }), "normalizeActivationCode");
 var formatLogTime = /* @__PURE__ */ __name((createdAt) => {
   const timestamp = new Date(createdAt);
@@ -160,8 +166,17 @@ var normalizeUser = /* @__PURE__ */ __name((row) => ({
   username: row.username,
   nickname: row.nickname,
   level: row.level,
-  expire_at: row.expire_at
+  expire_at: row.expire_at,
+  role: row.role || "teacher",
+  status: row.status || "active"
 }), "normalizeUser");
+var normalizeAdminLog = /* @__PURE__ */ __name((row) => ({
+  id: Number(row.id),
+  action: row.action_type,
+  detail: row.detail,
+  created_at: row.created_at,
+  operator: row.operator || "\u7CFB\u7EDF"
+}), "normalizeAdminLog");
 async function readBody(request) {
   if (!request.body) {
     return {};
@@ -250,7 +265,7 @@ async function refreshMembershipIfNeeded(db, user) {
       `UPDATE users
          SET level = 'temporary', expire_at = NULL
          WHERE id = ?
-         RETURNING id, username, nickname, level, expire_at`
+         RETURNING id, username, nickname, level, expire_at, role, status`
     ).bind(user.id).first();
     return refreshed;
   }
@@ -258,16 +273,19 @@ async function refreshMembershipIfNeeded(db, user) {
 }
 __name(refreshMembershipIfNeeded, "refreshMembershipIfNeeded");
 async function getUserById(db, userId) {
-  const rawUser = await db.prepare("SELECT id, username, nickname, level, expire_at FROM users WHERE id = ?").bind(userId).first();
+  const rawUser = await db.prepare("SELECT id, username, nickname, level, expire_at, role, status FROM users WHERE id = ?").bind(userId).first();
   if (!rawUser) {
     throw new Error("\u6559\u5E08\u8D26\u53F7\u4E0D\u5B58\u5728\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+  }
+  if (rawUser.status === "disabled") {
+    throw new Error("\u8BE5\u8D26\u53F7\u5DF2\u88AB\u505C\u7528\uFF0C\u8BF7\u8054\u7CFB\u7BA1\u7406\u5458");
   }
   return refreshMembershipIfNeeded(db, rawUser);
 }
 __name(getUserById, "getUserById");
 async function getUserWithPassword(db, username) {
   const rawUser = await db.prepare(
-    "SELECT id, username, password_hash, nickname, level, expire_at FROM users WHERE username = ?"
+    "SELECT id, username, password_hash, nickname, level, expire_at, role, status FROM users WHERE username = ?"
   ).bind(username).first();
   if (!rawUser) {
     return null;
@@ -282,6 +300,25 @@ async function getUserWithPassword(db, username) {
   };
 }
 __name(getUserWithPassword, "getUserWithPassword");
+async function assertSuperAdmin(db, userId) {
+  const user = await getUserById(db, userId);
+  if (user.role !== "super_admin") {
+    throw new Error("\u4EC5\u8D85\u7BA1\u8D26\u53F7\u53EF\u8BBF\u95EE\u8BE5\u540E\u53F0");
+  }
+  return user;
+}
+__name(assertSuperAdmin, "assertSuperAdmin");
+function sanitizeCodeStatus(value) {
+  return ["active", "revoked", "used"].includes(value) ? value : "active";
+}
+__name(sanitizeCodeStatus, "sanitizeCodeStatus");
+function generateActivationCode(prefix = "CLASS") {
+  const cleanedPrefix = String(prefix || "CLASS").replace(/[^A-Z0-9-]/g, "").slice(0, 12) || "CLASS";
+  const seed = Math.random().toString(36).slice(2, 8).toUpperCase();
+  const stamp = Date.now().toString(36).slice(-4).toUpperCase();
+  return `${cleanedPrefix}-${seed}-${stamp}`;
+}
+__name(generateActivationCode, "generateActivationCode");
 async function getClassesByUserId(db, userId) {
   const result = await db.prepare("SELECT id, name, created_at FROM classes WHERE user_id = ? ORDER BY created_at ASC, id ASC").bind(userId).all();
   return (result.results || []).map(normalizeClass);
@@ -372,6 +409,21 @@ async function appendLog(db, { classId, userId, actionType, detail, meta = null 
   await db.prepare("INSERT INTO logs (class_id, user_id, action_type, detail, meta) VALUES (?, ?, ?, ?, ?)").bind(classId, userId, actionType, detail, meta ? JSON.stringify(meta) : null).run();
 }
 __name(appendLog, "appendLog");
+async function appendAdminLog(db, { userId, actionType, detail }) {
+  await db.prepare("INSERT INTO admin_logs (user_id, action_type, detail) VALUES (?, ?, ?)").bind(userId, actionType, detail).run();
+}
+__name(appendAdminLog, "appendAdminLog");
+async function getAdminLogs(db) {
+  const result = await db.prepare(
+    `SELECT l.id, l.action_type, l.detail, l.created_at, u.nickname AS operator
+       FROM admin_logs l
+       LEFT JOIN users u ON u.id = l.user_id
+       ORDER BY l.created_at DESC, l.id DESC
+       LIMIT 60`
+  ).all();
+  return (result.results || []).map(normalizeAdminLog);
+}
+__name(getAdminLogs, "getAdminLogs");
 async function getRawLogById(db, classId, logId) {
   return db.prepare("SELECT id, class_id, user_id, action_type, detail, meta, created_at FROM logs WHERE id = ? AND class_id = ?").bind(logId, classId).first();
 }
@@ -447,28 +499,44 @@ async function handleLogin(db, request) {
       return error("\u8BE5\u8D26\u53F7\u5DF2\u5B58\u5728\uFF0C\u8BF7\u66F4\u6362\u7528\u6237\u540D");
     }
     const activationCode = await db.prepare(
-      `SELECT id, code, level, expires_in_days, used_by_user_id, used_at
+      `SELECT id, code, level, expires_in_days, used_by_user_id, used_at, max_uses, used_count, status
          FROM activation_codes
          WHERE code = ?`
     ).bind(activationCodeValue).first();
     if (!activationCode) {
       return error("\u6FC0\u6D3B\u7801\u4E0D\u5B58\u5728\uFF0C\u8BF7\u8054\u7CFB\u7BA1\u7406\u5458\u786E\u8BA4");
     }
-    if (activationCode.used_by_user_id) {
-      return error("\u8BE5\u6FC0\u6D3B\u7801\u5DF2\u88AB\u4F7F\u7528");
+    if (activationCode.status === "revoked") {
+      return error("\u8BE5\u6FC0\u6D3B\u7801\u5DF2\u4F5C\u5E9F");
+    }
+    if (Number(activationCode.used_count || 0) >= Number(activationCode.max_uses || 1)) {
+      return error("\u8BE5\u6FC0\u6D3B\u7801\u5DF2\u88AB\u4F7F\u7528\u5B8C\u6BD5");
     }
     const passwordHash = await hashPassword(password);
     const expireAt = computeExpireAt(
       activationCode.expires_in_days === null ? null : Number(activationCode.expires_in_days)
     );
     const createdUser = await db.prepare(
-      `INSERT INTO users (username, password_hash, nickname, level, expire_at)
-         VALUES (?, ?, ?, ?, ?)
-         RETURNING id, username, nickname, level, expire_at`
-    ).bind(username, passwordHash, nickname, activationCode.level, expireAt).first();
+      `INSERT INTO users (username, password_hash, nickname, level, expire_at, role)
+         VALUES (?, ?, ?, ?, ?, ?)
+         RETURNING id, username, nickname, level, expire_at, role`
+    ).bind(
+      username,
+      passwordHash,
+      nickname,
+      activationCode.level,
+      expireAt,
+      activationCode.level === "permanent" ? "super_admin" : "teacher"
+    ).first();
     await db.prepare(
       `UPDATE activation_codes
-         SET used_by_user_id = ?, used_at = CURRENT_TIMESTAMP
+         SET used_by_user_id = ?,
+             used_at = CURRENT_TIMESTAMP,
+             used_count = used_count + 1,
+             status = CASE
+               WHEN used_count + 1 >= max_uses THEN 'used'
+               ELSE status
+             END
          WHERE id = ?`
     ).bind(createdUser.id, activationCode.id).run();
     return json({
@@ -1167,21 +1235,359 @@ async function handleListActivationCodes(db, request) {
   if (!userId) {
     return error("\u7F3A\u5C11\u6709\u6548\u7684\u6559\u5E08\u8EAB\u4EFD");
   }
-  const user = await getUserById(db, userId);
-  if (user.level !== "permanent") {
-    return error("\u4EC5\u6C38\u4E45\u8D26\u53F7\u53EF\u67E5\u770B\u6FC0\u6D3B\u7801\u5E93\u5B58", 403);
-  }
+  await assertSuperAdmin(db, userId);
   await ensureActivationCodes(db);
   const result = await db.prepare(
-    `SELECT id, code, level, expires_in_days, used_by_user_id, used_at
-       FROM activation_codes
-       ORDER BY created_at ASC, id ASC`
+    `SELECT ac.id, ac.code, ac.level, ac.expires_in_days, ac.max_uses, ac.used_count, ac.status,
+              ac.used_by_user_id, ac.used_at, ac.created_by_user_id,
+              used_user.nickname AS used_by_nickname,
+              created_user.nickname AS created_by_nickname
+       FROM activation_codes ac
+       LEFT JOIN users used_user ON used_user.id = ac.used_by_user_id
+       LEFT JOIN users created_user ON created_user.id = ac.created_by_user_id
+       ORDER BY ac.created_at DESC, ac.id DESC`
   ).all();
   return json({
     activationCodes: (result.results || []).map(normalizeActivationCode)
   });
 }
 __name(handleListActivationCodes, "handleListActivationCodes");
+async function handleListAdminUsers(db, request) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get("userId"));
+  if (!userId) {
+    return error("\u7F3A\u5C11\u6709\u6548\u7684\u6559\u5E08\u8EAB\u4EFD");
+  }
+  await assertSuperAdmin(db, userId);
+  const result = await db.prepare(
+    `SELECT id, username, nickname, level, expire_at, role, created_at
+              , status
+       FROM users
+       ORDER BY created_at DESC, id DESC`
+  ).all();
+  return json({
+    users: (result.results || []).map((row) => ({
+      ...normalizeUser(row),
+      created_at: row.created_at
+    }))
+  });
+}
+__name(handleListAdminUsers, "handleListAdminUsers");
+async function handleListAdminLogs(db, request) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get("userId"));
+  if (!userId) {
+    return error("\u7F3A\u5C11\u6709\u6548\u7684\u6559\u5E08\u8EAB\u4EFD");
+  }
+  await assertSuperAdmin(db, userId);
+  return json({
+    logs: await getAdminLogs(db)
+  });
+}
+__name(handleListAdminLogs, "handleListAdminLogs");
+async function handleUpdateAdminUser(db, request, targetUserId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const updates = body.updates && typeof body.updates === "object" ? body.updates : {};
+  if (!userId) {
+    return error("\u7F3A\u5C11\u6709\u6548\u7684\u6559\u5E08\u8EAB\u4EFD");
+  }
+  await assertSuperAdmin(db, userId);
+  const targetUser = await db.prepare("SELECT id, username, nickname, level, expire_at, role, status FROM users WHERE id = ?").bind(targetUserId).first();
+  if (!targetUser) {
+    return error("\u76EE\u6807\u8D26\u53F7\u4E0D\u5B58\u5728", 404);
+  }
+  const nextNickname = String(updates.nickname ?? targetUser.nickname).trim();
+  const nextLevel = ["temporary", "vip1", "vip2", "permanent"].includes(updates.level) ? updates.level : targetUser.level;
+  const nextRole = ["teacher", "super_admin"].includes(updates.role) ? updates.role : targetUser.role;
+  const nextStatus = ["active", "disabled"].includes(updates.status) ? updates.status : targetUser.status;
+  const nextExpireAt = updates.expire_at === "" ? null : updates.expire_at ?? targetUser.expire_at;
+  if (!nextNickname) {
+    return error("\u6635\u79F0\u4E0D\u80FD\u4E3A\u7A7A");
+  }
+  await db.prepare("UPDATE users SET nickname = ?, level = ?, expire_at = ?, role = ?, status = ? WHERE id = ?").bind(nextNickname, nextLevel, nextExpireAt, nextRole, nextStatus, targetUserId).run();
+  await appendAdminLog(db, {
+    userId,
+    actionType: "\u8D26\u53F7\u7BA1\u7406",
+    detail: `\u66F4\u65B0\u8D26\u53F7 ${targetUser.username}\uFF1A\u7B49\u7EA7 ${targetUser.level} -> ${nextLevel}\uFF0C\u89D2\u8272 ${targetUser.role} -> ${nextRole}\uFF0C\u72B6\u6001 ${targetUser.status} -> ${nextStatus}`
+  });
+  return json({ success: true });
+}
+__name(handleUpdateAdminUser, "handleUpdateAdminUser");
+async function handleBatchUpdateAdminUsers(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const userIds = Array.isArray(body.userIds) ? Array.from(new Set(body.userIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))) : [];
+  const updates = body.updates && typeof body.updates === "object" ? body.updates : {};
+  if (!userId) {
+    return error("\u7F3A\u5C11\u6709\u6548\u7684\u6559\u5E08\u8EAB\u4EFD");
+  }
+  if (userIds.length === 0) {
+    return error("\u8BF7\u81F3\u5C11\u9009\u62E9\u4E00\u4E2A\u8D26\u53F7");
+  }
+  await assertSuperAdmin(db, userId);
+  const placeholders = userIds.map(() => "?").join(", ");
+  const result = await db.prepare(`SELECT id, username, nickname, level, expire_at, role, status FROM users WHERE id IN (${placeholders})`).bind(...userIds).all();
+  const targetUsers = result.results || [];
+  if (targetUsers.length !== userIds.length) {
+    return error("\u90E8\u5206\u8D26\u53F7\u4E0D\u5B58\u5728");
+  }
+  const statements = [];
+  const changedFields = [];
+  for (const targetUser of targetUsers) {
+    const nextLevel = ["temporary", "vip1", "vip2", "permanent"].includes(updates.level) ? updates.level : targetUser.level;
+    const nextRole = ["teacher", "super_admin"].includes(updates.role) ? updates.role : targetUser.role;
+    const nextStatus = ["active", "disabled"].includes(updates.status) ? updates.status : targetUser.status;
+    const nextExpireAt = updates.expire_at === "" ? null : updates.expire_at ?? targetUser.expire_at;
+    statements.push(
+      db.prepare("UPDATE users SET nickname = ?, level = ?, expire_at = ?, role = ?, status = ? WHERE id = ?").bind(targetUser.nickname, nextLevel, nextExpireAt, nextRole, nextStatus, targetUser.id)
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "level")) {
+    changedFields.push(`\u7B49\u7EA7 -> ${updates.level}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "role")) {
+    changedFields.push(`\u89D2\u8272 -> ${updates.role}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "status")) {
+    changedFields.push(`\u72B6\u6001 -> ${updates.status}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "expire_at")) {
+    changedFields.push(`\u6709\u6548\u671F -> ${updates.expire_at || "\u957F\u671F\u6709\u6548"}`);
+  }
+  await db.batch(statements);
+  await appendAdminLog(db, {
+    userId,
+    actionType: "\u8D26\u53F7\u7BA1\u7406",
+    detail: `\u6279\u91CF\u66F4\u65B0 ${targetUsers.length} \u4E2A\u8D26\u53F7\uFF08${targetUsers.slice(0, 8).map((item) => item.username).join("\u3001")}${targetUsers.length > 8 ? " \u7B49" : ""}\uFF09\uFF1A${changedFields.join("\uFF0C") || "\u57FA\u7840\u4FE1\u606F\u8C03\u6574"}`
+  });
+  return json({ success: true });
+}
+__name(handleBatchUpdateAdminUsers, "handleBatchUpdateAdminUsers");
+async function handleResetAdminUserPassword(db, request, targetUserId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const nextPassword = String(body.nextPassword || "");
+  if (!userId) {
+    return error("\u7F3A\u5C11\u6709\u6548\u7684\u6559\u5E08\u8EAB\u4EFD");
+  }
+  if (!validatePassword(nextPassword)) {
+    return error("\u65B0\u5BC6\u7801\u81F3\u5C11\u9700\u8981 6 \u4F4D");
+  }
+  await assertSuperAdmin(db, userId);
+  const targetUser = await db.prepare("SELECT id FROM users WHERE id = ?").bind(targetUserId).first();
+  if (!targetUser) {
+    return error("\u76EE\u6807\u8D26\u53F7\u4E0D\u5B58\u5728", 404);
+  }
+  await db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(await hashPassword(nextPassword), targetUserId).run();
+  await appendAdminLog(db, {
+    userId,
+    actionType: "\u8D26\u53F7\u7BA1\u7406",
+    detail: `\u91CD\u7F6E\u4E86\u8D26\u53F7 #${targetUserId} \u7684\u767B\u5F55\u5BC6\u7801`
+  });
+  return json({ success: true });
+}
+__name(handleResetAdminUserPassword, "handleResetAdminUserPassword");
+async function handleCreateActivationCode(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  if (!userId) {
+    return error("\u7F3A\u5C11\u6709\u6548\u7684\u6559\u5E08\u8EAB\u4EFD");
+  }
+  await assertSuperAdmin(db, userId);
+  const rawCode = String(body.code || "").trim().toUpperCase();
+  const prefix = String(body.prefix || "CLASS").trim().toUpperCase();
+  const code = rawCode || generateActivationCode(prefix);
+  const level = ["vip1", "vip2", "permanent"].includes(body.level) ? body.level : "vip1";
+  const expiresInDays = body.expires_in_days === "" || body.expires_in_days === null || body.expires_in_days === void 0 ? null : Math.max(1, Number(body.expires_in_days || 0));
+  const maxUses = Math.max(1, Number(body.max_uses || 1));
+  if (!/^[A-Z0-9-]{6,40}$/.test(code)) {
+    return error("\u6FC0\u6D3B\u7801\u9700\u4E3A 6-40 \u4F4D\u5927\u5199\u5B57\u6BCD\u3001\u6570\u5B57\u6216\u4E2D\u5212\u7EBF");
+  }
+  const existing = await db.prepare("SELECT id FROM activation_codes WHERE code = ?").bind(code).first();
+  if (existing) {
+    return error("\u6FC0\u6D3B\u7801\u5DF2\u5B58\u5728\uFF0C\u8BF7\u66F4\u6362\u540E\u518D\u8BD5");
+  }
+  await db.prepare(
+    `INSERT INTO activation_codes
+       (code, level, expires_in_days, max_uses, used_count, status, created_by_user_id)
+       VALUES (?, ?, ?, ?, 0, 'active', ?)`
+  ).bind(code, level, expiresInDays, maxUses, userId).run();
+  await appendAdminLog(db, {
+    userId,
+    actionType: "\u6FC0\u6D3B\u7801\u7BA1\u7406",
+    detail: `\u521B\u5EFA\u6FC0\u6D3B\u7801 ${code}\uFF0C\u7B49\u7EA7 ${level}\uFF0C\u53EF\u7528 ${maxUses} \u6B21`
+  });
+  return json({ success: true });
+}
+__name(handleCreateActivationCode, "handleCreateActivationCode");
+async function handleBatchCreateActivationCodes(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  if (!userId) {
+    return error("\u7F3A\u5C11\u6709\u6548\u7684\u6559\u5E08\u8EAB\u4EFD");
+  }
+  await assertSuperAdmin(db, userId);
+  const prefix = String(body.prefix || "CLASS").trim().toUpperCase();
+  const level = ["vip1", "vip2", "permanent"].includes(body.level) ? body.level : "vip1";
+  const expiresInDays = body.expires_in_days === "" || body.expires_in_days === null || body.expires_in_days === void 0 ? null : Math.max(1, Number(body.expires_in_days || 0));
+  const maxUses = Math.max(1, Number(body.max_uses || 1));
+  const count = Math.max(1, Math.min(100, Number(body.count || 1)));
+  const statements = [];
+  const createdCodes = [];
+  for (let index = 0; index < count; index += 1) {
+    let code = generateActivationCode(prefix);
+    while (createdCodes.includes(code)) {
+      code = generateActivationCode(prefix);
+    }
+    createdCodes.push(code);
+    statements.push(
+      db.prepare(
+        `INSERT INTO activation_codes
+           (code, level, expires_in_days, max_uses, used_count, status, created_by_user_id)
+           VALUES (?, ?, ?, ?, 0, 'active', ?)`
+      ).bind(code, level, expiresInDays, maxUses, userId)
+    );
+  }
+  await db.batch(statements);
+  await appendAdminLog(db, {
+    userId,
+    actionType: "\u6FC0\u6D3B\u7801\u7BA1\u7406",
+    detail: `\u6279\u91CF\u751F\u6210\u4E86 ${createdCodes.length} \u4E2A ${level} \u6FC0\u6D3B\u7801\uFF0C\u524D\u7F00 ${prefix || "CLASS"}`
+  });
+  return json({
+    success: true,
+    createdCodes
+  });
+}
+__name(handleBatchCreateActivationCodes, "handleBatchCreateActivationCodes");
+async function handleUpdateActivationCode(db, request, codeId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const updates = body.updates && typeof body.updates === "object" ? body.updates : {};
+  if (!userId) {
+    return error("\u7F3A\u5C11\u6709\u6548\u7684\u6559\u5E08\u8EAB\u4EFD");
+  }
+  await assertSuperAdmin(db, userId);
+  const existing = await db.prepare(
+    `SELECT id, code, level, expires_in_days, max_uses, used_count, status
+       FROM activation_codes
+       WHERE id = ?`
+  ).bind(codeId).first();
+  if (!existing) {
+    return error("\u6FC0\u6D3B\u7801\u4E0D\u5B58\u5728", 404);
+  }
+  const nextLevel = ["vip1", "vip2", "permanent"].includes(updates.level) ? updates.level : existing.level;
+  const nextStatus = sanitizeCodeStatus(updates.status ?? existing.status);
+  const nextExpiresInDays = updates.expires_in_days === "" ? null : updates.expires_in_days ?? existing.expires_in_days;
+  const nextMaxUses = Math.max(
+    Number(existing.used_count || 0),
+    Math.max(1, Number(updates.max_uses ?? existing.max_uses ?? 1))
+  );
+  await db.prepare(
+    `UPDATE activation_codes
+       SET level = ?, expires_in_days = ?, max_uses = ?, status = ?
+       WHERE id = ?`
+  ).bind(nextLevel, nextExpiresInDays, nextMaxUses, nextStatus, codeId).run();
+  await appendAdminLog(db, {
+    userId,
+    actionType: "\u6FC0\u6D3B\u7801\u7BA1\u7406",
+    detail: `\u66F4\u65B0\u6FC0\u6D3B\u7801 ${existing.code}\uFF1A\u7B49\u7EA7 ${existing.level} -> ${nextLevel}\uFF0C\u72B6\u6001 ${existing.status} -> ${nextStatus}`
+  });
+  return json({ success: true });
+}
+__name(handleUpdateActivationCode, "handleUpdateActivationCode");
+async function handleBatchUpdateActivationCodes(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const codeIds = Array.isArray(body.codeIds) ? Array.from(new Set(body.codeIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))) : [];
+  const updates = body.updates && typeof body.updates === "object" ? body.updates : {};
+  if (!userId) {
+    return error("\u7F3A\u5C11\u6709\u6548\u7684\u6559\u5E08\u8EAB\u4EFD");
+  }
+  if (codeIds.length === 0) {
+    return error("\u8BF7\u81F3\u5C11\u9009\u62E9\u4E00\u4E2A\u6FC0\u6D3B\u7801");
+  }
+  await assertSuperAdmin(db, userId);
+  const placeholders = codeIds.map(() => "?").join(", ");
+  const result = await db.prepare(
+    `SELECT id, code, level, expires_in_days, max_uses, used_count, status
+       FROM activation_codes
+       WHERE id IN (${placeholders})`
+  ).bind(...codeIds).all();
+  const targetCodes = result.results || [];
+  if (targetCodes.length !== codeIds.length) {
+    return error("\u90E8\u5206\u6FC0\u6D3B\u7801\u4E0D\u5B58\u5728");
+  }
+  const statements = [];
+  for (const existing of targetCodes) {
+    const nextLevel = ["vip1", "vip2", "permanent"].includes(updates.level) ? updates.level : existing.level;
+    const nextStatus = sanitizeCodeStatus(updates.status ?? existing.status);
+    const nextExpiresInDays = updates.expires_in_days === "" ? null : updates.expires_in_days ?? existing.expires_in_days;
+    const nextMaxUses = Math.max(
+      Number(existing.used_count || 0),
+      Math.max(1, Number(updates.max_uses ?? existing.max_uses ?? 1))
+    );
+    statements.push(
+      db.prepare(
+        `UPDATE activation_codes
+           SET level = ?, expires_in_days = ?, max_uses = ?, status = ?
+           WHERE id = ?`
+      ).bind(nextLevel, nextExpiresInDays, nextMaxUses, nextStatus, existing.id)
+    );
+  }
+  const changedFields = [];
+  if (Object.prototype.hasOwnProperty.call(updates, "level")) {
+    changedFields.push(`\u7B49\u7EA7 -> ${updates.level}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "status")) {
+    changedFields.push(`\u72B6\u6001 -> ${updates.status}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "expires_in_days")) {
+    changedFields.push(`\u6709\u6548\u5929\u6570 -> ${updates.expires_in_days || "\u957F\u671F\u6709\u6548"}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "max_uses")) {
+    changedFields.push(`\u53EF\u7528\u6B21\u6570 -> ${updates.max_uses}`);
+  }
+  await db.batch(statements);
+  await appendAdminLog(db, {
+    userId,
+    actionType: "\u6FC0\u6D3B\u7801\u7BA1\u7406",
+    detail: `\u6279\u91CF\u66F4\u65B0 ${targetCodes.length} \u4E2A\u6FC0\u6D3B\u7801\uFF08${targetCodes.slice(0, 8).map((item) => item.code).join("\u3001")}${targetCodes.length > 8 ? " \u7B49" : ""}\uFF09\uFF1A${changedFields.join("\uFF0C") || "\u89C4\u5219\u8C03\u6574"}`
+  });
+  return json({ success: true });
+}
+__name(handleBatchUpdateActivationCodes, "handleBatchUpdateActivationCodes");
+async function handleBatchRevokeActivationCodes(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const codeIds = Array.isArray(body.codeIds) ? Array.from(new Set(body.codeIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))) : [];
+  if (!userId) {
+    return error("\u7F3A\u5C11\u6709\u6548\u7684\u6559\u5E08\u8EAB\u4EFD");
+  }
+  if (codeIds.length === 0) {
+    return error("\u8BF7\u81F3\u5C11\u9009\u62E9\u4E00\u4E2A\u6FC0\u6D3B\u7801");
+  }
+  await assertSuperAdmin(db, userId);
+  const placeholders = codeIds.map(() => "?").join(", ");
+  const result = await db.prepare(
+    `SELECT id, code, status
+       FROM activation_codes
+       WHERE id IN (${placeholders})`
+  ).bind(...codeIds).all();
+  const targetCodes = result.results || [];
+  if (targetCodes.length !== codeIds.length) {
+    return error("\u90E8\u5206\u6FC0\u6D3B\u7801\u4E0D\u5B58\u5728");
+  }
+  await db.prepare(`UPDATE activation_codes SET status = 'revoked' WHERE id IN (${placeholders})`).bind(...codeIds).run();
+  await appendAdminLog(db, {
+    userId,
+    actionType: "\u6FC0\u6D3B\u7801\u7BA1\u7406",
+    detail: `\u6279\u91CF\u4F5C\u5E9F\u4E86 ${targetCodes.length} \u4E2A\u6FC0\u6D3B\u7801\uFF1A${targetCodes.slice(0, 8).map((item) => item.code).join("\u3001")}${targetCodes.length > 8 ? " \u7B49" : ""}`
+  });
+  return json({ success: true });
+}
+__name(handleBatchRevokeActivationCodes, "handleBatchRevokeActivationCodes");
 var src_server_default = {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
@@ -1207,6 +1613,42 @@ var src_server_default = {
       }
       if (path === "/api/activation-codes" && request.method === "GET") {
         return await handleListActivationCodes(db, request);
+      }
+      if (path === "/api/admin/users" && request.method === "GET") {
+        return await handleListAdminUsers(db, request);
+      }
+      if (path === "/api/admin/users/batch-update" && request.method === "POST") {
+        return await handleBatchUpdateAdminUsers(db, request);
+      }
+      if (path === "/api/admin/logs" && request.method === "GET") {
+        return await handleListAdminLogs(db, request);
+      }
+      const adminUserMatch = path.match(/^\/api\/admin\/users\/(\d+)$/);
+      if (adminUserMatch && request.method === "PATCH") {
+        return await handleUpdateAdminUser(db, request, Number(adminUserMatch[1]));
+      }
+      const adminPasswordMatch = path.match(/^\/api\/admin\/users\/(\d+)\/reset-password$/);
+      if (adminPasswordMatch && request.method === "POST") {
+        return await handleResetAdminUserPassword(db, request, Number(adminPasswordMatch[1]));
+      }
+      if (path === "/api/admin/codes" && request.method === "GET") {
+        return await handleListActivationCodes(db, request);
+      }
+      if (path === "/api/admin/codes" && request.method === "POST") {
+        return await handleCreateActivationCode(db, request);
+      }
+      if (path === "/api/admin/codes/batch-revoke" && request.method === "POST") {
+        return await handleBatchRevokeActivationCodes(db, request);
+      }
+      if (path === "/api/admin/codes/batch-update" && request.method === "POST") {
+        return await handleBatchUpdateActivationCodes(db, request);
+      }
+      if (path === "/api/admin/codes/batch" && request.method === "POST") {
+        return await handleBatchCreateActivationCodes(db, request);
+      }
+      const adminCodeMatch = path.match(/^\/api\/admin\/codes\/(\d+)$/);
+      if (adminCodeMatch && request.method === "PATCH") {
+        return await handleUpdateActivationCode(db, request, Number(adminCodeMatch[1]));
       }
       if (path === "/api/classes" && request.method === "POST") {
         return await handleCreateClass(db, request);
