@@ -36,6 +36,7 @@ const ClassSettingsPanel = ({
   onBatchRemoveStudents,
   onRenameStudent,
   onResetStudentPet,
+  onRequestConfirm,
 }) => {
   const [className, setClassName] = useState(currentClass?.name || '');
   const [bulkStudentText, setBulkStudentText] = useState('');
@@ -92,7 +93,13 @@ const ClassSettingsPanel = ({
       return;
     }
 
-    if (window.confirm(`确定要批量移除 ${selectedStudentIds.length} 名学生吗？`)) {
+    const confirmed = await onRequestConfirm({
+      title: '批量删除学生',
+      message: `确定要批量移除 ${selectedStudentIds.length} 名学生吗？该操作会把这些学生从当前班级中移除。`,
+      tone: 'danger',
+      confirmLabel: '确认删除',
+    });
+    if (confirmed) {
       await onBatchRemoveStudents(selectedStudentIds);
       setSelectedStudentIds([]);
     }
@@ -233,8 +240,14 @@ const ClassSettingsPanel = ({
                     {!isEditing && (
                       <button
                         className="icon-btn amber"
-                        onClick={() => {
-                          if (window.confirm(`确定要将 ${student.name} 的当前宠物重置为神秘蛋吗？`)) {
+                        onClick={async () => {
+                          const confirmed = await onRequestConfirm({
+                            title: '重置宠物',
+                            message: `确定要将 ${student.name} 的当前宠物重置为神秘蛋吗？当前宠物会回到待唤醒状态。`,
+                            tone: 'danger',
+                            confirmLabel: '确认重置',
+                          });
+                          if (confirmed) {
                             onResetStudentPet(student);
                           }
                         }}
@@ -246,8 +259,14 @@ const ClassSettingsPanel = ({
                     )}
                     <button
                       className="icon-btn red"
-                      onClick={() => {
-                        if (window.confirm(`确定要移除学生 ${student.name} 吗？`)) {
+                      onClick={async () => {
+                        const confirmed = await onRequestConfirm({
+                          title: '删除学生',
+                          message: `确定要移除学生 ${student.name} 吗？该学生会从当前班级列表中移除。`,
+                          tone: 'danger',
+                          confirmLabel: '确认移除',
+                        });
+                        if (confirmed) {
                           onRemoveStudent(student.id, student.name);
                         }
                       }}
@@ -743,8 +762,12 @@ const AccountPanel = ({
   themeOptions,
   density,
   densityOptions,
+  soundEnabled,
+  soundVolume,
   onThemeChange,
   onDensityChange,
+  onSoundEnabledChange,
+  onSoundVolumeChange,
   onUpdatePassword,
 }) => {
   const [passwordForm, setPasswordForm] = useState({
@@ -928,19 +951,58 @@ const AccountPanel = ({
             </div>
             <p>{density === 'compact' ? '更适合信息密度高的管理场景。' : '留白更舒展，适合课堂展示。'}</p>
           </section>
+
+          <section className="account-side-card glass-card">
+            <span className="account-side-label">提示音</span>
+            <div className="density-toggle-row">
+              <button
+                className={`density-chip ${soundEnabled ? 'active' : ''}`}
+                onClick={() => onSoundEnabledChange(true)}
+                type="button"
+              >
+                开启
+              </button>
+              <button
+                className={`density-chip ${!soundEnabled ? 'active' : ''}`}
+                onClick={() => onSoundEnabledChange(false)}
+                type="button"
+              >
+                关闭
+              </button>
+            </div>
+            <div className="sound-slider-row">
+              <label htmlFor="sound-volume">音量</label>
+              <input
+                id="sound-volume"
+                type="range"
+                min="0"
+                max="100"
+                value={Math.round(soundVolume * 100)}
+                onChange={(event) => onSoundVolumeChange(Number(event.target.value) / 100)}
+              />
+              <strong>{Math.round(soundVolume * 100)}%</strong>
+            </div>
+            <p>{soundEnabled ? '奖励、惩罚、领养等课堂动作会播放提示音。' : '已关闭所有动作提示音。'}</p>
+          </section>
         </aside>
       </div>
     </div>
   );
 };
 
-const DangerZonePanel = ({ currentClass, onResetClassProgress, onArchiveClassStudents }) => {
+const DangerZonePanel = ({ currentClass, onResetClassProgress, onArchiveClassStudents, onRequestConfirm }) => {
   const handleReset = async () => {
-    if (
-      !window.confirm(
-        `确定要重置班级 ${currentClass?.name || ''} 的全班进度吗？金币会清零，宠物会全部回到神秘蛋，但会保留学生名册和历史账单。`,
-      )
-    ) {
+    const className = currentClass?.name || '';
+    const confirmed = await onRequestConfirm({
+      title: '重置全班进度',
+      message: `确定要重置班级 ${className} 的全班进度吗？金币会清零，宠物会全部回到神秘蛋，但会保留学生名册和历史账单。`,
+      tone: 'danger',
+      confirmLabel: '确认重置',
+      requireMatch: className,
+      matchLabel: `请输入班级名“${className}”以确认重置`,
+      matchPlaceholder: className,
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -948,11 +1010,17 @@ const DangerZonePanel = ({ currentClass, onResetClassProgress, onArchiveClassStu
   };
 
   const handleWipe = async () => {
-    if (
-      !window.confirm(
-        `确定要将班级 ${currentClass?.name || ''} 的全部学生执行毕业归档大清洗吗？学生会从前端界面彻底移除，且不可恢复。`,
-      )
-    ) {
+    const className = currentClass?.name || '';
+    const confirmed = await onRequestConfirm({
+      title: '一键毕业归档',
+      message: `确定要将班级 ${className} 的全部学生执行毕业归档大清洗吗？学生会从前端界面彻底移除，且不可恢复。`,
+      tone: 'danger',
+      confirmLabel: '确认归档',
+      requireMatch: className,
+      matchLabel: `请输入班级名“${className}”以确认归档`,
+      matchPlaceholder: className,
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -1055,6 +1123,8 @@ const Settings = ({
   themeOptions,
   density,
   densityOptions,
+  soundEnabled,
+  soundVolume,
   currentClass,
   students,
   rules,
@@ -1076,6 +1146,9 @@ const Settings = ({
   onExportClassData,
   onThemeChange,
   onDensityChange,
+  onSoundEnabledChange,
+  onSoundVolumeChange,
+  onRequestConfirm,
   isMutating,
 }) => {
   const [activeMenu, setActiveMenu] = useState('account');
@@ -1142,8 +1215,12 @@ const Settings = ({
             themeOptions={themeOptions}
             density={density}
             densityOptions={densityOptions}
+            soundEnabled={soundEnabled}
+            soundVolume={soundVolume}
             onThemeChange={onThemeChange}
             onDensityChange={onDensityChange}
+            onSoundEnabledChange={onSoundEnabledChange}
+            onSoundVolumeChange={onSoundVolumeChange}
             onUpdatePassword={onUpdatePassword}
           />
         )}
@@ -1163,6 +1240,7 @@ const Settings = ({
                 onBatchRemoveStudents={onBatchRemoveStudents}
                 onRenameStudent={handleRenameStudent}
                 onResetStudentPet={handleResetStudentPet}
+                onRequestConfirm={onRequestConfirm}
               />
             )}
           </div>
@@ -1207,12 +1285,13 @@ const Settings = ({
         {activeMenu === 'danger' && (
           <div className="settings-section">
             {!hasClass ? (
-              <div className="empty-settings-state">请先创建班级，再执行充值或数据清空操作。</div>
+              <div className="empty-settings-state">请先创建班级，再执行重置或归档等危险操作。</div>
             ) : (
               <DangerZonePanel
                 currentClass={currentClass}
                 onResetClassProgress={onResetClassProgress}
                 onArchiveClassStudents={onArchiveClassStudents}
+                onRequestConfirm={onRequestConfirm}
               />
             )}
           </div>

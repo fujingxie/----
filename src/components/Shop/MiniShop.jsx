@@ -14,7 +14,16 @@ const toSafeNonNegativeInteger = (value) => {
   return String(Math.max(0, parseInt(value, 10) || 0));
 };
 
-const MiniShop = ({ items, logs = [], onAddItem, onUpdateItem, onDeleteItem, onRedeem, students }) => {
+const MiniShop = ({
+  items,
+  logs = [],
+  onAddItem,
+  onUpdateItem,
+  onDeleteItem,
+  onRedeem,
+  onRequestConfirm,
+  students,
+}) => {
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [selectedItemForRedeem, setSelectedItemForRedeem] = useState(null);
@@ -104,6 +113,19 @@ const MiniShop = ({ items, logs = [], onAddItem, onUpdateItem, onDeleteItem, onR
     });
   };
 
+  const handleDeleteItem = async (item) => {
+    const confirmed = await onRequestConfirm({
+      title: '下架商品',
+      message: `确定要下架商品 ${item.name} 吗？下架后学生将不能继续兑换这个商品。`,
+      tone: 'danger',
+      confirmLabel: '确认下架',
+    });
+
+    if (confirmed) {
+      onDeleteItem(item);
+    }
+  };
+
   return (
     <div className="mini-shop-container">
       <div className="shop-header">
@@ -161,11 +183,7 @@ const MiniShop = ({ items, logs = [], onAddItem, onUpdateItem, onDeleteItem, onR
                 </button>
                 <button
                   className="icon-btn red"
-                  onClick={() => {
-                    if (window.confirm(`确定要下架商品 ${item.name} 吗？`)) {
-                      onDeleteItem(item);
-                    }
-                  }}
+                  onClick={() => handleDeleteItem(item)}
                   type="button"
                   title="下架商品"
                 >

@@ -18,6 +18,7 @@ import HallOfFame from './components/Rank/HallOfFame';
 import Toolbox from './components/Toolbox/Toolbox';
 import Settings from './components/Settings/Settings';
 import { notify } from './lib/notify';
+import { setSoundPreferences } from './lib/sounds';
 import {
   createClass,
   createRule,
@@ -47,6 +48,8 @@ const STORAGE_KEYS = {
   currentClassId: 'classPets.currentClassId',
   theme: 'classPets.theme',
   density: 'classPets.density',
+  soundEnabled: 'classPets.soundEnabled',
+  soundVolume: 'classPets.soundVolume',
 };
 
 const THEME_OPTIONS = [
@@ -95,6 +98,25 @@ const readStoredDensity = () => {
   }
 };
 
+const readStoredSoundEnabled = () => {
+  try {
+    const rawValue = window.localStorage.getItem(STORAGE_KEYS.soundEnabled);
+    return rawValue === null ? true : rawValue === 'true';
+  } catch {
+    return true;
+  }
+};
+
+const readStoredSoundVolume = () => {
+  try {
+    const rawValue = window.localStorage.getItem(STORAGE_KEYS.soundVolume);
+    const parsed = rawValue === null ? 0.8 : Number(rawValue);
+    return Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : 0.8;
+  } catch {
+    return 0.8;
+  }
+};
+
 const tabs = [
   { id: 'pet', label: '宠物乐园', icon: <Gamepad2 size={20} /> },
   { id: 'shop', label: '小卖部', icon: <ShoppingBag size={20} /> },
@@ -125,6 +147,21 @@ function App() {
   const [toast, setToast] = useState(null);
   const [theme, setTheme] = useState(() => readStoredTheme());
   const [density, setDensity] = useState(() => readStoredDensity());
+  const [soundEnabled, setSoundEnabled] = useState(() => readStoredSoundEnabled());
+  const [soundVolume, setSoundVolume] = useState(() => readStoredSoundVolume());
+  const [confirmState, setConfirmState] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    tone: 'default',
+    confirmLabel: '确认',
+    cancelLabel: '取消',
+    requireMatch: '',
+    matchLabel: '',
+    matchPlaceholder: '',
+    inputValue: '',
+    resolver: null,
+  });
 
   const currentClass = useMemo(
     () => classes.find((item) => item.id === currentClassId) || null,
@@ -267,6 +304,47 @@ function App() {
     document.documentElement.setAttribute('data-density', density);
     window.localStorage.setItem(STORAGE_KEYS.density, density);
   }, [density]);
+
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEYS.soundEnabled, String(soundEnabled));
+    window.localStorage.setItem(STORAGE_KEYS.soundVolume, String(soundVolume));
+    setSoundPreferences({ enabled: soundEnabled, volume: soundVolume });
+  }, [soundEnabled, soundVolume]);
+
+  const requestConfirm = useCallback((options) => new Promise((resolve) => {
+    setConfirmState({
+      isOpen: true,
+      title: options?.title || '确认操作',
+      message: options?.message || '',
+      tone: options?.tone || 'default',
+      confirmLabel: options?.confirmLabel || '确认',
+      cancelLabel: options?.cancelLabel || '取消',
+      requireMatch: options?.requireMatch || '',
+      matchLabel: options?.matchLabel || '',
+      matchPlaceholder: options?.matchPlaceholder || '',
+      inputValue: '',
+      resolver: resolve,
+    });
+  }), []);
+
+  const closeConfirm = useCallback((confirmed) => {
+    setConfirmState((prev) => {
+      prev.resolver?.(confirmed);
+      return {
+        isOpen: false,
+        title: '',
+        message: '',
+        tone: 'default',
+        confirmLabel: '确认',
+        cancelLabel: '取消',
+        requireMatch: '',
+        matchLabel: '',
+        matchPlaceholder: '',
+        inputValue: '',
+        resolver: null,
+      };
+    });
+  }, []);
 
   const updateCurrentStudent = (student) => {
     if (!currentClassId || !student) {
@@ -1080,6 +1158,7 @@ function App() {
               items={currentItems}
               students={currentStudents}
               logs={currentLogs}
+              onRequestConfirm={requestConfirm}
               onAddItem={handleAddShopItem}
               onUpdateItem={handleUpdateShopItem}
               onDeleteItem={handleDeleteShopItem}
@@ -1098,6 +1177,8 @@ function App() {
               themeOptions={THEME_OPTIONS}
               density={density}
               densityOptions={DENSITY_OPTIONS}
+              soundEnabled={soundEnabled}
+              soundVolume={soundVolume}
               currentClass={currentClass}
               students={currentStudents}
               rules={currentRules}
@@ -1121,11 +1202,57 @@ function App() {
               onExportClassData={handleExportClassData}
               onThemeChange={setTheme}
               onDensityChange={setDensity}
+              onSoundEnabledChange={setSoundEnabled}
+              onSoundVolumeChange={setSoundVolume}
+              onRequestConfirm={requestConfirm}
               isMutating={isMutating}
             />
           )}
         </section>
       </main>
+
+      <Modal
+        isOpen={confirmState.isOpen}
+        onClose={() => closeConfirm(false)}
+        title={confirmState.title}
+        contentClassName={`confirm-modal ${confirmState.tone}`.trim()}
+      >
+        <div className="confirm-modal-body">
+          <p>{confirmState.message}</p>
+          {confirmState.requireMatch && (
+            <div className="confirm-match-field">
+              <label>{confirmState.matchLabel || `请输入 ${confirmState.requireMatch} 继续`}</label>
+              <input
+                className="glass-input"
+                placeholder={confirmState.matchPlaceholder || confirmState.requireMatch}
+                value={confirmState.inputValue}
+                onChange={(event) =>
+                  setConfirmState((prev) => ({
+                    ...prev,
+                    inputValue: event.target.value,
+                  }))
+                }
+              />
+            </div>
+          )}
+          <div className="modal-footer">
+            <button className="cancel-btn" onClick={() => closeConfirm(false)} type="button">
+              {confirmState.cancelLabel}
+            </button>
+            <button
+              className={`confirm-btn ${confirmState.tone === 'danger' ? 'danger' : ''}`.trim()}
+              onClick={() => closeConfirm(true)}
+              disabled={
+                Boolean(confirmState.requireMatch)
+                && confirmState.inputValue.trim() !== confirmState.requireMatch.trim()
+              }
+              type="button"
+            >
+              {confirmState.confirmLabel}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         isOpen={isCreateModalOpen}

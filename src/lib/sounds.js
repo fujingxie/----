@@ -1,4 +1,6 @@
 let audioContext = null;
+let soundEnabled = true;
+let soundVolume = 0.8;
 
 const getAudioContext = async () => {
   if (typeof window === 'undefined') {
@@ -58,6 +60,10 @@ const patterns = {
 
 export const playActionSound = async (kind) => {
   try {
+    if (!soundEnabled) {
+      return;
+    }
+
     const ctx = await getAudioContext();
     const pattern = patterns[kind];
 
@@ -71,11 +77,21 @@ export const playActionSound = async (kind) => {
         frequency: note.frequency,
         startAt: startAt + note.offset,
         duration: note.duration,
-        gain: note.gain,
+        gain: note.gain * soundVolume,
         type: note.type,
       });
     });
   } catch {
     // Ignore sound playback failures to avoid interrupting classroom flows.
+  }
+};
+
+export const setSoundPreferences = ({ enabled, volume }) => {
+  if (typeof enabled === 'boolean') {
+    soundEnabled = enabled;
+  }
+
+  if (typeof volume === 'number' && Number.isFinite(volume)) {
+    soundVolume = Math.min(1, Math.max(0, volume));
   }
 };
