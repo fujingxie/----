@@ -149,6 +149,147 @@
   font-weight: 800;
 }
 
+.theme-option-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.theme-option-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  text-align: left;
+}
+
+.theme-option-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 22px rgba(15, 23, 42, 0.06);
+}
+
+.theme-option-card.active {
+  border-color: rgba(99, 102, 241, 0.34);
+  box-shadow: 0 14px 24px rgba(99, 102, 241, 0.1);
+}
+
+.theme-option-card strong {
+  color: var(--text-main);
+  font-size: 14px;
+}
+
+.density-toggle-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.density-chip {
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.density-chip.active {
+  border-color: rgba(99, 102, 241, 0.34);
+  background: rgba(238, 242, 255, 0.96);
+  color: var(--brand-color);
+}
+
+.theme-preview {
+  width: 72px;
+  height: 52px;
+  border-radius: 14px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.theme-preview span {
+  border-radius: 8px;
+}
+
+.theme-preview span:first-child {
+  grid-row: 1 / span 2;
+}
+
+.theme-fresh {
+  background: linear-gradient(135deg, #e0e7ff, #f1f5f9);
+}
+
+.theme-fresh span:first-child {
+  background: #ffffff;
+}
+
+.theme-fresh span:nth-child(2) {
+  background: #6366f1;
+}
+
+.theme-fresh span:nth-child(3) {
+  background: #10b981;
+}
+
+.theme-cream {
+  background: linear-gradient(135deg, #fff0df, #fff7ef);
+}
+
+.theme-cream span:first-child {
+  background: #fffaf3;
+}
+
+.theme-cream span:nth-child(2) {
+  background: #ff7a59;
+}
+
+.theme-cream span:nth-child(3) {
+  background: #ffb36b;
+}
+
+.theme-night {
+  background: linear-gradient(135deg, #14294c, #050b14);
+}
+
+.theme-night span:first-child {
+  background: #0e1c31;
+}
+
+.theme-night span:nth-child(2) {
+  background: #7aa8ff;
+}
+
+.theme-night span:nth-child(3) {
+  background: #4bd2c1;
+}
+
+.theme-forest {
+  background: linear-gradient(135deg, #edf2e3, #f7f3e8);
+}
+
+.theme-forest span:first-child {
+  background: #fdfdf7;
+}
+
+.theme-forest span:nth-child(2) {
+  background: #4f7a5b;
+}
+
+.theme-forest span:nth-child(3) {
+  background: #c79546;
+}
+
 .export-panel {
   padding: 28px;
   display: flex;

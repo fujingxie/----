@@ -45,7 +45,21 @@ const DEFAULT_LEVEL_THRESHOLDS = [10, 20, 30, 50, 70, 100];
 const STORAGE_KEYS = {
   user: 'classPets.user',
   currentClassId: 'classPets.currentClassId',
+  theme: 'classPets.theme',
+  density: 'classPets.density',
 };
+
+const THEME_OPTIONS = [
+  { id: 'fresh', name: '清新课堂' },
+  { id: 'cream', name: '奶油活力' },
+  { id: 'night', name: '夜空专注' },
+  { id: 'forest', name: '森林成长' },
+];
+
+const DENSITY_OPTIONS = [
+  { id: 'cozy', name: '舒展' },
+  { id: 'compact', name: '紧凑' },
+];
 
 const readStoredUser = () => {
   try {
@@ -62,6 +76,22 @@ const readStoredClassId = () => {
     return rawClassId ? Number(rawClassId) : null;
   } catch {
     return null;
+  }
+};
+
+const readStoredTheme = () => {
+  try {
+    return window.localStorage.getItem(STORAGE_KEYS.theme) || 'fresh';
+  } catch {
+    return 'fresh';
+  }
+};
+
+const readStoredDensity = () => {
+  try {
+    return window.localStorage.getItem(STORAGE_KEYS.density) || 'cozy';
+  } catch {
+    return 'cozy';
   }
 };
 
@@ -93,6 +123,8 @@ function App() {
   const [isMutating, setIsMutating] = useState(false);
   const [isRestoringSession, setIsRestoringSession] = useState(() => Boolean(readStoredUser()));
   const [toast, setToast] = useState(null);
+  const [theme, setTheme] = useState(() => readStoredTheme());
+  const [density, setDensity] = useState(() => readStoredDensity());
 
   const currentClass = useMemo(
     () => classes.find((item) => item.id === currentClassId) || null,
@@ -225,6 +257,16 @@ function App() {
       window.clearTimeout(timer);
     };
   }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    window.localStorage.setItem(STORAGE_KEYS.theme, theme);
+  }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-density', density);
+    window.localStorage.setItem(STORAGE_KEYS.density, density);
+  }, [density]);
 
   const updateCurrentStudent = (student) => {
     if (!currentClassId || !student) {
@@ -1052,6 +1094,10 @@ function App() {
           {activeTab === 'settings' && (
             <Settings
               user={user}
+              theme={theme}
+              themeOptions={THEME_OPTIONS}
+              density={density}
+              densityOptions={DENSITY_OPTIONS}
               currentClass={currentClass}
               students={currentStudents}
               rules={currentRules}
@@ -1073,6 +1119,8 @@ function App() {
               onArchiveClassStudents={handleArchiveClassStudents}
               onUndoLog={handleUndoLog}
               onExportClassData={handleExportClassData}
+              onThemeChange={setTheme}
+              onDensityChange={setDensity}
               isMutating={isMutating}
             />
           )}

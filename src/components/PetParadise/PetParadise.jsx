@@ -7,6 +7,7 @@ import './PetParadise.css';
 import { CheckCircle2, UserPlus } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { getAdoptionCount, graduateToNewEgg, isStudentAtMaxLevel, syncStudentCollectionProgress } from '../../lib/petCollection';
+import { playActionSound } from '../../lib/sounds';
 
 const POSITIVE_EFFECT_ICONS = ['✨', '💖', '🌟', '🍗', '🎉'];
 const NEGATIVE_EFFECT_ICONS = ['💩', '😵', '⚠️', '🌧️', '🥀'];
@@ -192,6 +193,7 @@ const PetParadise = ({
         updated.pet_collection = syncStudentCollectionProgress(updated);
 
         triggerPetEffect(student.id, 'positive', BULK_FEED_RULE);
+        playActionSound('positive');
         await onInteractStudent(student, BULK_FEED_RULE, updated);
       }
 
@@ -376,6 +378,7 @@ const PetParadise = ({
           onClose={() => setSelectingStudent(null)}
           student={selectingStudent}
           onConfirm={async (updatedStudent) => {
+            playActionSound('adopt');
             await onActivatePet(updatedStudent);
             setSelectingStudent(null);
             confetti({
@@ -413,6 +416,7 @@ const PetParadise = ({
             updated.pet_collection = syncStudentCollectionProgress(updated);
 
             triggerPetEffect(interactingStudent.id, rule.type, rule);
+            playActionSound(rule.type === 'negative' ? 'negative' : 'positive');
             await onInteractStudent(interactingStudent, rule, updated);
             setInteractingStudent(null);
           }}
@@ -428,6 +432,7 @@ const PetParadise = ({
           canAdoptNewEgg={isStudentAtMaxLevel(collectionStudent, levelThresholds)}
           onAdoptNewEgg={async () => {
             const graduatedStudent = graduateToNewEgg(collectionStudent);
+            playActionSound('adopt');
             await onGraduatePet(collectionStudent, graduatedStudent);
             setCollectionStudent(null);
           }}

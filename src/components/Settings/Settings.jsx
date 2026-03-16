@@ -737,7 +737,16 @@ const LogsPanel = ({ logs, onUndoLog, isMutating }) => {
   );
 };
 
-const AccountPanel = ({ user, onUpdatePassword }) => {
+const AccountPanel = ({
+  user,
+  theme,
+  themeOptions,
+  density,
+  densityOptions,
+  onThemeChange,
+  onDensityChange,
+  onUpdatePassword,
+}) => {
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     nextPassword: '',
@@ -881,6 +890,44 @@ const AccountPanel = ({ user, onUpdatePassword }) => {
               </div>
             </div>
           </section>
+
+          <section className="account-side-card glass-card">
+            <span className="account-side-label">界面主题</span>
+            <div className="theme-option-grid">
+              {themeOptions.map((option) => (
+                <button
+                  key={option.id}
+                  className={`theme-option-card ${theme === option.id ? 'active' : ''}`}
+                  onClick={() => onThemeChange(option.id)}
+                  type="button"
+                >
+                  <div className={`theme-preview theme-${option.id}`}>
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <strong>{option.name}</strong>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="account-side-card glass-card">
+            <span className="account-side-label">界面密度</span>
+            <div className="density-toggle-row">
+              {densityOptions.map((option) => (
+                <button
+                  key={option.id}
+                  className={`density-chip ${density === option.id ? 'active' : ''}`}
+                  onClick={() => onDensityChange(option.id)}
+                  type="button"
+                >
+                  {option.name}
+                </button>
+              ))}
+            </div>
+            <p>{density === 'compact' ? '更适合信息密度高的管理场景。' : '留白更舒展，适合课堂展示。'}</p>
+          </section>
         </aside>
       </div>
     </div>
@@ -1004,6 +1051,10 @@ const ExportPanel = ({ currentClass, students, rules, logs, onExportClassData })
 
 const Settings = ({
   user,
+  theme,
+  themeOptions,
+  density,
+  densityOptions,
   currentClass,
   students,
   rules,
@@ -1023,6 +1074,8 @@ const Settings = ({
   onArchiveClassStudents,
   onUndoLog,
   onExportClassData,
+  onThemeChange,
+  onDensityChange,
   isMutating,
 }) => {
   const [activeMenu, setActiveMenu] = useState('account');
@@ -1083,7 +1136,16 @@ const Settings = ({
 
       <main className="settings-main">
         {activeMenu === 'account' && (
-          <AccountPanel user={user} onUpdatePassword={onUpdatePassword} />
+          <AccountPanel
+            user={user}
+            theme={theme}
+            themeOptions={themeOptions}
+            density={density}
+            densityOptions={densityOptions}
+            onThemeChange={onThemeChange}
+            onDensityChange={onDensityChange}
+            onUpdatePassword={onUpdatePassword}
+          />
         )}
 
         {activeMenu === 'class' && (
