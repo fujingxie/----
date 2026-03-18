@@ -1,4 +1,9 @@
 const DEFAULT_LEVEL_THRESHOLDS = [10, 20, 30, 50, 70, 100];
+const FREE_REGISTER_LEVEL_EXPIRES_IN_DAYS = {
+  temporary: null,
+  vip1: null,
+  vip2: null,
+};
 const ACTIVATION_CODE_SEEDS = [
   { code: 'CLASS-VIP1-2026', level: 'vip1', expiresInDays: 30 },
   { code: 'CLASS-VIP2-2026', level: 'vip2', expiresInDays: 90 },
@@ -170,7 +175,43 @@ const normalizeUser = (row) => ({
   expire_at: row.expire_at,
   role: row.role || 'teacher',
   status: row.status || 'active',
+  register_source: row.register_source || 'activation_code',
+  source_note: row.source_note || null,
 });
+
+const normalizeSystemFlag = (row) => {
+  if (!row) {
+    return {
+      key: 'free_register',
+      enabled: false,
+      mode: 'permanent',
+      end_at: null,
+      value: { default_level: 'temporary' },
+      updated_by_user_id: null,
+      updated_at: null,
+    };
+  }
+
+  let value = {};
+
+  if (typeof row?.value_json === 'string' && row.value_json.trim()) {
+    try {
+      value = JSON.parse(row.value_json) || {};
+    } catch {
+      value = {};
+    }
+  }
+
+  return {
+    key: row.key,
+    enabled: Boolean(row.enabled),
+    mode: row.mode || 'permanent',
+    end_at: row.end_at || null,
+    value,
+    updated_by_user_id: row.updated_by_user_id === null ? null : Number(row.updated_by_user_id),
+    updated_at: row.updated_at || null,
+  };
+};
 
 const normalizeAdminLog = (row) => ({
   id: Number(row.id),
@@ -266,6 +307,16 @@ async function ensureActivationCodes(db) {
   await db.batch(statements);
 }
 
+async function ensureSystemFlags(db) {
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO system_flags (key, enabled, mode, end_at, value_json)
+       VALUES ('free_register', 0, 'permanent', NULL, ?)`,
+    )
+    .bind(JSON.stringify({ default_level: 'temporary' }))
+    .run();
+}
+
 async function ensureClassSettings(db, classId) {
   const existing = await db.prepare('SELECT class_id FROM class_settings WHERE class_id = ?').bind(classId).first();
 
@@ -287,10 +338,10 @@ async function refreshMembershipIfNeeded(db, user) {
   if ((user.level === 'vip1' || user.level === 'vip2') && isExpired(user.expire_at)) {
     const refreshed = await db
       .prepare(
-        `UPDATE users
+      `UPDATE users
          SET level = 'temporary', expire_at = NULL
          WHERE id = ?
-         RETURNING id, username, nickname, level, expire_at, role, status`,
+         RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note`,
       )
       .bind(user.id)
       .first();
@@ -303,7 +354,11 @@ async function refreshMembershipIfNeeded(db, user) {
 
 async function getUserById(db, userId) {
   const rawUser = await db
-    .prepare('SELECT id, username, nickname, level, expire_at, role, status FROM users WHERE id = ?')
+    .prepare(
+      `SELECT id, username, nickname, level, expire_at, role, status, register_source, source_note
+       FROM users
+       WHERE id = ?`,
+    )
     .bind(userId)
     .first();
 
@@ -321,7 +376,9 @@ async function getUserById(db, userId) {
 async function getUserWithPassword(db, username) {
   const rawUser = await db
     .prepare(
-      'SELECT id, username, password_hash, nickname, level, expire_at, role, status FROM users WHERE username = ?',
+      `SELECT id, username, password_hash, nickname, level, expire_at, role, status, register_source, source_note
+       FROM users
+       WHERE username = ?`,
     )
     .bind(username)
     .first();
@@ -354,6 +411,56 @@ async function assertSuperAdmin(db, userId) {
 
 function sanitizeCodeStatus(value) {
   return ['active', 'revoked', 'used'].includes(value) ? value : 'active';
+}
+
+function sanitizeFreeRegisterMode(value) {
+  return value === 'until' ? 'until' : 'permanent';
+}
+
+function sanitizeFreeRegisterLevel(value) {
+  return ['temporary', 'vip1', 'vip2'].includes(value) ? value : 'temporary';
+}
+
+function resolveFreeRegisterState(flag) {
+  const normalized = flag || {
+    key: 'free_register',
+    enabled: false,
+    mode: 'permanent',
+    end_at: null,
+    value: { default_level: 'temporary' },
+    updated_by_user_id: null,
+    updated_at: null,
+  };
+  const mode = sanitizeFreeRegisterMode(normalized.mode);
+  const endAt = normalized.end_at || null;
+  const defaultLevel = sanitizeFreeRegisterLevel(normalized.value?.default_level);
+  const endTimestamp = endAt ? new Date(endAt).getTime() : NaN;
+  const windowOpen = mode !== 'until' || (Number.isFinite(endTimestamp) && endTimestamp > Date.now());
+
+  return {
+    ...normalized,
+    mode,
+    end_at: endAt,
+    value: {
+      ...normalized.value,
+      default_level: defaultLevel,
+    },
+    is_active: Boolean(normalized.enabled) && windowOpen,
+  };
+}
+
+async function getFreeRegisterFlag(db) {
+  await ensureSystemFlags(db);
+
+  const row = await db
+    .prepare(
+      `SELECT key, enabled, mode, end_at, value_json, updated_by_user_id, updated_at
+       FROM system_flags
+       WHERE key = 'free_register'`,
+    )
+    .first();
+
+  return resolveFreeRegisterState(normalizeSystemFlag(row));
 }
 
 function generateActivationCode(prefix = 'CLASS') {
@@ -547,6 +654,7 @@ async function getLatestUndoableLog(db, classId) {
 async function getBootstrapPayload(db, userId, requestedClassId) {
   await ensureSystemRules(db);
   await ensureActivationCodes(db);
+  await ensureSystemFlags(db);
 
   const user = normalizeUser(await getUserById(db, userId));
   const classes = await getClassesByUserId(db, userId);
@@ -580,6 +688,7 @@ async function getBootstrapPayload(db, userId, requestedClassId) {
 
 async function handleLogin(db, request) {
   await ensureActivationCodes(db);
+  await ensureSystemFlags(db);
 
   const body = await readBody(request);
   const mode = body.mode === 'register' ? 'register' : 'login';
@@ -597,13 +706,10 @@ async function handleLogin(db, request) {
   if (mode === 'register') {
     const nickname = String(body.nickname || '').trim();
     const activationCodeValue = String(body.activationCode || '').trim().toUpperCase();
+    const freeRegisterFlag = await getFreeRegisterFlag(db);
 
     if (!nickname) {
       return error('请输入展示昵称');
-    }
-
-    if (!activationCodeValue) {
-      return error('请输入有效的激活码');
     }
 
     const existingUser = await db
@@ -613,6 +719,41 @@ async function handleLogin(db, request) {
 
     if (existingUser) {
       return error('该账号已存在，请更换用户名');
+    }
+
+    if (freeRegisterFlag.is_active) {
+      const passwordHash = await hashPassword(password);
+      const expireAt = computeExpireAt(FREE_REGISTER_LEVEL_EXPIRES_IN_DAYS[freeRegisterFlag.value.default_level]);
+      const createdUser = await db
+        .prepare(
+          `INSERT INTO users (username, password_hash, nickname, level, expire_at, role, register_source, source_note)
+           VALUES (?, ?, ?, ?, ?, 'teacher', 'free_register', ?)
+           RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note`,
+        )
+        .bind(
+          username,
+          passwordHash,
+          nickname,
+          freeRegisterFlag.value.default_level,
+          expireAt,
+          `免激活注册${freeRegisterFlag.mode === 'until' && freeRegisterFlag.end_at ? `，有效期截止 ${freeRegisterFlag.end_at}` : ''}`,
+        )
+        .first();
+
+      await appendAdminLog(db, {
+        userId: createdUser.id,
+        actionType: '账号管理',
+        detail: `账号 ${createdUser.username} 通过免激活注册创建，默认等级 ${createdUser.level}`,
+      });
+
+      return json({
+        user: normalizeUser(createdUser),
+        currentClassId: null,
+      });
+    }
+
+    if (!activationCodeValue) {
+      return error('请输入有效的激活码');
     }
 
     const activationCode = await db
@@ -643,9 +784,9 @@ async function handleLogin(db, request) {
 
     const createdUser = await db
       .prepare(
-        `INSERT INTO users (username, password_hash, nickname, level, expire_at, role)
-         VALUES (?, ?, ?, ?, ?, ?)
-         RETURNING id, username, nickname, level, expire_at, role`,
+        `INSERT INTO users (username, password_hash, nickname, level, expire_at, role, register_source, source_note)
+         VALUES (?, ?, ?, ?, ?, ?, 'activation_code', ?)
+         RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note`,
       )
       .bind(
         username,
@@ -654,6 +795,7 @@ async function handleLogin(db, request) {
         activationCode.level,
         expireAt,
         activationCode.level === 'permanent' ? 'super_admin' : 'teacher',
+        activationCode.code,
       )
       .first();
 
@@ -1642,6 +1784,7 @@ async function handleListAdminUsers(db, request) {
     .prepare(
       `SELECT id, username, nickname, level, expire_at, role, created_at
               , status
+              , register_source, source_note
        FROM users
        ORDER BY created_at DESC, id DESC`,
     )
@@ -1670,6 +1813,83 @@ async function handleListAdminLogs(db, request) {
   });
 }
 
+async function handleGetPublicFreeRegisterFlag(db) {
+  const flag = await getFreeRegisterFlag(db);
+
+  return json({
+    freeRegister: {
+      enabled: flag.enabled,
+      is_active: flag.is_active,
+      mode: flag.mode,
+      end_at: flag.end_at,
+      default_level: flag.value.default_level,
+      updated_at: flag.updated_at,
+    },
+  });
+}
+
+async function handleUpdateFreeRegisterFlag(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+
+  if (!userId) {
+    return error('缺少有效的超管身份');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  const enabled = Boolean(body.enabled);
+  const mode = sanitizeFreeRegisterMode(body.mode);
+  const defaultLevel = sanitizeFreeRegisterLevel(body.default_level);
+  const rawEndAt = body.end_at ? String(body.end_at).trim() : '';
+  const endAt = mode === 'until' ? rawEndAt : null;
+
+  if (mode === 'until') {
+    const timestamp = new Date(endAt).getTime();
+
+    if (!endAt || !Number.isFinite(timestamp) || timestamp <= Date.now()) {
+      return error('请设置一个晚于当前时间的截止时间');
+    }
+  }
+
+  await ensureSystemFlags(db);
+
+  await db
+    .prepare(
+      `UPDATE system_flags
+       SET enabled = ?, mode = ?, end_at = ?, value_json = ?, updated_by_user_id = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE key = 'free_register'`,
+    )
+    .bind(
+      enabled ? 1 : 0,
+      mode,
+      endAt,
+      JSON.stringify({ default_level: defaultLevel }),
+      userId,
+    )
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '系统配置',
+    detail: `更新免激活注册：${enabled ? '开启' : '关闭'}，${mode === 'until' ? '截止时间模式' : '永久生效'}，默认等级 ${defaultLevel}${endAt ? `，截止 ${endAt}` : ''}`,
+  });
+
+  const flag = await getFreeRegisterFlag(db);
+
+  return json({
+    freeRegister: {
+      enabled: flag.enabled,
+      is_active: flag.is_active,
+      mode: flag.mode,
+      end_at: flag.end_at,
+      default_level: flag.value.default_level,
+      updated_at: flag.updated_at,
+      updated_by_user_id: flag.updated_by_user_id,
+    },
+  });
+}
+
 async function handleUpdateAdminUser(db, request, targetUserId) {
   const body = await readBody(request);
   const userId = parseId(body.userId);
@@ -1682,7 +1902,11 @@ async function handleUpdateAdminUser(db, request, targetUserId) {
   await assertSuperAdmin(db, userId);
 
   const targetUser = await db
-    .prepare('SELECT id, username, nickname, level, expire_at, role, status FROM users WHERE id = ?')
+    .prepare(
+      `SELECT id, username, nickname, level, expire_at, role, status, register_source, source_note
+       FROM users
+       WHERE id = ?`,
+    )
     .bind(targetUserId)
     .first();
 
@@ -1740,7 +1964,11 @@ async function handleBatchUpdateAdminUsers(db, request) {
 
   const placeholders = userIds.map(() => '?').join(', ');
   const result = await db
-    .prepare(`SELECT id, username, nickname, level, expire_at, role, status FROM users WHERE id IN (${placeholders})`)
+    .prepare(
+      `SELECT id, username, nickname, level, expire_at, role, status, register_source, source_note
+       FROM users
+       WHERE id IN (${placeholders})`,
+    )
     .bind(...userIds)
     .all();
 
@@ -2141,6 +2369,10 @@ export default {
         return await handleUpdatePassword(db, request);
       }
 
+      if (path === '/api/public/system-flags/free-register' && request.method === 'GET') {
+        return await handleGetPublicFreeRegisterFlag(db);
+      }
+
       if (path === '/api/bootstrap' && request.method === 'GET') {
         const userId = parseId(url.searchParams.get('userId'));
         const classId = parseId(url.searchParams.get('classId'));
@@ -2166,6 +2398,10 @@ export default {
 
       if (path === '/api/admin/logs' && request.method === 'GET') {
         return await handleListAdminLogs(db, request);
+      }
+
+      if (path === '/api/admin/system-flags/free-register' && request.method === 'PUT') {
+        return await handleUpdateFreeRegisterFlag(db, request);
       }
 
       const adminUserMatch = path.match(/^\/api\/admin\/users\/(\d+)$/);

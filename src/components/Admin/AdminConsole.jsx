@@ -37,6 +37,12 @@ const USER_STATUS_OPTIONS = [
   { value: 'disabled', label: '已停用' },
 ];
 
+const USER_REGISTER_SOURCE_OPTIONS = [
+  { value: 'all', label: '全部来源' },
+  { value: 'activation_code', label: '激活码注册' },
+  { value: 'free_register', label: '免激活注册' },
+];
+
 const CODE_LEVEL_OPTIONS = [
   { value: 'vip1', label: '会员一级' },
   { value: 'vip2', label: '会员二级' },
@@ -76,6 +82,9 @@ const getUserRoleLabel = (value) =>
 const getUserStatusLabel = (value) =>
   USER_STATUS_OPTIONS.find((item) => item.value === value)?.label || value;
 
+const getRegisterSourceLabel = (value) =>
+  USER_REGISTER_SOURCE_OPTIONS.find((item) => item.value === value)?.label || value;
+
 const getCodeLevelLabel = (value) =>
   CODE_LEVEL_OPTIONS.find((item) => item.value === value)?.label || value;
 
@@ -113,6 +122,9 @@ const formatAdminLogDetail = (detail) => {
     .replace(/vip1/g, '会员一级')
     .replace(/vip2/g, '会员二级')
     .replace(/permanent/g, '永久会员')
+    .replace(/activation_code/g, '激活码注册')
+    .replace(/free_register/g, '免激活注册')
+    .replace(/until/g, '截止时间')
     .replace(/teacher/g, '教师账号')
     .replace(/super_admin/g, '超管账号')
     .replace(/active/g, '启用中')
@@ -125,8 +137,10 @@ function AdminConsole({
   users,
   activationCodes,
   adminLogs,
+  freeRegisterConfig,
   isMutating,
   onRefresh,
+  onUpdateFreeRegisterConfig,
   onRequestConfirm,
   onUpdateUser,
   onBatchUpdateUsers,
@@ -157,9 +171,16 @@ function AdminConsole({
   const [userStatusFilter, setUserStatusFilter] = useState('all');
   const [userLevelFilter, setUserLevelFilter] = useState('all');
   const [userRoleFilter, setUserRoleFilter] = useState('all');
+  const [userSourceFilter, setUserSourceFilter] = useState('all');
   const [userPage, setUserPage] = useState(1);
   const [codePage, setCodePage] = useState(1);
   const [logPage, setLogPage] = useState(1);
+  const [freeRegisterDraft, setFreeRegisterDraft] = useState({
+    enabled: Boolean(freeRegisterConfig?.enabled),
+    mode: freeRegisterConfig?.mode || 'permanent',
+    end_at: freeRegisterConfig?.end_at ? String(freeRegisterConfig.end_at).slice(0, 16) : '',
+    default_level: freeRegisterConfig?.default_level || 'temporary',
+  });
 
   const sortBy = (list, { key, direction }) => {
     const factor = direction === 'asc' ? 1 : -1;
@@ -190,7 +211,7 @@ function AdminConsole({
     const baseList = !keyword
       ? users
       : users.filter((user) =>
-          [user.username, user.nickname, user.level, user.role, user.status]
+          [user.username, user.nickname, user.level, user.role, user.status, user.register_source]
             .filter(Boolean)
             .some((field) => String(field).toLowerCase().includes(keyword)),
         );
@@ -208,11 +229,24 @@ function AdminConsole({
         return false;
       }
 
+      if (userSourceFilter !== 'all' && (user.register_source || 'activation_code') !== userSourceFilter) {
+        return false;
+      }
+
       return true;
     });
 
     return sortBy(filterList, userSort);
-  }, [query, users, userSort, userStatusFilter, userLevelFilter, userRoleFilter]);
+  }, [query, users, userSort, userStatusFilter, userLevelFilter, userRoleFilter, userSourceFilter]);
+
+  React.useEffect(() => {
+    setFreeRegisterDraft({
+      enabled: Boolean(freeRegisterConfig?.enabled),
+      mode: freeRegisterConfig?.mode || 'permanent',
+      end_at: freeRegisterConfig?.end_at ? String(freeRegisterConfig.end_at).slice(0, 16) : '',
+      default_level: freeRegisterConfig?.default_level || 'temporary',
+    });
+  }, [freeRegisterConfig]);
 
   const filteredLogs = useMemo(() => {
     const keyword = logQuery.trim().toLowerCase();
@@ -367,13 +401,14 @@ function AdminConsole({
   };
 
   const handleExportUsersCsv = () => {
-    const header = ['username', 'nickname', 'level', 'role', 'status', 'expire_at'];
+    const header = ['username', 'nickname', 'level', 'role', 'status', 'register_source', 'expire_at'];
     const rows = filteredUsers.map((item) => [
       item.username,
       item.nickname,
       item.level,
       item.role,
       item.status || 'active',
+      item.register_source || 'activation_code',
       item.expire_at || '',
     ]);
     const csv = [header, ...rows]
@@ -550,6 +585,11 @@ function AdminConsole({
       value: users.filter((item) => item.status === 'disabled').length,
       tone: 'rose',
     },
+    {
+      label: '免激活注册',
+      value: users.filter((item) => item.register_source === 'free_register').length,
+      tone: 'amber',
+    },
   ];
 
   const codeOverview = [
@@ -649,6 +689,121 @@ function AdminConsole({
         {renderOverviewCard('激活码分布', '先看库存和状态，再决定是否补码、作废或导出。', codeOverview)}
       </div>
 
+      <section className="admin-panel glass-card">
+        <div className="admin-panel-head">
+          <div>
+            <h3>免激活注册</h3>
+            <p>开启后，登录页的激活新账号模式将直接注册，不再要求输入激活码。</p>
+          </div>
+        </div>
+        <div className="admin-code-create-grid">
+          <section className="admin-code-create-card">
+            <div className="admin-code-create-head">
+              <strong>策略配置</strong>
+              <p>支持永久生效或截止到指定时间，默认只开放到教师账号。</p>
+            </div>
+            <div className="admin-code-creator batch">
+              <label className="admin-field">
+                <span>开关状态</span>
+                <select
+                  className="glass-input compact"
+                  value={freeRegisterDraft.enabled ? 'enabled' : 'disabled'}
+                  onChange={(event) =>
+                    setFreeRegisterDraft((prev) => ({ ...prev, enabled: event.target.value === 'enabled' }))
+                  }
+                >
+                  <option value="disabled">关闭</option>
+                  <option value="enabled">开启</option>
+                </select>
+              </label>
+              <label className="admin-field">
+                <span>生效方式</span>
+                <select
+                  className="glass-input compact"
+                  value={freeRegisterDraft.mode}
+                  onChange={(event) =>
+                    setFreeRegisterDraft((prev) => ({ ...prev, mode: event.target.value }))
+                  }
+                >
+                  <option value="permanent">永久生效</option>
+                  <option value="until">截止到指定时间</option>
+                </select>
+              </label>
+              <label className="admin-field">
+                <span>默认等级</span>
+                <select
+                  className="glass-input compact"
+                  value={freeRegisterDraft.default_level}
+                  onChange={(event) =>
+                    setFreeRegisterDraft((prev) => ({ ...prev, default_level: event.target.value }))
+                  }
+                >
+                  <option value="temporary">临时体验</option>
+                  <option value="vip1">会员一级</option>
+                  <option value="vip2">会员二级</option>
+                </select>
+              </label>
+              {freeRegisterDraft.mode === 'until' ? (
+                <label className="admin-field">
+                  <span>截止时间</span>
+                  <input
+                    className="glass-input compact"
+                    type="datetime-local"
+                    value={freeRegisterDraft.end_at}
+                    onChange={(event) =>
+                      setFreeRegisterDraft((prev) => ({ ...prev, end_at: event.target.value }))
+                    }
+                  />
+                </label>
+              ) : null}
+              <button
+                className="confirm-btn"
+                disabled={isMutating}
+                onClick={() =>
+                  onUpdateFreeRegisterConfig?.({
+                    enabled: freeRegisterDraft.enabled,
+                    mode: freeRegisterDraft.mode,
+                    end_at:
+                      freeRegisterDraft.mode === 'until' && freeRegisterDraft.end_at
+                        ? new Date(freeRegisterDraft.end_at).toISOString()
+                        : null,
+                    default_level: freeRegisterDraft.default_level,
+                  })
+                }
+                type="button"
+              >
+                保存策略
+              </button>
+            </div>
+          </section>
+
+          <section className="admin-code-create-card">
+            <div className="admin-code-create-head">
+              <strong>当前生效状态</strong>
+              <p>这里显示的是前台实际看到的免激活注册结果。</p>
+            </div>
+            <div className="admin-code-creator batch">
+              <div className="admin-info-item">
+                <span>当前状态</span>
+                <strong>{freeRegisterConfig?.is_active ? '生效中' : freeRegisterConfig?.enabled ? '已开启但未生效' : '已关闭'}</strong>
+              </div>
+              <div className="admin-info-item">
+                <span>默认等级</span>
+                <strong>{getUserLevelLabel(freeRegisterConfig?.default_level || 'temporary')}</strong>
+              </div>
+              <div className="admin-info-item">
+                <span>生效方式</span>
+                <strong>{freeRegisterConfig?.mode === 'until' ? '截止时间' : '永久生效'}</strong>
+              </div>
+              <div className="admin-info-item">
+                <span>截止时间</span>
+                <strong>{freeRegisterConfig?.end_at ? formatDateTime(freeRegisterConfig.end_at) : '暂无'}</strong>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
       <div className="admin-layout tables">
         <section className="admin-panel glass-card">
           <div className="admin-panel-head">
@@ -708,6 +863,20 @@ function AdminConsole({
                 >
                   <option value="all">全部角色</option>
                   {USER_ROLE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="admin-filter-field">
+                <span>来源筛选</span>
+                <select
+                  className="glass-input compact"
+                  value={userSourceFilter}
+                  onChange={(event) => setUserSourceFilter(event.target.value)}
+                >
+                  {USER_REGISTER_SOURCE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -814,6 +983,7 @@ function AdminConsole({
                   <th>{renderSortButton('昵称', userSort, setUserSort, 'nickname')}</th>
                   <th>{renderSortButton('等级', userSort, setUserSort, 'level')}</th>
                   <th>{renderSortButton('角色', userSort, setUserSort, 'role')}</th>
+                  <th>{renderSortButton('来源', userSort, setUserSort, 'register_source')}</th>
                   <th>{renderSortButton('状态', userSort, setUserSort, 'status')}</th>
                   <th>{renderSortButton('到期', userSort, setUserSort, 'expire_at')}</th>
                 </tr>
@@ -821,7 +991,7 @@ function AdminConsole({
               <tbody>
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="admin-table-empty">没有找到匹配的账号。</td>
+                    <td colSpan="8" className="admin-table-empty">没有找到匹配的账号。</td>
                   </tr>
                 ) : (
                   pagedUsers.map((item) => (
@@ -839,6 +1009,7 @@ function AdminConsole({
                       <td title={item.nickname}><span className="admin-cell admin-cell-nowrap">{item.nickname}</span></td>
                       <td title={getUserLevelLabel(item.level)}><span className="admin-cell admin-cell-nowrap">{getUserLevelLabel(item.level)}</span></td>
                       <td title={getUserRoleLabel(item.role)}><span className="admin-cell admin-cell-nowrap">{getUserRoleLabel(item.role)}</span></td>
+                      <td title={getRegisterSourceLabel(item.register_source || 'activation_code')}><span className="admin-cell admin-cell-nowrap">{getRegisterSourceLabel(item.register_source || 'activation_code')}</span></td>
                       <td title={getUserStatusLabel(item.status || 'active')}><span className="admin-cell admin-cell-nowrap">{getUserStatusLabel(item.status || 'active')}</span></td>
                       <td title={item.expire_at || '长期有效'}><span className="admin-cell admin-cell-nowrap">{item.expire_at ? formatDateTime(item.expire_at) : '长期有效'}</span></td>
                     </tr>
@@ -1189,7 +1360,7 @@ function AdminConsole({
             />
           </label>
           <div className="density-toggle-row">
-            {['all', '账号管理', '激活码管理'].map((item) => (
+            {['all', '账号管理', '激活码管理', '系统配置'].map((item) => (
               <button
                 key={item}
                 className={`density-chip ${logFilter === item ? 'active' : ''}`}
@@ -1283,6 +1454,14 @@ function AdminConsole({
                 <div className="admin-info-item">
                   <span>有效期</span>
                   <strong>{selectedUser.expire_at || '长期有效'}</strong>
+                </div>
+                <div className="admin-info-item">
+                  <span>注册来源</span>
+                  <strong>{getRegisterSourceLabel(selectedUser.register_source || 'activation_code')}</strong>
+                </div>
+                <div className="admin-info-item">
+                  <span>来源备注</span>
+                  <strong>{selectedUser.source_note || '暂无'}</strong>
                 </div>
               </div>
 

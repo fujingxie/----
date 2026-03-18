@@ -27,6 +27,27 @@ const EMPTY_RULE = {
   type: 'positive',
 };
 
+const formatAccountExpireAt = (value) => {
+  if (!value) {
+    return '永久有效';
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString('zh-CN', {
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 const ClassSettingsPanel = ({
   currentClass,
   students,
@@ -848,7 +869,7 @@ const AccountPanel = ({
             </div>
             <div className="info-item">
               <label>有效期至</label>
-              <span>{user.expire_at || '永久有效'}</span>
+              <span>{formatAccountExpireAt(user.expire_at)}</span>
             </div>
           </div>
           <div className="password-reset">
@@ -888,7 +909,7 @@ const AccountPanel = ({
           <section className="account-side-card glass-card membership-card">
             <span className="account-side-label">当前状态</span>
             <strong>{membershipLabel}</strong>
-            <p>{user.expire_at ? `账号有效期至 ${user.expire_at}` : '当前账号长期有效，可持续管理多个班级和高级功能。'}</p>
+            <p>{user.expire_at ? `账号有效期至 ${formatAccountExpireAt(user.expire_at)}` : '当前账号长期有效，可持续管理多个班级和高级功能。'}</p>
           </section>
 
           <section className="account-side-card glass-card">

@@ -35,6 +35,7 @@ import {
   fetchAdminLogs,
   fetchAdminUsers,
   fetchBootstrap,
+  fetchFreeRegisterConfig,
   importStudents,
   loginUser,
   resetClassProgress,
@@ -43,6 +44,7 @@ import {
   revokeAdminCodesBatch,
   undoLog,
   updatePassword,
+  updateFreeRegisterConfig,
   updateAdminCodesBatch,
   updateAdminCode,
   updateAdminUsersBatch,
@@ -173,6 +175,14 @@ function App() {
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminCodes, setAdminCodes] = useState([]);
   const [adminLogs, setAdminLogs] = useState([]);
+  const [freeRegisterConfig, setFreeRegisterConfig] = useState({
+    enabled: false,
+    is_active: false,
+    mode: 'permanent',
+    end_at: null,
+    default_level: 'temporary',
+    updated_at: null,
+  });
   const [confirmState, setConfirmState] = useState({
     isOpen: false,
     title: '',
@@ -301,6 +311,33 @@ function App() {
 
     restoreSession();
   }, [loadDashboard, persistSession]);
+
+  useEffect(() => {
+    const loadFreeRegisterConfig = async () => {
+      try {
+        const response = await fetchFreeRegisterConfig();
+        setFreeRegisterConfig(response.freeRegister || {
+          enabled: false,
+          is_active: false,
+          mode: 'permanent',
+          end_at: null,
+          default_level: 'temporary',
+          updated_at: null,
+        });
+      } catch {
+        setFreeRegisterConfig({
+          enabled: false,
+          is_active: false,
+          mode: 'permanent',
+          end_at: null,
+          default_level: 'temporary',
+          updated_at: null,
+        });
+      }
+    };
+
+    loadFreeRegisterConfig();
+  }, []);
 
   useEffect(() => {
     let timer = null;
@@ -1072,14 +1109,16 @@ function App() {
     setAppErrorMessage('');
 
     try {
-      const [usersResponse, codesResponse, logsResponse] = await Promise.all([
+      const [usersResponse, codesResponse, logsResponse, freeRegisterResponse] = await Promise.all([
         fetchAdminUsers({ userId: user.id }),
         fetchAdminCodes({ userId: user.id }),
         fetchAdminLogs({ userId: user.id }),
+        fetchFreeRegisterConfig(),
       ]);
       setAdminUsers(usersResponse.users || []);
       setAdminCodes(codesResponse.activationCodes || []);
       setAdminLogs(logsResponse.logs || []);
+      setFreeRegisterConfig((prev) => freeRegisterResponse.freeRegister || prev);
     } catch (error) {
       setAppErrorMessage(error.message);
       throw error;
@@ -1087,6 +1126,26 @@ function App() {
       setIsMutating(false);
     }
   }, [user]);
+
+  const handleAdminUpdateFreeRegisterConfig = async (payload) => {
+    if (!user || !isSuperAdmin) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+    try {
+      const response = await updateFreeRegisterConfig({ userId: user.id, ...payload });
+      setFreeRegisterConfig(response.freeRegister || freeRegisterConfig);
+      notify('免激活注册配置已更新');
+      await refreshAdminConsole();
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
 
   useEffect(() => {
     if (activeTab === 'admin' && isSuperAdmin) {
@@ -1288,6 +1347,7 @@ function App() {
         onLogin={handleLogin}
         isSubmitting={isAuthenticating}
         errorMessage={authErrorMessage}
+        freeRegisterConfig={freeRegisterConfig}
       />
     );
   }
@@ -1453,8 +1513,10 @@ function App() {
               users={adminUsers}
               activationCodes={adminCodes}
               adminLogs={adminLogs}
+              freeRegisterConfig={freeRegisterConfig}
               isMutating={isMutating}
               onRefresh={refreshAdminConsole}
+              onUpdateFreeRegisterConfig={handleAdminUpdateFreeRegisterConfig}
               onRequestConfirm={requestConfirm}
               onUpdateUser={handleAdminUpdateUser}
               onBatchUpdateUsers={handleAdminBatchUpdateUsers}

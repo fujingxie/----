@@ -6,6 +6,10 @@ CREATE TABLE users (
     nickname TEXT NOT NULL,
     level TEXT DEFAULT 'temporary', -- temporary, permanent, vip1, vip2
     expire_at DATETIME,
+    role TEXT NOT NULL DEFAULT 'teacher',
+    status TEXT NOT NULL DEFAULT 'active',
+    register_source TEXT NOT NULL DEFAULT 'activation_code',
+    source_note TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -87,8 +91,23 @@ CREATE TABLE activation_codes (
     expires_in_days INTEGER,
     used_by_user_id INTEGER,
     used_at DATETIME,
+    max_uses INTEGER NOT NULL DEFAULT 1,
+    used_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_by_user_id INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (used_by_user_id) REFERENCES users(id)
+);
+
+CREATE TABLE system_flags (
+    key TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    mode TEXT NOT NULL DEFAULT 'permanent',
+    end_at DATETIME,
+    value_json TEXT NOT NULL DEFAULT '{}',
+    updated_by_user_id INTEGER,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (updated_by_user_id) REFERENCES users(id)
 );
 
 CREATE INDEX idx_classes_user_id ON classes(user_id);
@@ -98,3 +117,8 @@ CREATE INDEX idx_rules_class_id ON rules(class_id);
 CREATE INDEX idx_logs_class_id_created_at ON logs(class_id, created_at DESC);
 CREATE INDEX idx_activation_codes_code ON activation_codes(code);
 CREATE INDEX idx_activation_codes_used_by_user_id ON activation_codes(used_by_user_id);
+CREATE INDEX idx_activation_codes_status ON activation_codes(status);
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_status ON users(status);
+CREATE INDEX idx_users_register_source ON users(register_source);
+CREATE INDEX idx_system_flags_updated_at ON system_flags(updated_at DESC);

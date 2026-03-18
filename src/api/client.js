@@ -25,6 +25,9 @@ export const loginUser = (payload) =>
     body: JSON.stringify(payload),
   });
 
+export const fetchFreeRegisterConfig = () =>
+  request('/public/system-flags/free-register');
+
 export const updatePassword = ({ userId, currentPassword, nextPassword }) =>
   request('/auth/password', {
     method: 'PUT',
@@ -148,6 +151,12 @@ export const fetchAdminUsers = ({ userId }) =>
 
 export const fetchAdminLogs = ({ userId }) =>
   request(`/admin/logs?${new URLSearchParams({ userId: String(userId) }).toString()}`);
+
+export const updateFreeRegisterConfig = ({ userId, enabled, mode, end_at, default_level }) =>
+  request('/admin/system-flags/free-register', {
+    method: 'PUT',
+    body: JSON.stringify({ userId, enabled, mode, end_at, default_level }),
+  });
 
 export const updateAdminUser = ({ userId, targetUserId, updates }) =>
   request(`/admin/users/${targetUserId}`, {
