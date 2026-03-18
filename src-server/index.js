@@ -4,6 +4,12 @@ const FREE_REGISTER_LEVEL_EXPIRES_IN_DAYS = {
   vip1: null,
   vip2: null,
 };
+const REGISTER_RATE_LIMIT = {
+  shortWindowMinutes: 10,
+  shortLimit: 3,
+  longWindowHours: 24,
+  longLimit: 10,
+};
 const ACTIVATION_CODE_SEEDS = [
   { code: 'CLASS-VIP1-2026', level: 'vip1', expiresInDays: 30 },
   { code: 'CLASS-VIP2-2026', level: 'vip2', expiresInDays: 90 },
@@ -33,7 +39,17 @@ const json = (data, status = 200) =>
     },
   });
 
-const error = (message, status = 400) => json({ error: message }, status);
+const errorWithHeaders = (message, status = 400, extraHeaders = {}) =>
+  new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+      ...extraHeaders,
+    },
+  });
+
+const error = (message, status = 400) => errorWithHeaders(message, status);
 
 const textEncoder = new TextEncoder();
 
@@ -177,6 +193,9 @@ const normalizeUser = (row) => ({
   status: row.status || 'active',
   register_source: row.register_source || 'activation_code',
   source_note: row.source_note || null,
+  register_ip: row.register_ip || null,
+  register_user_agent: row.register_user_agent || null,
+  same_ip_count: Number(row.same_ip_count || 0),
 });
 
 const normalizeSystemFlag = (row) => {
@@ -338,10 +357,10 @@ async function refreshMembershipIfNeeded(db, user) {
   if ((user.level === 'vip1' || user.level === 'vip2') && isExpired(user.expire_at)) {
     const refreshed = await db
       .prepare(
-      `UPDATE users
+        `UPDATE users
          SET level = 'temporary', expire_at = NULL
          WHERE id = ?
-         RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note`,
+         RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_ip, register_user_agent`,
       )
       .bind(user.id)
       .first();
@@ -355,7 +374,7 @@ async function refreshMembershipIfNeeded(db, user) {
 async function getUserById(db, userId) {
   const rawUser = await db
     .prepare(
-      `SELECT id, username, nickname, level, expire_at, role, status, register_source, source_note
+      `SELECT id, username, nickname, level, expire_at, role, status, register_source, source_note, register_ip, register_user_agent
        FROM users
        WHERE id = ?`,
     )
@@ -376,7 +395,7 @@ async function getUserById(db, userId) {
 async function getUserWithPassword(db, username) {
   const rawUser = await db
     .prepare(
-      `SELECT id, username, password_hash, nickname, level, expire_at, role, status, register_source, source_note
+      `SELECT id, username, password_hash, nickname, level, expire_at, role, status, register_source, source_note, register_ip, register_user_agent
        FROM users
        WHERE username = ?`,
     )
@@ -468,6 +487,136 @@ function generateActivationCode(prefix = 'CLASS') {
   const seed = Math.random().toString(36).slice(2, 8).toUpperCase();
   const stamp = Date.now().toString(36).slice(-4).toUpperCase();
   return `${cleanedPrefix}-${seed}-${stamp}`;
+}
+
+function getClientIp(request) {
+  const cfIp = request.headers.get('CF-Connecting-IP')?.trim();
+  if (cfIp) {
+    return cfIp;
+  }
+
+  const xff = request.headers.get('X-Forwarded-For') || '';
+  const firstIp = xff.split(',')[0]?.trim();
+  if (firstIp) {
+    return firstIp;
+  }
+
+  return 'unknown';
+}
+
+function getUserAgent(request) {
+  return request.headers.get('User-Agent') || '';
+}
+
+function parseDbTimestamp(value) {
+  if (!value) {
+    return NaN;
+  }
+
+  const normalized = String(value).includes('T')
+    ? String(value)
+    : String(value).replace(' ', 'T');
+  const timestamp = new Date(normalized.endsWith('Z') ? normalized : `${normalized}Z`);
+  return timestamp.getTime();
+}
+
+function formatRetryHint(retryAfterSeconds) {
+  if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
+    return '稍后再试';
+  }
+
+  if (retryAfterSeconds < 60) {
+    return `${retryAfterSeconds} 秒后再试`;
+  }
+
+  return `${Math.ceil(retryAfterSeconds / 60)} 分钟后再试`;
+}
+
+async function getRegistrationAttemptsCount(db, ip, intervalSql) {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM registration_attempts
+       WHERE ip = ?
+         AND result IN ('failed', 'success')
+         AND created_at >= datetime('now', ?)`,
+    )
+    .bind(ip, intervalSql)
+    .first();
+
+  return Number(row?.count || 0);
+}
+
+async function getRegisterRetryAfterSeconds(db, ip, limit, windowSeconds) {
+  const result = await db
+    .prepare(
+      `SELECT created_at
+       FROM registration_attempts
+       WHERE ip = ?
+         AND result IN ('failed', 'success')
+       ORDER BY created_at DESC, id DESC
+       LIMIT ?`,
+    )
+    .bind(ip, limit)
+    .all();
+
+  const rows = result.results || [];
+  const pivot = rows[rows.length - 1];
+  if (!pivot?.created_at) {
+    return windowSeconds;
+  }
+
+  const pivotTimestamp = parseDbTimestamp(pivot.created_at);
+  if (!Number.isFinite(pivotTimestamp)) {
+    return windowSeconds;
+  }
+
+  const retryAt = pivotTimestamp + windowSeconds * 1000;
+  return Math.max(1, Math.ceil((retryAt - Date.now()) / 1000));
+}
+
+async function checkRegisterRateLimit(db, ip) {
+  const shortCount = await getRegistrationAttemptsCount(db, ip, `-${REGISTER_RATE_LIMIT.shortWindowMinutes} minutes`);
+  if (shortCount >= REGISTER_RATE_LIMIT.shortLimit) {
+    const retryAfterSeconds = await getRegisterRetryAfterSeconds(
+      db,
+      ip,
+      REGISTER_RATE_LIMIT.shortLimit,
+      REGISTER_RATE_LIMIT.shortWindowMinutes * 60,
+    );
+    return {
+      blocked: true,
+      reason: `short_window_${REGISTER_RATE_LIMIT.shortWindowMinutes}m`,
+      retryAfterSeconds,
+    };
+  }
+
+  const longCount = await getRegistrationAttemptsCount(db, ip, `-${REGISTER_RATE_LIMIT.longWindowHours} hours`);
+  if (longCount >= REGISTER_RATE_LIMIT.longLimit) {
+    const retryAfterSeconds = await getRegisterRetryAfterSeconds(
+      db,
+      ip,
+      REGISTER_RATE_LIMIT.longLimit,
+      REGISTER_RATE_LIMIT.longWindowHours * 60 * 60,
+    );
+    return {
+      blocked: true,
+      reason: `long_window_${REGISTER_RATE_LIMIT.longWindowHours}h`,
+      retryAfterSeconds,
+    };
+  }
+
+  return { blocked: false, reason: '', retryAfterSeconds: 0 };
+}
+
+async function appendRegistrationAttempt(db, { ip, username, result, reason = '', userAgent = '' }) {
+  await db
+    .prepare(
+      `INSERT INTO registration_attempts (ip, username, mode, result, reason, user_agent)
+       VALUES (?, ?, 'register', ?, ?, ?)`,
+    )
+    .bind(ip, username || null, result, reason || null, userAgent || null)
+    .run();
 }
 
 async function getClassesByUserId(db, userId) {
@@ -707,9 +856,40 @@ async function handleLogin(db, request) {
     const nickname = String(body.nickname || '').trim();
     const activationCodeValue = String(body.activationCode || '').trim().toUpperCase();
     const freeRegisterFlag = await getFreeRegisterFlag(db);
+    const registerIp = getClientIp(request);
+    const userAgent = getUserAgent(request);
+    const denyRegister = async (message, status = 400, reason = 'validation_failed', retryAfterSeconds = 0) => {
+      if (status !== 429) {
+        await appendRegistrationAttempt(db, {
+          ip: registerIp,
+          username,
+          result: 'failed',
+          reason,
+          userAgent,
+        });
+      }
+
+      if (status === 429 && retryAfterSeconds > 0) {
+        return errorWithHeaders(message, status, {
+          'Retry-After': String(retryAfterSeconds),
+        });
+      }
+
+      return error(message, status);
+    };
+
+    const limitState = await checkRegisterRateLimit(db, registerIp);
+    if (limitState.blocked) {
+      return await denyRegister(
+        `注册过于频繁，请${formatRetryHint(limitState.retryAfterSeconds)}`,
+        429,
+        limitState.reason,
+        limitState.retryAfterSeconds,
+      );
+    }
 
     if (!nickname) {
-      return error('请输入展示昵称');
+      return await denyRegister('请输入展示昵称', 400, 'empty_nickname');
     }
 
     const existingUser = await db
@@ -718,7 +898,7 @@ async function handleLogin(db, request) {
       .first();
 
     if (existingUser) {
-      return error('该账号已存在，请更换用户名');
+      return await denyRegister('该账号已存在，请更换用户名', 400, 'duplicate_username');
     }
 
     if (freeRegisterFlag.is_active) {
@@ -726,9 +906,9 @@ async function handleLogin(db, request) {
       const expireAt = computeExpireAt(FREE_REGISTER_LEVEL_EXPIRES_IN_DAYS[freeRegisterFlag.value.default_level]);
       const createdUser = await db
         .prepare(
-          `INSERT INTO users (username, password_hash, nickname, level, expire_at, role, register_source, source_note)
-           VALUES (?, ?, ?, ?, ?, 'teacher', 'free_register', ?)
-           RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note`,
+          `INSERT INTO users (username, password_hash, nickname, level, expire_at, role, register_source, source_note, register_ip, register_user_agent)
+           VALUES (?, ?, ?, ?, ?, 'teacher', 'free_register', ?, ?, ?)
+           RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_ip, register_user_agent`,
         )
         .bind(
           username,
@@ -737,13 +917,23 @@ async function handleLogin(db, request) {
           freeRegisterFlag.value.default_level,
           expireAt,
           `免激活注册${freeRegisterFlag.mode === 'until' && freeRegisterFlag.end_at ? `，有效期截止 ${freeRegisterFlag.end_at}` : ''}`,
+          registerIp,
+          userAgent,
         )
         .first();
+
+      await appendRegistrationAttempt(db, {
+        ip: registerIp,
+        username,
+        result: 'success',
+        reason: 'free_register',
+        userAgent,
+      });
 
       await appendAdminLog(db, {
         userId: createdUser.id,
         actionType: '账号管理',
-        detail: `账号 ${createdUser.username} 通过免激活注册创建，默认等级 ${createdUser.level}`,
+        detail: `账号 ${createdUser.username} 通过免激活注册创建，默认等级 ${createdUser.level}，注册IP ${registerIp}`,
       });
 
       return json({
@@ -753,7 +943,7 @@ async function handleLogin(db, request) {
     }
 
     if (!activationCodeValue) {
-      return error('请输入有效的激活码');
+      return await denyRegister('请输入有效的激活码', 400, 'empty_activation_code');
     }
 
     const activationCode = await db
@@ -766,15 +956,15 @@ async function handleLogin(db, request) {
       .first();
 
     if (!activationCode) {
-      return error('激活码不存在，请联系管理员确认');
+      return await denyRegister('激活码不存在，请联系管理员确认', 400, 'activation_code_not_found');
     }
 
     if (activationCode.status === 'revoked') {
-      return error('该激活码已作废');
+      return await denyRegister('该激活码已作废', 400, 'activation_code_revoked');
     }
 
     if (Number(activationCode.used_count || 0) >= Number(activationCode.max_uses || 1)) {
-      return error('该激活码已被使用完毕');
+      return await denyRegister('该激活码已被使用完毕', 400, 'activation_code_exhausted');
     }
 
     const passwordHash = await hashPassword(password);
@@ -784,9 +974,9 @@ async function handleLogin(db, request) {
 
     const createdUser = await db
       .prepare(
-        `INSERT INTO users (username, password_hash, nickname, level, expire_at, role, register_source, source_note)
-         VALUES (?, ?, ?, ?, ?, ?, 'activation_code', ?)
-         RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note`,
+        `INSERT INTO users (username, password_hash, nickname, level, expire_at, role, register_source, source_note, register_ip, register_user_agent)
+         VALUES (?, ?, ?, ?, ?, ?, 'activation_code', ?, ?, ?)
+         RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_ip, register_user_agent`,
       )
       .bind(
         username,
@@ -796,8 +986,18 @@ async function handleLogin(db, request) {
         expireAt,
         activationCode.level === 'permanent' ? 'super_admin' : 'teacher',
         activationCode.code,
+        registerIp,
+        userAgent,
       )
       .first();
+
+    await appendRegistrationAttempt(db, {
+      ip: registerIp,
+      username,
+      result: 'success',
+      reason: 'activation_code',
+      userAgent,
+    });
 
     await db
       .prepare(
@@ -1782,11 +1982,18 @@ async function handleListAdminUsers(db, request) {
 
   const result = await db
     .prepare(
-      `SELECT id, username, nickname, level, expire_at, role, created_at
-              , status
-              , register_source, source_note
-       FROM users
-       ORDER BY created_at DESC, id DESC`,
+      `SELECT u.id, u.username, u.nickname, u.level, u.expire_at, u.role, u.created_at
+              , u.status
+              , u.register_source, u.source_note, u.register_ip, u.register_user_agent
+              , (
+                SELECT COUNT(*)
+                FROM users same_ip_users
+                WHERE same_ip_users.register_ip = u.register_ip
+                  AND u.register_ip IS NOT NULL
+                  AND TRIM(u.register_ip) != ''
+              ) AS same_ip_count
+       FROM users u
+       ORDER BY u.created_at DESC, u.id DESC`,
     )
     .all();
 

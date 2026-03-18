@@ -211,7 +211,7 @@ function AdminConsole({
     const baseList = !keyword
       ? users
       : users.filter((user) =>
-          [user.username, user.nickname, user.level, user.role, user.status, user.register_source]
+          [user.username, user.nickname, user.level, user.role, user.status, user.register_source, user.register_ip, user.same_ip_count]
             .filter(Boolean)
             .some((field) => String(field).toLowerCase().includes(keyword)),
         );
@@ -401,7 +401,7 @@ function AdminConsole({
   };
 
   const handleExportUsersCsv = () => {
-    const header = ['username', 'nickname', 'level', 'role', 'status', 'register_source', 'expire_at'];
+    const header = ['username', 'nickname', 'level', 'role', 'status', 'register_source', 'register_ip', 'same_ip_count', 'expire_at'];
     const rows = filteredUsers.map((item) => [
       item.username,
       item.nickname,
@@ -409,6 +409,8 @@ function AdminConsole({
       item.role,
       item.status || 'active',
       item.register_source || 'activation_code',
+      item.register_ip || '',
+      item.same_ip_count || 0,
       item.expire_at || '',
     ]);
     const csv = [header, ...rows]
@@ -984,6 +986,8 @@ function AdminConsole({
                   <th>{renderSortButton('等级', userSort, setUserSort, 'level')}</th>
                   <th>{renderSortButton('角色', userSort, setUserSort, 'role')}</th>
                   <th>{renderSortButton('来源', userSort, setUserSort, 'register_source')}</th>
+                  <th>{renderSortButton('注册IP', userSort, setUserSort, 'register_ip')}</th>
+                  <th>{renderSortButton('同IP账号', userSort, setUserSort, 'same_ip_count')}</th>
                   <th>{renderSortButton('状态', userSort, setUserSort, 'status')}</th>
                   <th>{renderSortButton('到期', userSort, setUserSort, 'expire_at')}</th>
                 </tr>
@@ -991,7 +995,7 @@ function AdminConsole({
               <tbody>
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="admin-table-empty">没有找到匹配的账号。</td>
+                    <td colSpan="10" className="admin-table-empty">没有找到匹配的账号。</td>
                   </tr>
                 ) : (
                   pagedUsers.map((item) => (
@@ -1010,6 +1014,8 @@ function AdminConsole({
                       <td title={getUserLevelLabel(item.level)}><span className="admin-cell admin-cell-nowrap">{getUserLevelLabel(item.level)}</span></td>
                       <td title={getUserRoleLabel(item.role)}><span className="admin-cell admin-cell-nowrap">{getUserRoleLabel(item.role)}</span></td>
                       <td title={getRegisterSourceLabel(item.register_source || 'activation_code')}><span className="admin-cell admin-cell-nowrap">{getRegisterSourceLabel(item.register_source || 'activation_code')}</span></td>
+                      <td title={item.register_ip || '暂无'}><span className="admin-cell admin-cell-nowrap">{item.register_ip || '暂无'}</span></td>
+                      <td title={String(item.same_ip_count || 0)}><span className="admin-cell admin-cell-nowrap">{item.same_ip_count || 0}</span></td>
                       <td title={getUserStatusLabel(item.status || 'active')}><span className="admin-cell admin-cell-nowrap">{getUserStatusLabel(item.status || 'active')}</span></td>
                       <td title={item.expire_at || '长期有效'}><span className="admin-cell admin-cell-nowrap">{item.expire_at ? formatDateTime(item.expire_at) : '长期有效'}</span></td>
                     </tr>
@@ -1458,6 +1464,14 @@ function AdminConsole({
                 <div className="admin-info-item">
                   <span>注册来源</span>
                   <strong>{getRegisterSourceLabel(selectedUser.register_source || 'activation_code')}</strong>
+                </div>
+                <div className="admin-info-item">
+                  <span>注册IP</span>
+                  <strong>{selectedUser.register_ip || '暂无'}</strong>
+                </div>
+                <div className="admin-info-item">
+                  <span>同IP账号数</span>
+                  <strong>{selectedUser.same_ip_count || 0}</strong>
                 </div>
                 <div className="admin-info-item">
                   <span>来源备注</span>

@@ -10,6 +10,8 @@ CREATE TABLE users (
     status TEXT NOT NULL DEFAULT 'active',
     register_source TEXT NOT NULL DEFAULT 'activation_code',
     source_note TEXT,
+    register_ip TEXT,
+    register_user_agent TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -110,6 +112,17 @@ CREATE TABLE system_flags (
     FOREIGN KEY (updated_by_user_id) REFERENCES users(id)
 );
 
+CREATE TABLE registration_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip TEXT NOT NULL,
+    username TEXT,
+    mode TEXT NOT NULL DEFAULT 'register',
+    result TEXT NOT NULL,
+    reason TEXT,
+    user_agent TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX idx_classes_user_id ON classes(user_id);
 CREATE INDEX idx_students_class_id ON students(class_id);
 CREATE INDEX idx_shop_items_class_id ON shop_items(class_id);
@@ -121,4 +134,6 @@ CREATE INDEX idx_activation_codes_status ON activation_codes(status);
 CREATE INDEX idx_users_role ON users(role);
 CREATE INDEX idx_users_status ON users(status);
 CREATE INDEX idx_users_register_source ON users(register_source);
+CREATE INDEX idx_users_register_ip ON users(register_ip);
 CREATE INDEX idx_system_flags_updated_at ON system_flags(updated_at DESC);
+CREATE INDEX idx_registration_attempts_ip_created_at ON registration_attempts(ip, created_at DESC);
