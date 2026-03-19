@@ -265,6 +265,13 @@
   gap: 10px;
 }
 
+.admin-channel-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
 .admin-account-batch-row {
   padding-top: 2px;
 }

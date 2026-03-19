@@ -23,6 +23,7 @@ import { notify } from './lib/notify';
 import { setSoundPreferences } from './lib/sounds';
 import {
   createAdminCodesBatch,
+  createAdminRegisterChannel,
   createAdminCode,
   createClass,
   createRule,
@@ -33,6 +34,7 @@ import {
   deleteRule,
   fetchAdminCodes,
   fetchAdminLogs,
+  fetchAdminRegisterChannels,
   fetchAdminUsers,
   fetchBootstrap,
   fetchFreeRegisterConfig,
@@ -49,6 +51,7 @@ import {
   updateAdminCode,
   updateAdminUsersBatch,
   updateAdminUser,
+  updateAdminRegisterChannel,
   updateRule,
   updateShopItem,
   updateSmartSeatingConfig,
@@ -186,6 +189,7 @@ function App() {
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminCodes, setAdminCodes] = useState([]);
   const [adminLogs, setAdminLogs] = useState([]);
+  const [adminRegisterChannels, setAdminRegisterChannels] = useState([]);
   const [freeRegisterConfig, setFreeRegisterConfig] = useState({
     enabled: false,
     is_active: false,
@@ -1153,16 +1157,18 @@ function App() {
     setAppErrorMessage('');
 
     try {
-      const [usersResponse, codesResponse, logsResponse, freeRegisterResponse] = await Promise.all([
+      const [usersResponse, codesResponse, logsResponse, freeRegisterResponse, channelsResponse] = await Promise.all([
         fetchAdminUsers({ userId: user.id }),
         fetchAdminCodes({ userId: user.id }),
         fetchAdminLogs({ userId: user.id }),
         fetchFreeRegisterConfig(),
+        fetchAdminRegisterChannels({ userId: user.id }),
       ]);
       setAdminUsers(usersResponse.users || []);
       setAdminCodes(codesResponse.activationCodes || []);
       setAdminLogs(logsResponse.logs || []);
       setFreeRegisterConfig((prev) => freeRegisterResponse.freeRegister || prev);
+      setAdminRegisterChannels(channelsResponse.channels || []);
     } catch (error) {
       setAppErrorMessage(error.message);
       throw error;
@@ -1202,6 +1208,46 @@ function App() {
       const response = await updateToolboxAccessConfig({ userId: user.id, config });
       setToolboxAccessConfig(response.toolboxAccess || DEFAULT_TOOLBOX_ACCESS);
       notify('百宝箱权限配置已更新');
+      await refreshAdminConsole();
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleAdminCreateRegisterChannel = async (channel) => {
+    if (!user || !isSuperAdmin) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+    try {
+      const response = await createAdminRegisterChannel({ userId: user.id, channel });
+      setAdminRegisterChannels(response.channels || []);
+      notify('注册渠道已创建');
+      await refreshAdminConsole();
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleAdminUpdateRegisterChannel = async (channelId, channel) => {
+    if (!user || !isSuperAdmin) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+    try {
+      const response = await updateAdminRegisterChannel({ userId: user.id, channelId, channel });
+      setAdminRegisterChannels(response.channels || []);
+      notify('注册渠道已更新');
       await refreshAdminConsole();
     } catch (error) {
       setAppErrorMessage(error.message);
@@ -1586,12 +1632,15 @@ function App() {
               users={adminUsers}
               activationCodes={adminCodes}
               adminLogs={adminLogs}
+              registerChannels={adminRegisterChannels}
               freeRegisterConfig={freeRegisterConfig}
               toolboxAccessConfig={toolboxAccessConfig}
               isMutating={isMutating}
               onRefresh={refreshAdminConsole}
               onUpdateFreeRegisterConfig={handleAdminUpdateFreeRegisterConfig}
               onUpdateToolboxAccessConfig={handleAdminUpdateToolboxAccessConfig}
+              onCreateRegisterChannel={handleAdminCreateRegisterChannel}
+              onUpdateRegisterChannel={handleAdminUpdateRegisterChannel}
               onRequestConfirm={requestConfirm}
               onUpdateUser={handleAdminUpdateUser}
               onBatchUpdateUsers={handleAdminBatchUpdateUsers}

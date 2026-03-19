@@ -201,9 +201,24 @@ const normalizeUser = (row) => ({
   status: row.status || 'active',
   register_source: row.register_source || 'activation_code',
   source_note: row.source_note || null,
+  register_channel: row.register_channel || null,
   register_ip: row.register_ip || null,
   register_user_agent: row.register_user_agent || null,
   same_ip_count: Number(row.same_ip_count || 0),
+});
+
+const normalizeRegistrationChannel = (row) => ({
+  id: Number(row.id),
+  code: row.code,
+  name: row.name,
+  enabled: Boolean(row.enabled),
+  require_activation: Boolean(row.require_activation),
+  default_level: sanitizeFreeRegisterLevel(row.default_level),
+  end_at: row.end_at || null,
+  note: row.note || '',
+  updated_by_user_id: row.updated_by_user_id === null ? null : Number(row.updated_by_user_id),
+  created_at: row.created_at || null,
+  updated_at: row.updated_at || null,
 });
 
 const normalizeSystemFlag = (row) => {
@@ -376,7 +391,7 @@ async function refreshMembershipIfNeeded(db, user) {
         `UPDATE users
          SET level = 'temporary', expire_at = NULL
          WHERE id = ?
-         RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_ip, register_user_agent`,
+         RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_channel, register_ip, register_user_agent`,
       )
       .bind(user.id)
       .first();
@@ -391,6 +406,7 @@ async function getUserById(db, userId) {
   const rawUser = await db
     .prepare(
       `SELECT id, username, nickname, level, expire_at, role, status, register_source, source_note, register_ip, register_user_agent
+       , register_channel
        FROM users
        WHERE id = ?`,
     )
@@ -412,6 +428,7 @@ async function getUserWithPassword(db, username) {
   const rawUser = await db
     .prepare(
       `SELECT id, username, password_hash, nickname, level, expire_at, role, status, register_source, source_note, register_ip, register_user_agent
+       , register_channel
        FROM users
        WHERE username = ?`,
     )
@@ -454,6 +471,14 @@ function sanitizeFreeRegisterMode(value) {
 
 function sanitizeFreeRegisterLevel(value) {
   return ['temporary', 'vip1', 'vip2'].includes(value) ? value : 'temporary';
+}
+
+function sanitizeChannelCode(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '')
+    .slice(0, 32);
 }
 
 function sanitizeToolboxLevel(value) {
@@ -527,6 +552,51 @@ async function getToolboxAccessFlag(db) {
     updated_by_user_id: normalized.updated_by_user_id,
     updated_at: normalized.updated_at,
   };
+}
+
+function resolveRegistrationChannelState(channel) {
+  if (!channel) {
+    return null;
+  }
+
+  const endAt = channel.end_at || null;
+  const endTimestamp = endAt ? new Date(endAt).getTime() : NaN;
+  const windowOpen = !endAt || (Number.isFinite(endTimestamp) && endTimestamp > Date.now());
+
+  return {
+    ...channel,
+    is_active: Boolean(channel.enabled) && windowOpen,
+  };
+}
+
+async function getRegistrationChannelByCode(db, code) {
+  const normalizedCode = sanitizeChannelCode(code);
+  if (!normalizedCode) {
+    return null;
+  }
+
+  const row = await db
+    .prepare(
+      `SELECT id, code, name, enabled, require_activation, default_level, end_at, note, updated_by_user_id, created_at, updated_at
+       FROM registration_channels
+       WHERE code = ?`,
+    )
+    .bind(normalizedCode)
+    .first();
+
+  return resolveRegistrationChannelState(row ? normalizeRegistrationChannel(row) : null);
+}
+
+async function listRegistrationChannels(db) {
+  const result = await db
+    .prepare(
+      `SELECT id, code, name, enabled, require_activation, default_level, end_at, note, updated_by_user_id, created_at, updated_at
+       FROM registration_channels
+       ORDER BY created_at DESC, id DESC`,
+    )
+    .all();
+
+  return (result.results || []).map((row) => resolveRegistrationChannelState(normalizeRegistrationChannel(row)));
 }
 
 function generateActivationCode(prefix = 'CLASS') {
@@ -925,7 +995,9 @@ async function handleLogin(db, request) {
   if (mode === 'register') {
     const nickname = String(body.nickname || '').trim();
     const activationCodeValue = String(body.activationCode || '').trim().toUpperCase();
+    const channelCode = sanitizeChannelCode(body.channelCode);
     const freeRegisterFlag = await getFreeRegisterFlag(db);
+    const registrationChannel = channelCode ? await getRegistrationChannelByCode(db, channelCode) : null;
     const registerIp = getClientIp(request);
     const userAgent = getUserAgent(request);
     const denyRegister = async (message, status = 400, reason = 'validation_failed', retryAfterSeconds = 0) => {
@@ -971,14 +1043,59 @@ async function handleLogin(db, request) {
       return await denyRegister('该账号已存在，请更换用户名', 400, 'duplicate_username');
     }
 
-    if (freeRegisterFlag.is_active) {
+    const canUseChannelRegister = Boolean(registrationChannel?.is_active && !registrationChannel.require_activation);
+    const shouldForceActivationByChannel = Boolean(registrationChannel?.is_active && registrationChannel.require_activation);
+
+    if (canUseChannelRegister) {
+      const passwordHash = await hashPassword(password);
+      const expireAt = computeExpireAt(FREE_REGISTER_LEVEL_EXPIRES_IN_DAYS[registrationChannel.default_level]);
+      const createdUser = await db
+        .prepare(
+          `INSERT INTO users (username, password_hash, nickname, level, expire_at, role, register_source, source_note, register_channel, register_ip, register_user_agent)
+           VALUES (?, ?, ?, ?, ?, 'teacher', 'channel_register', ?, ?, ?, ?)
+           RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_channel, register_ip, register_user_agent`,
+        )
+        .bind(
+          username,
+          passwordHash,
+          nickname,
+          registrationChannel.default_level,
+          expireAt,
+          `渠道免激活注册：${registrationChannel.name}${registrationChannel.end_at ? `，截止 ${registrationChannel.end_at}` : ''}`,
+          registrationChannel.code,
+          registerIp,
+          userAgent,
+        )
+        .first();
+
+      await appendRegistrationAttempt(db, {
+        ip: registerIp,
+        username,
+        result: 'success',
+        reason: `channel_register:${registrationChannel.code}`,
+        userAgent,
+      });
+
+      await appendAdminLog(db, {
+        userId: createdUser.id,
+        actionType: '账号管理',
+        detail: `账号 ${createdUser.username} 通过渠道 ${registrationChannel.code} 免激活注册创建，默认等级 ${createdUser.level}，注册IP ${registerIp}`,
+      });
+
+      return json({
+        user: normalizeUser(createdUser),
+        currentClassId: null,
+      });
+    }
+
+    if (!shouldForceActivationByChannel && freeRegisterFlag.is_active) {
       const passwordHash = await hashPassword(password);
       const expireAt = computeExpireAt(FREE_REGISTER_LEVEL_EXPIRES_IN_DAYS[freeRegisterFlag.value.default_level]);
       const createdUser = await db
         .prepare(
-          `INSERT INTO users (username, password_hash, nickname, level, expire_at, role, register_source, source_note, register_ip, register_user_agent)
-           VALUES (?, ?, ?, ?, ?, 'teacher', 'free_register', ?, ?, ?)
-           RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_ip, register_user_agent`,
+          `INSERT INTO users (username, password_hash, nickname, level, expire_at, role, register_source, source_note, register_channel, register_ip, register_user_agent)
+           VALUES (?, ?, ?, ?, ?, 'teacher', 'free_register', ?, NULL, ?, ?)
+           RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_channel, register_ip, register_user_agent`,
         )
         .bind(
           username,
@@ -1044,9 +1161,9 @@ async function handleLogin(db, request) {
 
     const createdUser = await db
       .prepare(
-        `INSERT INTO users (username, password_hash, nickname, level, expire_at, role, register_source, source_note, register_ip, register_user_agent)
-         VALUES (?, ?, ?, ?, ?, ?, 'activation_code', ?, ?, ?)
-         RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_ip, register_user_agent`,
+        `INSERT INTO users (username, password_hash, nickname, level, expire_at, role, register_source, source_note, register_channel, register_ip, register_user_agent)
+         VALUES (?, ?, ?, ?, ?, ?, 'activation_code', ?, ?, ?, ?)
+         RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_channel, register_ip, register_user_agent`,
       )
       .bind(
         username,
@@ -1056,6 +1173,7 @@ async function handleLogin(db, request) {
         expireAt,
         activationCode.level === 'permanent' ? 'super_admin' : 'teacher',
         activationCode.code,
+        registrationChannel?.is_active ? registrationChannel.code : null,
         registerIp,
         userAgent,
       )
@@ -2123,9 +2241,9 @@ async function handleListAdminUsers(db, request) {
 
   const result = await db
     .prepare(
-      `SELECT u.id, u.username, u.nickname, u.level, u.expire_at, u.role, u.created_at
+       `SELECT u.id, u.username, u.nickname, u.level, u.expire_at, u.role, u.created_at
               , u.status
-              , u.register_source, u.source_note, u.register_ip, u.register_user_agent
+              , u.register_source, u.source_note, u.register_channel, u.register_ip, u.register_user_agent
               , (
                 SELECT COUNT(*)
                 FROM users same_ip_users
@@ -2173,6 +2291,184 @@ async function handleGetPublicFreeRegisterFlag(db) {
       default_level: flag.value.default_level,
       updated_at: flag.updated_at,
     },
+  });
+}
+
+async function handleGetPublicRegistrationChannel(db, request) {
+  const url = new URL(request.url);
+  const code = sanitizeChannelCode(url.searchParams.get('code'));
+
+  if (!code) {
+    return json({ channel: null });
+  }
+
+  const channel = await getRegistrationChannelByCode(db, code);
+
+  if (!channel) {
+    return json({ channel: null });
+  }
+
+  return json({
+    channel: {
+      code: channel.code,
+      name: channel.name,
+      is_active: channel.is_active,
+      require_activation: channel.require_activation,
+      default_level: channel.default_level,
+      end_at: channel.end_at,
+      note: channel.note,
+    },
+  });
+}
+
+async function handleListRegistrationChannels(db, request) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  return json({
+    channels: await listRegistrationChannels(db),
+  });
+}
+
+async function handleCreateRegistrationChannel(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+
+  if (!userId) {
+    return error('缺少有效的超管身份');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  const code = sanitizeChannelCode(body.code);
+  const name = String(body.name || '').trim();
+  const enabled = body.enabled === undefined ? true : Boolean(body.enabled);
+  const requireActivation = body.require_activation === undefined ? true : Boolean(body.require_activation);
+  const defaultLevel = sanitizeFreeRegisterLevel(body.default_level);
+  const note = String(body.note || '').trim();
+  const endAt = body.end_at ? String(body.end_at).trim() : null;
+
+  if (!code || !name) {
+    return error('请填写渠道名称和渠道标识');
+  }
+
+  if (endAt) {
+    const timestamp = new Date(endAt).getTime();
+    if (!Number.isFinite(timestamp) || timestamp <= Date.now()) {
+      return error('渠道截止时间需要晚于当前时间');
+    }
+  }
+
+  const exists = await db.prepare('SELECT id FROM registration_channels WHERE code = ?').bind(code).first();
+  if (exists) {
+    return error('渠道标识已存在，请更换');
+  }
+
+  await db
+    .prepare(
+      `INSERT INTO registration_channels (code, name, enabled, require_activation, default_level, end_at, note, updated_by_user_id, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+    )
+    .bind(code, name, enabled ? 1 : 0, requireActivation ? 1 : 0, defaultLevel, endAt, note || null, userId)
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '系统配置',
+    detail: `新增注册渠道：${code}（${name}），${requireActivation ? '需要激活码' : '免激活'}，默认等级 ${defaultLevel}`,
+  });
+
+  return json({
+    channels: await listRegistrationChannels(db),
+  });
+}
+
+async function handleUpdateRegistrationChannel(db, request, channelId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+
+  if (!userId) {
+    return error('缺少有效的超管身份');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  const existing = await db
+    .prepare(
+      `SELECT id, code, name, enabled, require_activation, default_level, end_at, note
+       FROM registration_channels
+       WHERE id = ?`,
+    )
+    .bind(channelId)
+    .first();
+
+  if (!existing) {
+    return error('目标渠道不存在', 404);
+  }
+
+  const nextCode = sanitizeChannelCode(body.code ?? existing.code);
+  const nextName = String(body.name ?? existing.name).trim();
+  const nextEnabled = body.enabled === undefined ? Boolean(existing.enabled) : Boolean(body.enabled);
+  const nextRequireActivation =
+    body.require_activation === undefined ? Boolean(existing.require_activation) : Boolean(body.require_activation);
+  const nextDefaultLevel = sanitizeFreeRegisterLevel(body.default_level ?? existing.default_level);
+  const nextNote = String(body.note ?? existing.note ?? '').trim();
+  const nextEndAt =
+    body.end_at === '' ? null : body.end_at === undefined ? existing.end_at : String(body.end_at).trim();
+
+  if (!nextCode || !nextName) {
+    return error('请填写渠道名称和渠道标识');
+  }
+
+  if (nextEndAt) {
+    const timestamp = new Date(nextEndAt).getTime();
+    if (!Number.isFinite(timestamp) || timestamp <= Date.now()) {
+      return error('渠道截止时间需要晚于当前时间');
+    }
+  }
+
+  const duplicate = await db
+    .prepare('SELECT id FROM registration_channels WHERE code = ? AND id != ?')
+    .bind(nextCode, channelId)
+    .first();
+
+  if (duplicate) {
+    return error('渠道标识已存在，请更换');
+  }
+
+  await db
+    .prepare(
+      `UPDATE registration_channels
+       SET code = ?, name = ?, enabled = ?, require_activation = ?, default_level = ?, end_at = ?, note = ?, updated_by_user_id = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    )
+    .bind(
+      nextCode,
+      nextName,
+      nextEnabled ? 1 : 0,
+      nextRequireActivation ? 1 : 0,
+      nextDefaultLevel,
+      nextEndAt,
+      nextNote || null,
+      userId,
+      channelId,
+    )
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '系统配置',
+    detail: `更新注册渠道：${existing.code} -> ${nextCode}，${nextRequireActivation ? '需要激活码' : '免激活'}，默认等级 ${nextDefaultLevel}`,
+  });
+
+  return json({
+    channels: await listRegistrationChannels(db),
   });
 }
 
@@ -2768,6 +3064,10 @@ export default {
         return await handleGetPublicFreeRegisterFlag(db);
       }
 
+      if (path === '/api/public/register-channel' && request.method === 'GET') {
+        return await handleGetPublicRegistrationChannel(db, request);
+      }
+
       if (path === '/api/bootstrap' && request.method === 'GET') {
         const userId = parseId(url.searchParams.get('userId'));
         const classId = parseId(url.searchParams.get('classId'));
@@ -2795,6 +3095,14 @@ export default {
         return await handleListAdminLogs(db, request);
       }
 
+      if (path === '/api/admin/register-channels' && request.method === 'GET') {
+        return await handleListRegistrationChannels(db, request);
+      }
+
+      if (path === '/api/admin/register-channels' && request.method === 'POST') {
+        return await handleCreateRegistrationChannel(db, request);
+      }
+
       if (path === '/api/admin/system-flags/free-register' && request.method === 'PUT') {
         return await handleUpdateFreeRegisterFlag(db, request);
       }
@@ -2806,6 +3114,11 @@ export default {
       const adminUserMatch = path.match(/^\/api\/admin\/users\/(\d+)$/);
       if (adminUserMatch && request.method === 'PATCH') {
         return await handleUpdateAdminUser(db, request, Number(adminUserMatch[1]));
+      }
+
+      const adminRegisterChannelMatch = path.match(/^\/api\/admin\/register-channels\/(\d+)$/);
+      if (adminRegisterChannelMatch && request.method === 'PATCH') {
+        return await handleUpdateRegistrationChannel(db, request, Number(adminRegisterChannelMatch[1]));
       }
 
       const adminPasswordMatch = path.match(/^\/api\/admin\/users\/(\d+)\/reset-password$/);

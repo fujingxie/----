@@ -18,6 +18,16 @@ const EMPTY_BATCH_FORM = {
   count: '10',
 };
 
+const EMPTY_CHANNEL_FORM = {
+  name: '',
+  code: '',
+  enabled: true,
+  require_activation: true,
+  default_level: 'temporary',
+  end_at: '',
+  note: '',
+};
+
 const formatExpire = (value) => (value ? value : '长期有效');
 
 const USER_LEVEL_OPTIONS = [
@@ -41,6 +51,7 @@ const USER_REGISTER_SOURCE_OPTIONS = [
   { value: 'all', label: '全部来源' },
   { value: 'activation_code', label: '激活码注册' },
   { value: 'free_register', label: '免激活注册' },
+  { value: 'channel_register', label: '渠道免激活注册' },
 ];
 
 const CODE_LEVEL_OPTIONS = [
@@ -155,6 +166,7 @@ const formatAdminLogDetail = (detail) => {
     .replace(/permanent/g, '永久会员')
     .replace(/activation_code/g, '激活码注册')
     .replace(/free_register/g, '免激活注册')
+    .replace(/channel_register/g, '渠道免激活注册')
     .replace(/until/g, '截止时间')
     .replace(/teacher/g, '教师账号')
     .replace(/super_admin/g, '超管账号')
@@ -168,12 +180,15 @@ function AdminConsole({
   users,
   activationCodes,
   adminLogs,
+  registerChannels,
   freeRegisterConfig,
   toolboxAccessConfig,
   isMutating,
   onRefresh,
   onUpdateFreeRegisterConfig,
   onUpdateToolboxAccessConfig,
+  onCreateRegisterChannel,
+  onUpdateRegisterChannel,
   onRequestConfirm,
   onUpdateUser,
   onBatchUpdateUsers,
@@ -218,6 +233,8 @@ function AdminConsole({
     ...DEFAULT_TOOLBOX_ACCESS,
     ...(toolboxAccessConfig || {}),
   });
+  const [channelForm, setChannelForm] = useState(EMPTY_CHANNEL_FORM);
+  const [selectedChannelId, setSelectedChannelId] = useState(null);
 
   const sortBy = (list, { key, direction }) => {
     const factor = direction === 'asc' ? 1 : -1;
@@ -343,6 +360,43 @@ function AdminConsole({
     return sortBy(baseList, codeSort);
   }, [activationCodes, codeLevelFilter, codeStatusFilter, codeSort]);
 
+  const channelStatsByCode = useMemo(() => {
+    const summary = {};
+
+    (registerChannels || []).forEach((channel) => {
+      summary[channel.code] = {
+        total: 0,
+        active: 0,
+        freeRegister: 0,
+        activationCode: 0,
+        vipUsers: 0,
+      };
+    });
+
+    users.forEach((user) => {
+      const code = user.register_channel;
+      if (!code || !summary[code]) {
+        return;
+      }
+
+      summary[code].total += 1;
+      if ((user.status || 'active') === 'active') {
+        summary[code].active += 1;
+      }
+      if (user.register_source === 'channel_register') {
+        summary[code].freeRegister += 1;
+      }
+      if (user.register_source === 'activation_code') {
+        summary[code].activationCode += 1;
+      }
+      if (user.level === 'vip1' || user.level === 'vip2' || user.level === 'permanent') {
+        summary[code].vipUsers += 1;
+      }
+    });
+
+    return summary;
+  }, [registerChannels, users]);
+
   const userTotalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
   const codeTotalPages = Math.max(1, Math.ceil(filteredCodes.length / PAGE_SIZE));
   const logTotalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
@@ -365,6 +419,7 @@ function AdminConsole({
 
   const selectedUser = filteredUsers.find((item) => item.id === selectedUserId) || null;
   const selectedCode = filteredCodes.find((item) => item.id === selectedCodeId) || null;
+  const selectedChannel = (registerChannels || []).find((item) => item.id === selectedChannelId) || null;
 
   const openUserDetail = (user) => {
     setSelectedUserId(user.id);
@@ -405,6 +460,24 @@ function AdminConsole({
     } catch {
       // ignore clipboard failures
     }
+  };
+
+  const startEditChannel = (channel) => {
+    setSelectedChannelId(channel.id);
+    setChannelForm({
+      name: channel.name || '',
+      code: channel.code || '',
+      enabled: Boolean(channel.enabled),
+      require_activation: Boolean(channel.require_activation),
+      default_level: channel.default_level || 'temporary',
+      end_at: channel.end_at ? String(channel.end_at).slice(0, 16) : '',
+      note: channel.note || '',
+    });
+  };
+
+  const resetChannelForm = () => {
+    setSelectedChannelId(null);
+    setChannelForm(EMPTY_CHANNEL_FORM);
   };
 
   const handleCopyAllActive = async () => {
@@ -734,6 +807,206 @@ function AdminConsole({
         {renderOverviewCard('账号分布', '快速查看当前账号角色和启用状态的整体结构。', accountOverview)}
         {renderOverviewCard('激活码分布', '先看库存和状态，再决定是否补码、作废或导出。', codeOverview)}
       </div>
+
+      <section className="admin-panel glass-card">
+        <div className="admin-panel-head">
+          <div>
+            <h3>渠道入口管理</h3>
+            <p>给不同平台生成不同的注册链接，并分别控制是否需要激活码。</p>
+          </div>
+        </div>
+        <div className="admin-code-create-grid">
+          <section className="admin-code-create-card">
+            <div className="admin-code-create-head">
+              <strong>{selectedChannel ? '编辑渠道' : '新建渠道'}</strong>
+              <p>示例链接：`https://www.banjiyangchong.tech/?channel=你的渠道标识`</p>
+            </div>
+            <div className="admin-code-creator batch">
+              <label className="admin-field">
+                <span>渠道名称</span>
+                <input
+                  className="glass-input compact"
+                  value={channelForm.name}
+                  onChange={(event) => setChannelForm((prev) => ({ ...prev, name: event.target.value }))}
+                  placeholder="例如：抖音活动页"
+                />
+              </label>
+              <label className="admin-field">
+                <span>渠道标识</span>
+                <input
+                  className="glass-input compact"
+                  value={channelForm.code}
+                  onChange={(event) =>
+                    setChannelForm((prev) => ({
+                      ...prev,
+                      code: event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''),
+                    }))
+                  }
+                  placeholder="例如：douyin"
+                />
+              </label>
+              <label className="admin-field">
+                <span>渠道状态</span>
+                <select
+                  className="glass-input compact"
+                  value={channelForm.enabled ? 'enabled' : 'disabled'}
+                  onChange={(event) =>
+                    setChannelForm((prev) => ({ ...prev, enabled: event.target.value === 'enabled' }))
+                  }
+                >
+                  <option value="enabled">启用</option>
+                  <option value="disabled">停用</option>
+                </select>
+              </label>
+              <label className="admin-field">
+                <span>注册方式</span>
+                <select
+                  className="glass-input compact"
+                  value={channelForm.require_activation ? 'required' : 'free'}
+                  onChange={(event) =>
+                    setChannelForm((prev) => ({ ...prev, require_activation: event.target.value === 'required' }))
+                  }
+                >
+                  <option value="required">需要激活码</option>
+                  <option value="free">免激活注册</option>
+                </select>
+              </label>
+              <label className="admin-field">
+                <span>默认等级</span>
+                <select
+                  className="glass-input compact"
+                  value={channelForm.default_level}
+                  onChange={(event) =>
+                    setChannelForm((prev) => ({ ...prev, default_level: event.target.value }))
+                  }
+                >
+                  <option value="temporary">临时体验</option>
+                  <option value="vip1">会员一级</option>
+                  <option value="vip2">会员二级</option>
+                </select>
+              </label>
+              <label className="admin-field">
+                <span>截止时间</span>
+                <input
+                  className="glass-input compact"
+                  type="datetime-local"
+                  value={channelForm.end_at}
+                  onChange={(event) =>
+                    setChannelForm((prev) => ({ ...prev, end_at: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="admin-field">
+                <span>备注说明</span>
+                <input
+                  className="glass-input compact"
+                  value={channelForm.note}
+                  onChange={(event) => setChannelForm((prev) => ({ ...prev, note: event.target.value }))}
+                  placeholder="可选，记录投放说明"
+                />
+              </label>
+              <div className="admin-code-head-actions">
+                <button
+                  className="confirm-btn"
+                  disabled={isMutating}
+                  onClick={() => {
+                    const payload = {
+                      ...channelForm,
+                      end_at: channelForm.end_at ? new Date(channelForm.end_at).toISOString() : null,
+                    };
+
+                    if (selectedChannel) {
+                      onUpdateRegisterChannel?.(selectedChannel.id, payload).then?.(() => resetChannelForm());
+                      return;
+                    }
+
+                    onCreateRegisterChannel?.(payload).then?.(() => resetChannelForm());
+                  }}
+                  type="button"
+                >
+                  {selectedChannel ? '保存渠道' : '创建渠道'}
+                </button>
+                {selectedChannel ? (
+                  <button className="select-all-btn" onClick={resetChannelForm} type="button">
+                    取消编辑
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </section>
+
+          <section className="admin-code-create-card">
+            <div className="admin-code-create-head">
+              <strong>已有渠道</strong>
+              <p>点“编辑”可修改策略；复制链接后可直接投放到不同平台。</p>
+            </div>
+            <div className="admin-code-creator batch">
+              {(registerChannels || []).length === 0 ? (
+                <div className="admin-info-item">
+                  <span>渠道状态</span>
+                  <strong>还没有创建渠道</strong>
+                </div>
+              ) : (
+                registerChannels.map((channel) => {
+                  const stats = channelStatsByCode[channel.code] || {
+                    total: 0,
+                    active: 0,
+                    freeRegister: 0,
+                    activationCode: 0,
+                    vipUsers: 0,
+                  };
+
+                  return (
+                    <div className="admin-info-item" key={channel.id}>
+                      <span>{channel.name}</span>
+                      <strong>{channel.code}</strong>
+                      <span>{channel.require_activation ? '需要激活码' : '免激活'}</span>
+                      <span>{channel.is_active ? '生效中' : channel.enabled ? '已开启但未生效' : '已停用'}</span>
+                      <span>{channel.end_at ? formatDateTime(channel.end_at) : '长期有效'}</span>
+                      <div className="admin-channel-stats">
+                        <div className="admin-mini-stat">
+                          <span>注册总数</span>
+                          <strong>{stats.total}</strong>
+                        </div>
+                        <div className="admin-mini-stat">
+                          <span>启用账号</span>
+                          <strong>{stats.active}</strong>
+                        </div>
+                        <div className="admin-mini-stat">
+                          <span>渠道免激活</span>
+                          <strong>{stats.freeRegister}</strong>
+                        </div>
+                        <div className="admin-mini-stat">
+                          <span>激活码注册</span>
+                          <strong>{stats.activationCode}</strong>
+                        </div>
+                        <div className="admin-mini-stat">
+                          <span>会员账号</span>
+                          <strong>{stats.vipUsers}</strong>
+                        </div>
+                      </div>
+                      <div className="admin-code-head-actions">
+                        <button className="select-all-btn" onClick={() => startEditChannel(channel)} type="button">
+                          编辑
+                        </button>
+                        <button
+                          className="select-all-btn"
+                          onClick={() =>
+                            handleCopy(`https://www.banjiyangchong.tech/?channel=${channel.code}`)
+                          }
+                          type="button"
+                        >
+                          复制链接
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
+        </div>
+      </section>
 
       <section className="admin-panel glass-card">
         <div className="admin-panel-head">

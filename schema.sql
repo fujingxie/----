@@ -10,6 +10,7 @@ CREATE TABLE users (
     status TEXT NOT NULL DEFAULT 'active',
     register_source TEXT NOT NULL DEFAULT 'activation_code',
     source_note TEXT,
+    register_channel TEXT,
     register_ip TEXT,
     register_user_agent TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -74,6 +75,21 @@ CREATE TABLE class_settings (
     smart_seating_config TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (class_id) REFERENCES classes(id)
+);
+
+CREATE TABLE registration_channels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    require_activation INTEGER NOT NULL DEFAULT 1,
+    default_level TEXT NOT NULL DEFAULT 'temporary',
+    end_at DATETIME,
+    note TEXT,
+    updated_by_user_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (updated_by_user_id) REFERENCES users(id)
 );
 
 -- 操作日志表

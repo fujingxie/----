@@ -28,6 +28,9 @@ export const loginUser = (payload) =>
 export const fetchFreeRegisterConfig = () =>
   request('/public/system-flags/free-register');
 
+export const fetchPublicRegisterChannel = ({ code }) =>
+  request(`/public/register-channel?${new URLSearchParams({ code: String(code || '') }).toString()}`);
+
 export const updatePassword = ({ userId, currentPassword, nextPassword }) =>
   request('/auth/password', {
     method: 'PUT',
@@ -158,6 +161,9 @@ export const fetchAdminUsers = ({ userId }) =>
 export const fetchAdminLogs = ({ userId }) =>
   request(`/admin/logs?${new URLSearchParams({ userId: String(userId) }).toString()}`);
 
+export const fetchAdminRegisterChannels = ({ userId }) =>
+  request(`/admin/register-channels?${new URLSearchParams({ userId: String(userId) }).toString()}`);
+
 export const updateFreeRegisterConfig = ({ userId, enabled, mode, end_at, default_level }) =>
   request('/admin/system-flags/free-register', {
     method: 'PUT',
@@ -168,6 +174,18 @@ export const updateToolboxAccessConfig = ({ userId, config }) =>
   request('/admin/system-flags/toolbox-access', {
     method: 'PUT',
     body: JSON.stringify({ userId, config }),
+  });
+
+export const createAdminRegisterChannel = ({ userId, channel }) =>
+  request('/admin/register-channels', {
+    method: 'POST',
+    body: JSON.stringify({ userId, ...channel }),
+  });
+
+export const updateAdminRegisterChannel = ({ userId, channelId, channel }) =>
+  request(`/admin/register-channels/${channelId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ userId, ...channel }),
   });
 
 export const updateAdminUser = ({ userId, targetUserId, updates }) =>

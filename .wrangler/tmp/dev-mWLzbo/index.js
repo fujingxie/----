@@ -202,10 +202,24 @@ var normalizeUser = /* @__PURE__ */ __name((row) => ({
   status: row.status || "active",
   register_source: row.register_source || "activation_code",
   source_note: row.source_note || null,
+  register_channel: row.register_channel || null,
   register_ip: row.register_ip || null,
   register_user_agent: row.register_user_agent || null,
   same_ip_count: Number(row.same_ip_count || 0)
 }), "normalizeUser");
+var normalizeRegistrationChannel = /* @__PURE__ */ __name((row) => ({
+  id: Number(row.id),
+  code: row.code,
+  name: row.name,
+  enabled: Boolean(row.enabled),
+  require_activation: Boolean(row.require_activation),
+  default_level: sanitizeFreeRegisterLevel(row.default_level),
+  end_at: row.end_at || null,
+  note: row.note || "",
+  updated_by_user_id: row.updated_by_user_id === null ? null : Number(row.updated_by_user_id),
+  created_at: row.created_at || null,
+  updated_at: row.updated_at || null
+}), "normalizeRegistrationChannel");
 var normalizeSystemFlag = /* @__PURE__ */ __name((row) => {
   if (!row) {
     return {
@@ -342,7 +356,7 @@ async function refreshMembershipIfNeeded(db, user) {
       `UPDATE users
          SET level = 'temporary', expire_at = NULL
          WHERE id = ?
-         RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_ip, register_user_agent`
+         RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_channel, register_ip, register_user_agent`
     ).bind(user.id).first();
     return refreshed;
   }
@@ -352,6 +366,7 @@ __name(refreshMembershipIfNeeded, "refreshMembershipIfNeeded");
 async function getUserById(db, userId) {
   const rawUser = await db.prepare(
     `SELECT id, username, nickname, level, expire_at, role, status, register_source, source_note, register_ip, register_user_agent
+       , register_channel
        FROM users
        WHERE id = ?`
   ).bind(userId).first();
@@ -367,6 +382,7 @@ __name(getUserById, "getUserById");
 async function getUserWithPassword(db, username) {
   const rawUser = await db.prepare(
     `SELECT id, username, password_hash, nickname, level, expire_at, role, status, register_source, source_note, register_ip, register_user_agent
+       , register_channel
        FROM users
        WHERE username = ?`
   ).bind(username).first();
@@ -403,6 +419,10 @@ function sanitizeFreeRegisterLevel(value) {
   return ["temporary", "vip1", "vip2"].includes(value) ? value : "temporary";
 }
 __name(sanitizeFreeRegisterLevel, "sanitizeFreeRegisterLevel");
+function sanitizeChannelCode(value) {
+  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 32);
+}
+__name(sanitizeChannelCode, "sanitizeChannelCode");
 function sanitizeToolboxLevel(value) {
   return ["temporary", "vip1", "vip2", "permanent"].includes(value) ? value : "temporary";
 }
@@ -465,6 +485,41 @@ async function getToolboxAccessFlag(db) {
   };
 }
 __name(getToolboxAccessFlag, "getToolboxAccessFlag");
+function resolveRegistrationChannelState(channel) {
+  if (!channel) {
+    return null;
+  }
+  const endAt = channel.end_at || null;
+  const endTimestamp = endAt ? new Date(endAt).getTime() : NaN;
+  const windowOpen = !endAt || Number.isFinite(endTimestamp) && endTimestamp > Date.now();
+  return {
+    ...channel,
+    is_active: Boolean(channel.enabled) && windowOpen
+  };
+}
+__name(resolveRegistrationChannelState, "resolveRegistrationChannelState");
+async function getRegistrationChannelByCode(db, code) {
+  const normalizedCode = sanitizeChannelCode(code);
+  if (!normalizedCode) {
+    return null;
+  }
+  const row = await db.prepare(
+    `SELECT id, code, name, enabled, require_activation, default_level, end_at, note, updated_by_user_id, created_at, updated_at
+       FROM registration_channels
+       WHERE code = ?`
+  ).bind(normalizedCode).first();
+  return resolveRegistrationChannelState(row ? normalizeRegistrationChannel(row) : null);
+}
+__name(getRegistrationChannelByCode, "getRegistrationChannelByCode");
+async function listRegistrationChannels(db) {
+  const result = await db.prepare(
+    `SELECT id, code, name, enabled, require_activation, default_level, end_at, note, updated_by_user_id, created_at, updated_at
+       FROM registration_channels
+       ORDER BY created_at DESC, id DESC`
+  ).all();
+  return (result.results || []).map((row) => resolveRegistrationChannelState(normalizeRegistrationChannel(row)));
+}
+__name(listRegistrationChannels, "listRegistrationChannels");
 function generateActivationCode(prefix = "CLASS") {
   const cleanedPrefix = String(prefix || "CLASS").replace(/[^A-Z0-9-]/g, "").slice(0, 12) || "CLASS";
   const seed = Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -768,7 +823,9 @@ async function handleLogin(db, request) {
   if (mode === "register") {
     const nickname = String(body.nickname || "").trim();
     const activationCodeValue = String(body.activationCode || "").trim().toUpperCase();
+    const channelCode = sanitizeChannelCode(body.channelCode);
     const freeRegisterFlag = await getFreeRegisterFlag(db);
+    const registrationChannel = channelCode ? await getRegistrationChannelByCode(db, channelCode) : null;
     const registerIp = getClientIp(request);
     const userAgent = getUserAgent(request);
     const denyRegister = /* @__PURE__ */ __name(async (message, status = 400, reason = "validation_failed", retryAfterSeconds = 0) => {
@@ -804,13 +861,50 @@ async function handleLogin(db, request) {
     if (existingUser) {
       return await denyRegister("\u8BE5\u8D26\u53F7\u5DF2\u5B58\u5728\uFF0C\u8BF7\u66F4\u6362\u7528\u6237\u540D", 400, "duplicate_username");
     }
-    if (freeRegisterFlag.is_active) {
+    const canUseChannelRegister = Boolean(registrationChannel?.is_active && !registrationChannel.require_activation);
+    const shouldForceActivationByChannel = Boolean(registrationChannel?.is_active && registrationChannel.require_activation);
+    if (canUseChannelRegister) {
+      const passwordHash2 = await hashPassword(password);
+      const expireAt2 = computeExpireAt(FREE_REGISTER_LEVEL_EXPIRES_IN_DAYS[registrationChannel.default_level]);
+      const createdUser2 = await db.prepare(
+        `INSERT INTO users (username, password_hash, nickname, level, expire_at, role, register_source, source_note, register_channel, register_ip, register_user_agent)
+           VALUES (?, ?, ?, ?, ?, 'teacher', 'channel_register', ?, ?, ?, ?)
+           RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_channel, register_ip, register_user_agent`
+      ).bind(
+        username,
+        passwordHash2,
+        nickname,
+        registrationChannel.default_level,
+        expireAt2,
+        `\u6E20\u9053\u514D\u6FC0\u6D3B\u6CE8\u518C\uFF1A${registrationChannel.name}${registrationChannel.end_at ? `\uFF0C\u622A\u6B62 ${registrationChannel.end_at}` : ""}`,
+        registrationChannel.code,
+        registerIp,
+        userAgent
+      ).first();
+      await appendRegistrationAttempt(db, {
+        ip: registerIp,
+        username,
+        result: "success",
+        reason: `channel_register:${registrationChannel.code}`,
+        userAgent
+      });
+      await appendAdminLog(db, {
+        userId: createdUser2.id,
+        actionType: "\u8D26\u53F7\u7BA1\u7406",
+        detail: `\u8D26\u53F7 ${createdUser2.username} \u901A\u8FC7\u6E20\u9053 ${registrationChannel.code} \u514D\u6FC0\u6D3B\u6CE8\u518C\u521B\u5EFA\uFF0C\u9ED8\u8BA4\u7B49\u7EA7 ${createdUser2.level}\uFF0C\u6CE8\u518CIP ${registerIp}`
+      });
+      return json({
+        user: normalizeUser(createdUser2),
+        currentClassId: null
+      });
+    }
+    if (!shouldForceActivationByChannel && freeRegisterFlag.is_active) {
       const passwordHash2 = await hashPassword(password);
       const expireAt2 = computeExpireAt(FREE_REGISTER_LEVEL_EXPIRES_IN_DAYS[freeRegisterFlag.value.default_level]);
       const createdUser2 = await db.prepare(
-        `INSERT INTO users (username, password_hash, nickname, level, expire_at, role, register_source, source_note, register_ip, register_user_agent)
-           VALUES (?, ?, ?, ?, ?, 'teacher', 'free_register', ?, ?, ?)
-           RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_ip, register_user_agent`
+        `INSERT INTO users (username, password_hash, nickname, level, expire_at, role, register_source, source_note, register_channel, register_ip, register_user_agent)
+           VALUES (?, ?, ?, ?, ?, 'teacher', 'free_register', ?, NULL, ?, ?)
+           RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_channel, register_ip, register_user_agent`
       ).bind(
         username,
         passwordHash2,
@@ -860,9 +954,9 @@ async function handleLogin(db, request) {
       activationCode.expires_in_days === null ? null : Number(activationCode.expires_in_days)
     );
     const createdUser = await db.prepare(
-      `INSERT INTO users (username, password_hash, nickname, level, expire_at, role, register_source, source_note, register_ip, register_user_agent)
-         VALUES (?, ?, ?, ?, ?, ?, 'activation_code', ?, ?, ?)
-         RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_ip, register_user_agent`
+      `INSERT INTO users (username, password_hash, nickname, level, expire_at, role, register_source, source_note, register_channel, register_ip, register_user_agent)
+         VALUES (?, ?, ?, ?, ?, ?, 'activation_code', ?, ?, ?, ?)
+         RETURNING id, username, nickname, level, expire_at, role, status, register_source, source_note, register_channel, register_ip, register_user_agent`
     ).bind(
       username,
       passwordHash,
@@ -871,6 +965,7 @@ async function handleLogin(db, request) {
       expireAt,
       activationCode.level === "permanent" ? "super_admin" : "teacher",
       activationCode.code,
+      registrationChannel?.is_active ? registrationChannel.code : null,
       registerIp,
       userAgent
     ).first();
@@ -1670,7 +1765,7 @@ async function handleListAdminUsers(db, request) {
   const result = await db.prepare(
     `SELECT u.id, u.username, u.nickname, u.level, u.expire_at, u.role, u.created_at
               , u.status
-              , u.register_source, u.source_note, u.register_ip, u.register_user_agent
+              , u.register_source, u.source_note, u.register_channel, u.register_ip, u.register_user_agent
               , (
                 SELECT COUNT(*)
                 FROM users same_ip_users
@@ -1715,6 +1810,142 @@ async function handleGetPublicFreeRegisterFlag(db) {
   });
 }
 __name(handleGetPublicFreeRegisterFlag, "handleGetPublicFreeRegisterFlag");
+async function handleGetPublicRegistrationChannel(db, request) {
+  const url = new URL(request.url);
+  const code = sanitizeChannelCode(url.searchParams.get("code"));
+  if (!code) {
+    return json({ channel: null });
+  }
+  const channel = await getRegistrationChannelByCode(db, code);
+  if (!channel) {
+    return json({ channel: null });
+  }
+  return json({
+    channel: {
+      code: channel.code,
+      name: channel.name,
+      is_active: channel.is_active,
+      require_activation: channel.require_activation,
+      default_level: channel.default_level,
+      end_at: channel.end_at,
+      note: channel.note
+    }
+  });
+}
+__name(handleGetPublicRegistrationChannel, "handleGetPublicRegistrationChannel");
+async function handleListRegistrationChannels(db, request) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get("userId"));
+  if (!userId) {
+    return error("\u7F3A\u5C11\u6709\u6548\u7684\u6559\u5E08\u8EAB\u4EFD");
+  }
+  await assertSuperAdmin(db, userId);
+  return json({
+    channels: await listRegistrationChannels(db)
+  });
+}
+__name(handleListRegistrationChannels, "handleListRegistrationChannels");
+async function handleCreateRegistrationChannel(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  if (!userId) {
+    return error("\u7F3A\u5C11\u6709\u6548\u7684\u8D85\u7BA1\u8EAB\u4EFD");
+  }
+  await assertSuperAdmin(db, userId);
+  const code = sanitizeChannelCode(body.code);
+  const name = String(body.name || "").trim();
+  const enabled = body.enabled === void 0 ? true : Boolean(body.enabled);
+  const requireActivation = body.require_activation === void 0 ? true : Boolean(body.require_activation);
+  const defaultLevel = sanitizeFreeRegisterLevel(body.default_level);
+  const note = String(body.note || "").trim();
+  const endAt = body.end_at ? String(body.end_at).trim() : null;
+  if (!code || !name) {
+    return error("\u8BF7\u586B\u5199\u6E20\u9053\u540D\u79F0\u548C\u6E20\u9053\u6807\u8BC6");
+  }
+  if (endAt) {
+    const timestamp = new Date(endAt).getTime();
+    if (!Number.isFinite(timestamp) || timestamp <= Date.now()) {
+      return error("\u6E20\u9053\u622A\u6B62\u65F6\u95F4\u9700\u8981\u665A\u4E8E\u5F53\u524D\u65F6\u95F4");
+    }
+  }
+  const exists = await db.prepare("SELECT id FROM registration_channels WHERE code = ?").bind(code).first();
+  if (exists) {
+    return error("\u6E20\u9053\u6807\u8BC6\u5DF2\u5B58\u5728\uFF0C\u8BF7\u66F4\u6362");
+  }
+  await db.prepare(
+    `INSERT INTO registration_channels (code, name, enabled, require_activation, default_level, end_at, note, updated_by_user_id, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+  ).bind(code, name, enabled ? 1 : 0, requireActivation ? 1 : 0, defaultLevel, endAt, note || null, userId).run();
+  await appendAdminLog(db, {
+    userId,
+    actionType: "\u7CFB\u7EDF\u914D\u7F6E",
+    detail: `\u65B0\u589E\u6CE8\u518C\u6E20\u9053\uFF1A${code}\uFF08${name}\uFF09\uFF0C${requireActivation ? "\u9700\u8981\u6FC0\u6D3B\u7801" : "\u514D\u6FC0\u6D3B"}\uFF0C\u9ED8\u8BA4\u7B49\u7EA7 ${defaultLevel}`
+  });
+  return json({
+    channels: await listRegistrationChannels(db)
+  });
+}
+__name(handleCreateRegistrationChannel, "handleCreateRegistrationChannel");
+async function handleUpdateRegistrationChannel(db, request, channelId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  if (!userId) {
+    return error("\u7F3A\u5C11\u6709\u6548\u7684\u8D85\u7BA1\u8EAB\u4EFD");
+  }
+  await assertSuperAdmin(db, userId);
+  const existing = await db.prepare(
+    `SELECT id, code, name, enabled, require_activation, default_level, end_at, note
+       FROM registration_channels
+       WHERE id = ?`
+  ).bind(channelId).first();
+  if (!existing) {
+    return error("\u76EE\u6807\u6E20\u9053\u4E0D\u5B58\u5728", 404);
+  }
+  const nextCode = sanitizeChannelCode(body.code ?? existing.code);
+  const nextName = String(body.name ?? existing.name).trim();
+  const nextEnabled = body.enabled === void 0 ? Boolean(existing.enabled) : Boolean(body.enabled);
+  const nextRequireActivation = body.require_activation === void 0 ? Boolean(existing.require_activation) : Boolean(body.require_activation);
+  const nextDefaultLevel = sanitizeFreeRegisterLevel(body.default_level ?? existing.default_level);
+  const nextNote = String(body.note ?? existing.note ?? "").trim();
+  const nextEndAt = body.end_at === "" ? null : body.end_at === void 0 ? existing.end_at : String(body.end_at).trim();
+  if (!nextCode || !nextName) {
+    return error("\u8BF7\u586B\u5199\u6E20\u9053\u540D\u79F0\u548C\u6E20\u9053\u6807\u8BC6");
+  }
+  if (nextEndAt) {
+    const timestamp = new Date(nextEndAt).getTime();
+    if (!Number.isFinite(timestamp) || timestamp <= Date.now()) {
+      return error("\u6E20\u9053\u622A\u6B62\u65F6\u95F4\u9700\u8981\u665A\u4E8E\u5F53\u524D\u65F6\u95F4");
+    }
+  }
+  const duplicate = await db.prepare("SELECT id FROM registration_channels WHERE code = ? AND id != ?").bind(nextCode, channelId).first();
+  if (duplicate) {
+    return error("\u6E20\u9053\u6807\u8BC6\u5DF2\u5B58\u5728\uFF0C\u8BF7\u66F4\u6362");
+  }
+  await db.prepare(
+    `UPDATE registration_channels
+       SET code = ?, name = ?, enabled = ?, require_activation = ?, default_level = ?, end_at = ?, note = ?, updated_by_user_id = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+  ).bind(
+    nextCode,
+    nextName,
+    nextEnabled ? 1 : 0,
+    nextRequireActivation ? 1 : 0,
+    nextDefaultLevel,
+    nextEndAt,
+    nextNote || null,
+    userId,
+    channelId
+  ).run();
+  await appendAdminLog(db, {
+    userId,
+    actionType: "\u7CFB\u7EDF\u914D\u7F6E",
+    detail: `\u66F4\u65B0\u6CE8\u518C\u6E20\u9053\uFF1A${existing.code} -> ${nextCode}\uFF0C${nextRequireActivation ? "\u9700\u8981\u6FC0\u6D3B\u7801" : "\u514D\u6FC0\u6D3B"}\uFF0C\u9ED8\u8BA4\u7B49\u7EA7 ${nextDefaultLevel}`
+  });
+  return json({
+    channels: await listRegistrationChannels(db)
+  });
+}
+__name(handleUpdateRegistrationChannel, "handleUpdateRegistrationChannel");
 async function handleUpdateFreeRegisterFlag(db, request) {
   const body = await readBody(request);
   const userId = parseId(body.userId);
@@ -2127,6 +2358,9 @@ var src_server_default = {
       if (path === "/api/public/system-flags/free-register" && request.method === "GET") {
         return await handleGetPublicFreeRegisterFlag(db);
       }
+      if (path === "/api/public/register-channel" && request.method === "GET") {
+        return await handleGetPublicRegistrationChannel(db, request);
+      }
       if (path === "/api/bootstrap" && request.method === "GET") {
         const userId = parseId(url.searchParams.get("userId"));
         const classId = parseId(url.searchParams.get("classId"));
@@ -2147,6 +2381,12 @@ var src_server_default = {
       if (path === "/api/admin/logs" && request.method === "GET") {
         return await handleListAdminLogs(db, request);
       }
+      if (path === "/api/admin/register-channels" && request.method === "GET") {
+        return await handleListRegistrationChannels(db, request);
+      }
+      if (path === "/api/admin/register-channels" && request.method === "POST") {
+        return await handleCreateRegistrationChannel(db, request);
+      }
       if (path === "/api/admin/system-flags/free-register" && request.method === "PUT") {
         return await handleUpdateFreeRegisterFlag(db, request);
       }
@@ -2156,6 +2396,10 @@ var src_server_default = {
       const adminUserMatch = path.match(/^\/api\/admin\/users\/(\d+)$/);
       if (adminUserMatch && request.method === "PATCH") {
         return await handleUpdateAdminUser(db, request, Number(adminUserMatch[1]));
+      }
+      const adminRegisterChannelMatch = path.match(/^\/api\/admin\/register-channels\/(\d+)$/);
+      if (adminRegisterChannelMatch && request.method === "PATCH") {
+        return await handleUpdateRegistrationChannel(db, request, Number(adminRegisterChannelMatch[1]));
       }
       const adminPasswordMatch = path.match(/^\/api\/admin\/users\/(\d+)\/reset-password$/);
       if (adminPasswordMatch && request.method === "POST") {
