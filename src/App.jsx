@@ -51,6 +51,7 @@ import {
   updateAdminUser,
   updateRule,
   updateShopItem,
+  updateSmartSeatingConfig,
   updateClass,
   updateStudent,
   updateThresholds,
@@ -161,6 +162,7 @@ function App() {
   const [rulesByClassId, setRulesByClassId] = useState({});
   const [logsByClassId, setLogsByClassId] = useState({});
   const [thresholdsByClassId, setThresholdsByClassId] = useState({});
+  const [seatingConfigsByClassId, setSeatingConfigsByClassId] = useState({});
   const [authErrorMessage, setAuthErrorMessage] = useState('');
   const [appErrorMessage, setAppErrorMessage] = useState('');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
@@ -209,6 +211,7 @@ function App() {
   const currentThresholds = currentClassId
     ? thresholdsByClassId[currentClassId] || DEFAULT_LEVEL_THRESHOLDS
     : DEFAULT_LEVEL_THRESHOLDS;
+  const currentSeatingConfig = currentClassId ? seatingConfigsByClassId[currentClassId] || null : null;
   const isSuperAdmin = user?.role === 'super_admin';
   const membershipLabel = user?.level ? MEMBERSHIP_LABELS[user.level] || user.level : '';
   const visibleTabs = useMemo(
@@ -242,6 +245,10 @@ function App() {
     setThresholdsByClassId((prev) => ({
       ...prev,
       [classId]: bundle.levelThresholds || DEFAULT_LEVEL_THRESHOLDS,
+    }));
+    setSeatingConfigsByClassId((prev) => ({
+      ...prev,
+      [classId]: bundle.smartSeatingConfig || null,
     }));
   };
 
@@ -494,6 +501,32 @@ function App() {
     setClassDropdownOpen(false);
     window.localStorage.setItem(STORAGE_KEYS.currentClassId, String(classId));
     await loadDashboard(user.id, classId);
+  };
+
+  const handleSaveSmartSeatingConfig = async (config) => {
+    if (!user || !currentClassId) {
+      throw new Error('请先选择班级后再保存');
+    }
+
+    const response = await updateSmartSeatingConfig({
+      userId: user.id,
+      classId: currentClassId,
+      config,
+    });
+
+    setSeatingConfigsByClassId((prev) => ({
+      ...prev,
+      [currentClassId]: response.smartSeatingConfig || null,
+    }));
+
+    if (response.logs) {
+      setLogsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.logs,
+      }));
+    }
+
+    return response.smartSeatingConfig || null;
   };
 
   const handleCreateClass = async () => {
@@ -1467,7 +1500,15 @@ function App() {
 
           {activeTab === 'rank' && <HallOfFame students={currentStudents} />}
 
-          {activeTab === 'toolbox' && <Toolbox user={user} students={currentStudents} />}
+          {activeTab === 'toolbox' && (
+            <Toolbox
+              user={user}
+              currentClass={currentClass}
+              students={currentStudents}
+              savedSmartSeatingConfig={currentSeatingConfig}
+              onSaveSmartSeatingConfig={handleSaveSmartSeatingConfig}
+            />
+          )}
 
           {activeTab === 'settings' && (
             <Settings

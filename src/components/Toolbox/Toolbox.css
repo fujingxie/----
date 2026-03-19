@@ -676,6 +676,19 @@
   resize: vertical;
 }
 
+.smart-seating-modal {
+  width: min(96vw, 1380px);
+  max-width: 1380px;
+  max-height: calc(100vh - 72px);
+  margin-top: 26px;
+  padding: 14px;
+}
+
+.smart-seating-modal-body {
+  min-width: 0;
+  overflow: hidden;
+}
+
 @media (max-width: 768px) {
   .toolbox-container {
     padding-inline: 12px;
@@ -728,6 +741,13 @@
   .random-picker-modal {
     width: 94vw;
     padding: 22px 18px 18px;
+  }
+
+  .smart-seating-modal {
+    width: 96vw;
+    max-height: calc(100vh - 32px);
+    margin-top: 10px;
+    padding: 10px;
   }
 
   .timer-modal {

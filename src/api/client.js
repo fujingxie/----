@@ -128,6 +128,12 @@ export const updateThresholds = ({ userId, classId, thresholds }) =>
     body: JSON.stringify({ userId, thresholds }),
   });
 
+export const updateSmartSeatingConfig = ({ userId, classId, config }) =>
+  request(`/classes/${classId}/settings/smart-seating`, {
+    method: 'PUT',
+    body: JSON.stringify({ userId, config }),
+  });
+
 export const resetClassProgress = ({ userId, classId }) =>
   request(`/classes/${classId}/reset-progress`, {
     method: 'POST',

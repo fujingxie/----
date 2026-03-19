@@ -4,6 +4,7 @@ import {
   Clock3,
   Expand,
   Lock,
+  Map,
   Pause,
   Play,
   Settings2,
@@ -18,14 +19,16 @@ import {
 } from 'lucide-react';
 import Modal from '../Common/Modal';
 import { notify } from '../../lib/notify';
+import SmartSeatingTool from './SmartSeatingTool';
 
-const Toolbox = ({ user, students }) => {
+const Toolbox = ({ user, currentClass, students, savedSmartSeatingConfig, onSaveSmartSeatingConfig }) => {
   const [activeTool, setActiveTool] = useState(null);
 
   const isVip2 = user?.level === 'vip2' || user?.level === 'permanent';
   const tools = [
     { id: 'random', name: '随机点名', icon: <UserCheck size={32} />, type: 'basic', color: '#6366f1', status: 'ready' },
     { id: 'timer', name: '倒计时', icon: <Timer size={32} />, type: 'basic', color: '#10b981', status: 'ready' },
+    { id: 'smart_seating', name: '智能排座', icon: <Map size={32} />, type: 'advanced', color: '#2563eb', status: 'ready' },
     { id: 'read_forest', name: '早读素养', icon: <BookOpen size={32} />, type: 'advanced', color: '#f59e0b', status: 'coming' },
     { id: 'mic_power', name: '大声读', icon: <Mic size={32} />, type: 'advanced', color: '#f43f5e', status: 'coming' },
     { id: 'quiet_study', name: '静心自习', icon: <Coffee size={32} />, type: 'advanced', color: '#0f766e', status: 'ready' },
@@ -97,6 +100,21 @@ const Toolbox = ({ user, students }) => {
 
       <Modal isOpen={activeTool === 'quiet_study'} onClose={() => setActiveTool(null)} title="静心自习">
         <QuietStudyTool students={students} />
+      </Modal>
+
+      <Modal
+        isOpen={activeTool === 'smart_seating'}
+        onClose={() => setActiveTool(null)}
+        title="智能排座"
+        contentClassName="smart-seating-modal"
+        bodyClassName="smart-seating-modal-body"
+      >
+        <SmartSeatingTool
+          currentClass={currentClass}
+          students={students}
+          savedConfig={savedSmartSeatingConfig}
+          onSaveConfig={onSaveSmartSeatingConfig}
+        />
       </Modal>
     </div>
   );

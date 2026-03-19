@@ -344,7 +344,7 @@ async function ensureClassSettings(db, classId) {
   }
 
   await db
-    .prepare('INSERT INTO class_settings (class_id, level_thresholds) VALUES (?, ?)')
+    .prepare('INSERT INTO class_settings (class_id, level_thresholds, smart_seating_config) VALUES (?, ?, NULL)')
     .bind(classId, JSON.stringify(DEFAULT_LEVEL_THRESHOLDS))
     .run();
 }
@@ -743,6 +743,26 @@ async function getThresholdsByClassId(db, classId) {
   return DEFAULT_LEVEL_THRESHOLDS;
 }
 
+async function getSmartSeatingConfigByClassId(db, classId) {
+  await ensureClassSettings(db, classId);
+
+  const settings = await db
+    .prepare('SELECT smart_seating_config FROM class_settings WHERE class_id = ?')
+    .bind(classId)
+    .first();
+
+  if (!settings?.smart_seating_config) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(settings.smart_seating_config);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 async function appendLog(db, { classId, userId, actionType, detail, meta = null }) {
   await db
     .prepare('INSERT INTO logs (class_id, user_id, action_type, detail, meta) VALUES (?, ?, ?, ?, ?)')
@@ -832,6 +852,7 @@ async function getBootstrapPayload(db, userId, requestedClassId) {
     rules: await getRulesByClassId(db, resolvedClassId),
     logs: await getLogsByClassId(db, resolvedClassId),
     levelThresholds: await getThresholdsByClassId(db, resolvedClassId),
+    smartSeatingConfig: await getSmartSeatingConfigByClassId(db, resolvedClassId),
   };
 }
 
@@ -1742,6 +1763,77 @@ async function handleUpdateThresholds(db, request, classId) {
 
   return json({
     levelThresholds: await getThresholdsByClassId(db, classId),
+    logs: await getLogsByClassId(db, classId),
+  });
+}
+
+async function handleUpdateSmartSeatingConfig(db, request, classId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const config = body.config;
+
+  if (!userId || !config || typeof config !== 'object') {
+    return error('排座方案格式不正确');
+  }
+
+  const layoutStr = String(config.layoutStr || '').trim() || '2-4-2';
+  const rows = Math.max(1, Math.min(30, Number(config.rows) || 1));
+  const viewMode = config.viewMode === 'teacher' ? 'teacher' : 'student';
+  const lockedIndices = Array.isArray(config.lockedIndices)
+    ? [...new Set(config.lockedIndices.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value >= 0))]
+    : [];
+  const seatMap = Array.isArray(config.seatMap)
+    ? config.seatMap.slice(0, 240).map((seat, index) => {
+        if (!seat || typeof seat !== 'object') {
+          return null;
+        }
+
+        const name = String(seat.name || '').trim();
+        if (!name) {
+          return null;
+        }
+
+        return {
+          id: seat.id || `saved-seat-${index}`,
+          name,
+          gender: seat.gender === '女' ? '女' : '男',
+          height: Number.isFinite(Number(seat.height)) ? Number(seat.height) : 0,
+          vision: String(seat.vision || ''),
+          score: Number.isFinite(Number(seat.score)) ? Number(seat.score) : 0,
+        };
+      })
+    : [];
+
+  await assertClassOwnership(db, userId, classId);
+  await ensureClassSettings(db, classId);
+
+  const payload = {
+    layoutStr,
+    rows,
+    viewMode,
+    lockedIndices,
+    seatMap,
+    saved_at: new Date().toISOString(),
+  };
+
+  await db
+    .prepare(
+      `INSERT INTO class_settings (class_id, level_thresholds, smart_seating_config, updated_at)
+       VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(class_id) DO UPDATE SET smart_seating_config = excluded.smart_seating_config, updated_at = CURRENT_TIMESTAMP`,
+    )
+    .bind(classId, JSON.stringify(DEFAULT_LEVEL_THRESHOLDS), JSON.stringify(payload))
+    .run();
+
+  await appendLog(db, {
+    classId,
+    userId,
+    actionType: '百宝箱',
+    detail: `保存了智能排座方案（${rows} 行，${seatMap.filter(Boolean).length} 名学生）`,
+  });
+
+  return json({
+    smartSeatingConfig: await getSmartSeatingConfigByClassId(db, classId),
     logs: await getLogsByClassId(db, classId),
   });
 }
@@ -2711,6 +2803,11 @@ export default {
       const thresholdMatch = path.match(/^\/api\/classes\/(\d+)\/settings\/thresholds$/);
       if (thresholdMatch && request.method === 'PUT') {
         return await handleUpdateThresholds(db, request, Number(thresholdMatch[1]));
+      }
+
+      const smartSeatingMatch = path.match(/^\/api\/classes\/(\d+)\/settings\/smart-seating$/);
+      if (smartSeatingMatch && request.method === 'PUT') {
+        return await handleUpdateSmartSeatingConfig(db, request, Number(smartSeatingMatch[1]));
       }
 
       const resetProgressMatch = path.match(/^\/api\/classes\/(\d+)\/reset-progress$/);

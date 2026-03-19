@@ -71,6 +71,7 @@ CREATE TABLE rules (
 CREATE TABLE class_settings (
     class_id INTEGER PRIMARY KEY,
     level_thresholds TEXT NOT NULL DEFAULT '[10,20,30,50,70,100]',
+    smart_seating_config TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (class_id) REFERENCES classes(id)
 );
