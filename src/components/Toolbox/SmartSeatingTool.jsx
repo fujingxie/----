@@ -61,6 +61,28 @@ const buildSeatMap = (students, totalSeats) => {
   return seatMap;
 };
 
+const mergeSeatStudents = (seatMap, studentMeta) => {
+  const seatedStudents = Array.isArray(seatMap) ? seatMap.filter(Boolean) : [];
+  const fallbackStudents = Array.isArray(studentMeta) ? studentMeta.filter(Boolean) : [];
+
+  if (seatedStudents.length === 0) {
+    return fallbackStudents;
+  }
+
+  if (seatedStudents.length >= fallbackStudents.length) {
+    return seatedStudents;
+  }
+
+  const identitySet = new Set(
+    seatedStudents.map((student) => student.id || `name:${student.name}`),
+  );
+  const missingStudents = fallbackStudents.filter(
+    (student) => !identitySet.has(student.id || `name:${student.name}`),
+  );
+
+  return [...seatedStudents, ...missingStudents];
+};
+
 const formatVision = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed.toFixed(1) : '';
@@ -195,6 +217,7 @@ export default function SmartSeatingTool({ currentClass, students, savedConfig, 
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef(null);
   const stageExportRef = useRef(null);
+  const previousTotalColsRef = useRef(null);
 
   const layoutGroups = useMemo(() => parseLayoutGroups(layoutStr), [layoutStr]);
   const totalCols = useMemo(
@@ -204,6 +227,7 @@ export default function SmartSeatingTool({ currentClass, students, savedConfig, 
   const totalSeats = rows * totalCols;
   const totalSeatsRef = useRef(totalSeats);
   const currentSeat = selectedSeatIndex === null ? null : seatMap[selectedSeatIndex] || null;
+  const currentStudentCount = studentMeta.length;
 
   useEffect(() => {
     if (!toolMessage) {
@@ -227,10 +251,22 @@ export default function SmartSeatingTool({ currentClass, students, savedConfig, 
   }, [students]);
 
   useEffect(() => {
-    setSeatMap((prev) => buildSeatMap(prev.filter(Boolean), totalSeats));
+    setSeatMap((prev) => buildSeatMap(mergeSeatStudents(prev, studentMeta), totalSeats));
     setLockedIndices((prev) => prev.filter((index) => index < totalSeats));
     setSelectedSeatIndex((prev) => (prev !== null && prev < totalSeats ? prev : null));
-  }, [totalSeats]);
+  }, [studentMeta, totalSeats]);
+
+  useEffect(() => {
+    const previousTotalCols = previousTotalColsRef.current;
+    previousTotalColsRef.current = totalCols;
+
+    if (!Number.isInteger(previousTotalCols) || previousTotalCols === totalCols) {
+      return;
+    }
+
+    const minRowsNeeded = Math.max(1, Math.ceil(Math.max(currentStudentCount, 1) / Math.max(totalCols, 1)));
+    setRows((prev) => (prev < minRowsNeeded ? minRowsNeeded : prev));
+  }, [currentStudentCount, totalCols]);
 
   useEffect(() => {
     if (!savedConfig || typeof savedConfig !== 'object') {
@@ -263,12 +299,11 @@ export default function SmartSeatingTool({ currentClass, students, savedConfig, 
   }, [currentClass?.name, savedConfig]);
 
   const stats = useMemo(() => {
-    const seatedStudents = seatMap.filter(Boolean).length;
     return {
-      seatedStudents,
-      emptySeats: Math.max(0, totalSeats - seatedStudents),
+      seatedStudents: currentStudentCount,
+      emptySeats: Math.max(0, totalSeats - currentStudentCount),
     };
-  }, [seatMap, totalSeats]);
+  }, [currentStudentCount, totalSeats]);
 
   const fitRowsToStudents = () => {
     const nextRows = Math.max(1, Math.ceil(Math.max(studentMeta.length, 1) / Math.max(totalCols, 1)));

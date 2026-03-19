@@ -1339,8 +1339,22 @@ function App() {
     setAppErrorMessage('');
     try {
       const response = await createAdminCodesBatch({ userId: user.id, ...payload });
+      const createdCodes = Array.isArray(response.createdCodes) ? response.createdCodes : [];
+
+      if (createdCodes.length > 0) {
+        const clipboardText = createdCodes.join('\n');
+
+        try {
+          await navigator.clipboard.writeText(clipboardText);
+          notify(`已批量生成 ${createdCodes.length} 个激活码，并复制到剪贴板`);
+        } catch {
+          notify(`已批量生成 ${createdCodes.length} 个激活码，但复制到剪贴板失败`, 'warning');
+        }
+      } else {
+        notify('批量生成已完成，但没有返回激活码内容', 'warning');
+      }
+
       await refreshAdminConsole();
-      notify(`已批量生成 ${response.createdCodes?.length || 0} 个激活码`);
     } catch (error) {
       setAppErrorMessage(error.message);
       throw error;

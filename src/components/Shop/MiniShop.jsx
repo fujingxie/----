@@ -6,6 +6,8 @@ import EmptyState from '../Common/EmptyState';
 import { notify } from '../../lib/notify';
 
 const EMPTY_ITEM = { name: '', price: '', stock: '', icon: '🎁' };
+const SHOP_ICON_OPTIONS = ['🎁', '🍬', '🍪', '🧃', '📚', '✏️', '🏅', '🎨', '🧩', '🪁', '🎯', '⭐'];
+
 const toSafeNonNegativeInteger = (value) => {
   if (value === '' || value === null || value === undefined) {
     return '';
@@ -13,6 +15,23 @@ const toSafeNonNegativeInteger = (value) => {
 
   return String(Math.max(0, parseInt(value, 10) || 0));
 };
+
+function ShopIconPicker({ value, onChange }) {
+  return (
+    <div className="shop-icon-picker">
+      {SHOP_ICON_OPTIONS.map((icon) => (
+        <button
+          key={icon}
+          className={`shop-icon-option ${value === icon ? 'active' : ''}`}
+          onClick={() => onChange(icon)}
+          type="button"
+        >
+          {icon}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const MiniShop = ({
   items,
@@ -239,12 +258,7 @@ const MiniShop = ({
         <div className="add-item-form">
           <div className="form-group">
             <label>商品图标</label>
-            <input
-              className="glass-input"
-              placeholder="🎁"
-              value={newItem.icon}
-              onChange={(event) => setNewItem({ ...newItem, icon: event.target.value })}
-            />
+            <ShopIconPicker value={newItem.icon} onChange={(icon) => setNewItem({ ...newItem, icon })} />
           </div>
           <div className="form-group">
             <label>商品名称</label>
@@ -292,11 +306,7 @@ const MiniShop = ({
         <div className="add-item-form">
           <div className="form-group">
             <label>商品图标</label>
-            <input
-              className="glass-input"
-              value={editDraft.icon}
-              onChange={(event) => setEditDraft((prev) => ({ ...prev, icon: event.target.value }))}
-            />
+            <ShopIconPicker value={editDraft.icon} onChange={(icon) => setEditDraft((prev) => ({ ...prev, icon }))} />
           </div>
           <div className="form-group">
             <label>商品名称</label>
