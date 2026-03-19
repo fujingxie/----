@@ -63,6 +63,31 @@ const CODE_LEVEL_FILTER_OPTIONS = [
   { value: 'permanent', label: '永久会员' },
 ];
 
+const TOOLBOX_LEVEL_OPTIONS = [
+  { value: 'temporary', label: '全员可用' },
+  { value: 'vip1', label: '会员一级' },
+  { value: 'vip2', label: '会员二级' },
+  { value: 'permanent', label: '永久会员' },
+];
+
+const TOOLBOX_TOOL_OPTIONS = [
+  { id: 'random', label: '随机点名' },
+  { id: 'timer', label: '倒计时' },
+  { id: 'smart_seating', label: '智能排座' },
+  { id: 'read_forest', label: '早读素养' },
+  { id: 'mic_power', label: '大声读' },
+  { id: 'quiet_study', label: '静心自习' },
+];
+
+const DEFAULT_TOOLBOX_ACCESS = {
+  random: 'temporary',
+  timer: 'temporary',
+  smart_seating: 'vip2',
+  read_forest: 'vip2',
+  mic_power: 'vip2',
+  quiet_study: 'vip2',
+};
+
 const PAGE_SIZE = 8;
 
 const formatCodeRule = (code) => {
@@ -118,6 +143,12 @@ const formatAdminLogDetail = (detail) => {
   }
 
   return String(detail)
+    .replace(/smart_seating/g, '智能排座')
+    .replace(/quiet_study/g, '静心自习')
+    .replace(/read_forest/g, '早读素养')
+    .replace(/mic_power/g, '大声读')
+    .replace(/random/g, '随机点名')
+    .replace(/timer/g, '倒计时')
     .replace(/temporary/g, '临时体验')
     .replace(/vip1/g, '会员一级')
     .replace(/vip2/g, '会员二级')
@@ -138,9 +169,11 @@ function AdminConsole({
   activationCodes,
   adminLogs,
   freeRegisterConfig,
+  toolboxAccessConfig,
   isMutating,
   onRefresh,
   onUpdateFreeRegisterConfig,
+  onUpdateToolboxAccessConfig,
   onRequestConfirm,
   onUpdateUser,
   onBatchUpdateUsers,
@@ -180,6 +213,10 @@ function AdminConsole({
     mode: freeRegisterConfig?.mode || 'permanent',
     end_at: freeRegisterConfig?.end_at ? String(freeRegisterConfig.end_at).slice(0, 16) : '',
     default_level: freeRegisterConfig?.default_level || 'temporary',
+  });
+  const [toolboxAccessDraft, setToolboxAccessDraft] = useState({
+    ...DEFAULT_TOOLBOX_ACCESS,
+    ...(toolboxAccessConfig || {}),
   });
 
   const sortBy = (list, { key, direction }) => {
@@ -247,6 +284,13 @@ function AdminConsole({
       default_level: freeRegisterConfig?.default_level || 'temporary',
     });
   }, [freeRegisterConfig]);
+
+  React.useEffect(() => {
+    setToolboxAccessDraft({
+      ...DEFAULT_TOOLBOX_ACCESS,
+      ...(toolboxAccessConfig || {}),
+    });
+  }, [toolboxAccessConfig]);
 
   const filteredLogs = useMemo(() => {
     const keyword = logQuery.trim().toLowerCase();
@@ -801,6 +845,70 @@ function AdminConsole({
                 <span>截止时间</span>
                 <strong>{freeRegisterConfig?.end_at ? formatDateTime(freeRegisterConfig.end_at) : '暂无'}</strong>
               </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section className="admin-panel glass-card">
+        <div className="admin-panel-head">
+          <div>
+            <h3>百宝箱权限</h3>
+            <p>按工具单独设置可用等级，前台会自动显示对应的解锁文案。</p>
+          </div>
+        </div>
+        <div className="admin-code-create-grid">
+          <section className="admin-code-create-card">
+            <div className="admin-code-create-head">
+              <strong>工具等级配置</strong>
+              <p>适合把基础工具开放给全员，把高阶工具按会员等级逐步解锁。</p>
+            </div>
+            <div className="admin-code-creator batch">
+              {TOOLBOX_TOOL_OPTIONS.map((tool) => (
+                <label className="admin-field" key={tool.id}>
+                  <span>{tool.label}</span>
+                  <select
+                    className="glass-input compact"
+                    value={toolboxAccessDraft[tool.id] || DEFAULT_TOOLBOX_ACCESS[tool.id]}
+                    onChange={(event) =>
+                      setToolboxAccessDraft((prev) => ({ ...prev, [tool.id]: event.target.value }))
+                    }
+                  >
+                    {TOOLBOX_LEVEL_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+              <button
+                className="confirm-btn"
+                disabled={isMutating}
+                onClick={() => onUpdateToolboxAccessConfig?.(toolboxAccessDraft)}
+                type="button"
+              >
+                保存权限
+              </button>
+            </div>
+          </section>
+
+          <section className="admin-code-create-card">
+            <div className="admin-code-create-head">
+              <strong>当前生效结果</strong>
+              <p>这里显示的是百宝箱首页每个工具现在实际要求的会员等级。</p>
+            </div>
+            <div className="admin-code-creator batch">
+              {TOOLBOX_TOOL_OPTIONS.map((tool) => (
+                <div className="admin-info-item" key={tool.id}>
+                  <span>{tool.label}</span>
+                  <strong>
+                    {TOOLBOX_LEVEL_OPTIONS.find(
+                      (option) => option.value === (toolboxAccessConfig?.[tool.id] || DEFAULT_TOOLBOX_ACCESS[tool.id]),
+                    )?.label || '全员可用'}
+                  </strong>
+                </div>
+              ))}
             </div>
           </section>
         </div>

@@ -15,6 +15,14 @@ const ACTIVATION_CODE_SEEDS = [
   { code: 'CLASS-VIP2-2026', level: 'vip2', expiresInDays: 90 },
   { code: 'CLASS-PERM-2026', level: 'permanent', expiresInDays: null },
 ];
+const DEFAULT_TOOLBOX_ACCESS = {
+  random: 'temporary',
+  timer: 'temporary',
+  smart_seating: 'vip2',
+  read_forest: 'vip2',
+  mic_power: 'vip2',
+  quiet_study: 'vip2',
+};
 
 const SYSTEM_RULES = [
   { name: '字迹工整', icon: '✍️', exp: 2, coins: 5, type: 'positive' },
@@ -334,6 +342,14 @@ async function ensureSystemFlags(db) {
     )
     .bind(JSON.stringify({ default_level: 'temporary' }))
     .run();
+
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO system_flags (key, enabled, mode, end_at, value_json)
+       VALUES ('toolbox_access', 1, 'permanent', NULL, ?)`,
+    )
+    .bind(JSON.stringify(DEFAULT_TOOLBOX_ACCESS))
+    .run();
 }
 
 async function ensureClassSettings(db, classId) {
@@ -440,6 +456,10 @@ function sanitizeFreeRegisterLevel(value) {
   return ['temporary', 'vip1', 'vip2'].includes(value) ? value : 'temporary';
 }
 
+function sanitizeToolboxLevel(value) {
+  return ['temporary', 'vip1', 'vip2', 'permanent'].includes(value) ? value : 'temporary';
+}
+
 function resolveFreeRegisterState(flag) {
   const normalized = flag || {
     key: 'free_register',
@@ -480,6 +500,33 @@ async function getFreeRegisterFlag(db) {
     .first();
 
   return resolveFreeRegisterState(normalizeSystemFlag(row));
+}
+
+async function getToolboxAccessFlag(db) {
+  await ensureSystemFlags(db);
+
+  const row = await db
+    .prepare(
+      `SELECT key, enabled, mode, end_at, value_json, updated_by_user_id, updated_at
+       FROM system_flags
+       WHERE key = 'toolbox_access'`,
+    )
+    .first();
+
+  const normalized = normalizeSystemFlag(row);
+  const value = { ...DEFAULT_TOOLBOX_ACCESS };
+  const rawValue = normalized?.value || {};
+
+  Object.keys(DEFAULT_TOOLBOX_ACCESS).forEach((toolId) => {
+    value[toolId] = sanitizeToolboxLevel(rawValue[toolId]);
+  });
+
+  return {
+    key: 'toolbox_access',
+    value,
+    updated_by_user_id: normalized.updated_by_user_id,
+    updated_at: normalized.updated_at,
+  };
 }
 
 function generateActivationCode(prefix = 'CLASS') {
@@ -853,6 +900,7 @@ async function getBootstrapPayload(db, userId, requestedClassId) {
     logs: await getLogsByClassId(db, resolvedClassId),
     levelThresholds: await getThresholdsByClassId(db, resolvedClassId),
     smartSeatingConfig: await getSmartSeatingConfigByClassId(db, resolvedClassId),
+    toolboxAccess: (await getToolboxAccessFlag(db)).value,
   };
 }
 
@@ -2189,6 +2237,53 @@ async function handleUpdateFreeRegisterFlag(db, request) {
   });
 }
 
+async function handleUpdateToolboxAccessFlag(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const rawConfig = body.config;
+
+  if (!userId) {
+    return error('缺少有效的超管身份');
+  }
+
+  if (!rawConfig || typeof rawConfig !== 'object') {
+    return error('百宝箱权限配置格式不正确');
+  }
+
+  await assertSuperAdmin(db, userId);
+  await ensureSystemFlags(db);
+
+  const nextConfig = { ...DEFAULT_TOOLBOX_ACCESS };
+  Object.keys(DEFAULT_TOOLBOX_ACCESS).forEach((toolId) => {
+    nextConfig[toolId] = sanitizeToolboxLevel(rawConfig[toolId]);
+  });
+
+  await db
+    .prepare(
+      `UPDATE system_flags
+       SET enabled = 1, mode = 'permanent', end_at = NULL, value_json = ?, updated_by_user_id = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE key = 'toolbox_access'`,
+    )
+    .bind(JSON.stringify(nextConfig), userId)
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '系统配置',
+    detail: `更新百宝箱权限：${Object.entries(nextConfig)
+      .map(([toolId, level]) => `${toolId}=${level}`)
+      .join('，')}`,
+  });
+
+  const flag = await getToolboxAccessFlag(db);
+
+  return json({
+    toolboxAccess: flag.value,
+    updated_at: flag.updated_at,
+    updated_by_user_id: flag.updated_by_user_id,
+  });
+}
+
 async function handleUpdateAdminUser(db, request, targetUserId) {
   const body = await readBody(request);
   const userId = parseId(body.userId);
@@ -2701,6 +2796,10 @@ export default {
 
       if (path === '/api/admin/system-flags/free-register' && request.method === 'PUT') {
         return await handleUpdateFreeRegisterFlag(db, request);
+      }
+
+      if (path === '/api/admin/system-flags/toolbox-access' && request.method === 'PUT') {
+        return await handleUpdateToolboxAccessFlag(db, request);
       }
 
       const adminUserMatch = path.match(/^\/api\/admin\/users\/(\d+)$/);

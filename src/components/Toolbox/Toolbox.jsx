@@ -21,22 +21,61 @@ import Modal from '../Common/Modal';
 import { notify } from '../../lib/notify';
 import SmartSeatingTool from './SmartSeatingTool';
 
-const Toolbox = ({ user, currentClass, students, savedSmartSeatingConfig, onSaveSmartSeatingConfig }) => {
-  const [activeTool, setActiveTool] = useState(null);
+const LEVEL_LABELS = {
+  temporary: '全员可用',
+  vip1: '会员一级',
+  vip2: '会员二级',
+  permanent: '永久会员',
+};
 
-  const isVip2 = user?.level === 'vip2' || user?.level === 'permanent';
+const LEVEL_RANK = {
+  temporary: 0,
+  vip1: 1,
+  vip2: 2,
+  permanent: 3,
+};
+
+const DEFAULT_TOOLBOX_ACCESS = {
+  random: 'temporary',
+  timer: 'temporary',
+  smart_seating: 'vip2',
+  read_forest: 'vip2',
+  mic_power: 'vip2',
+  quiet_study: 'vip2',
+};
+
+const Toolbox = ({
+  user,
+  currentClass,
+  students,
+  savedSmartSeatingConfig,
+  onSaveSmartSeatingConfig,
+  toolboxAccessConfig,
+}) => {
+  const [activeTool, setActiveTool] = useState(null);
+  const currentLevelRank = LEVEL_RANK[user?.level || 'temporary'] ?? 0;
+  const resolvedAccess = { ...DEFAULT_TOOLBOX_ACCESS, ...(toolboxAccessConfig || {}) };
   const tools = [
-    { id: 'random', name: '随机点名', icon: <UserCheck size={32} />, type: 'basic', color: '#6366f1', status: 'ready' },
-    { id: 'timer', name: '倒计时', icon: <Timer size={32} />, type: 'basic', color: '#10b981', status: 'ready' },
-    { id: 'smart_seating', name: '智能排座', icon: <Map size={32} />, type: 'advanced', color: '#2563eb', status: 'ready' },
-    { id: 'read_forest', name: '早读素养', icon: <BookOpen size={32} />, type: 'advanced', color: '#f59e0b', status: 'coming' },
-    { id: 'mic_power', name: '大声读', icon: <Mic size={32} />, type: 'advanced', color: '#f43f5e', status: 'coming' },
-    { id: 'quiet_study', name: '静心自习', icon: <Coffee size={32} />, type: 'advanced', color: '#0f766e', status: 'ready' },
-  ];
+    { id: 'random', name: '随机点名', icon: <UserCheck size={32} />, color: '#6366f1', status: 'ready' },
+    { id: 'timer', name: '倒计时', icon: <Timer size={32} />, color: '#10b981', status: 'ready' },
+    { id: 'smart_seating', name: '智能排座', icon: <Map size={32} />, color: '#2563eb', status: 'ready' },
+    { id: 'read_forest', name: '早读素养', icon: <BookOpen size={32} />, color: '#f59e0b', status: 'coming' },
+    { id: 'mic_power', name: '大声读', icon: <Mic size={32} />, color: '#f43f5e', status: 'coming' },
+    { id: 'quiet_study', name: '静心自习', icon: <Coffee size={32} />, color: '#0f766e', status: 'ready' },
+  ].map((tool) => {
+    const minLevel = resolvedAccess[tool.id] || 'temporary';
+    const unlocked = currentLevelRank >= (LEVEL_RANK[minLevel] ?? 0);
+
+    return {
+      ...tool,
+      minLevel,
+      unlocked,
+    };
+  });
 
   const handleToolClick = (tool) => {
-    if (tool.type === 'advanced' && !isVip2) {
-      notify('此工具需要 VIP 2 或永久账号才可使用', 'warning');
+    if (!tool.unlocked) {
+      notify(`此工具需要 ${LEVEL_LABELS[tool.minLevel] || tool.minLevel} 才可使用`, 'warning');
       return;
     }
 
@@ -54,26 +93,27 @@ const Toolbox = ({ user, currentClass, students, savedSmartSeatingConfig, onSave
         {tools.map((tool) => (
           <div
             key={tool.id}
-            className={`tool-card glass-card ${tool.type === 'advanced' && !isVip2 ? 'locked' : ''}`}
+            className={`tool-card glass-card ${!tool.unlocked ? 'locked' : ''}`}
             onClick={() => handleToolClick(tool)}
           >
             <div className="tool-icon" style={{ color: tool.color }}>
               {tool.icon}
             </div>
             <h3 className="tool-name">{tool.name}</h3>
-            {tool.type === 'advanced' && !isVip2 && (
+            {!tool.unlocked && (
               <div className="lock-badge">
                 <Lock size={12} />
-                <span>VIP 2 解锁</span>
+                <span>{LEVEL_LABELS[tool.minLevel] || tool.minLevel} 解锁</span>
               </div>
             )}
-            {tool.type === 'basic' && <div className="tool-tag">全员可用</div>}
-            {tool.type === 'advanced' && isVip2 && tool.status === 'ready' && (
+            {tool.minLevel !== 'temporary' && tool.unlocked && tool.status === 'ready' && (
               <div className="tool-tag ready">已可用</div>
             )}
-            {tool.type === 'advanced' && isVip2 && tool.status !== 'ready' && (
+            {tool.minLevel !== 'temporary' && tool.unlocked && tool.status !== 'ready' && (
               <div className="tool-tag coming">开发中</div>
             )}
+            {tool.minLevel === 'temporary' && tool.status === 'ready' && <div className="tool-tag">全员可用</div>}
+            {tool.minLevel === 'temporary' && tool.status !== 'ready' && <div className="tool-tag coming">开发中</div>}
           </div>
         ))}
       </div>

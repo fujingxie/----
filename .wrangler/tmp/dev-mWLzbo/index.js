@@ -45,6 +45,14 @@ var ACTIVATION_CODE_SEEDS = [
   { code: "CLASS-VIP2-2026", level: "vip2", expiresInDays: 90 },
   { code: "CLASS-PERM-2026", level: "permanent", expiresInDays: null }
 ];
+var DEFAULT_TOOLBOX_ACCESS = {
+  random: "temporary",
+  timer: "temporary",
+  smart_seating: "vip2",
+  read_forest: "vip2",
+  mic_power: "vip2",
+  quiet_study: "vip2"
+};
 var SYSTEM_RULES = [
   { name: "\u5B57\u8FF9\u5DE5\u6574", icon: "\u270D\uFE0F", exp: 2, coins: 5, type: "positive" },
   { name: "\u70ED\u7231\u52B3\u52A8", icon: "\u{1F9F9}", exp: 3, coins: 10, type: "positive" },
@@ -311,6 +319,10 @@ async function ensureSystemFlags(db) {
     `INSERT OR IGNORE INTO system_flags (key, enabled, mode, end_at, value_json)
        VALUES ('free_register', 0, 'permanent', NULL, ?)`
   ).bind(JSON.stringify({ default_level: "temporary" })).run();
+  await db.prepare(
+    `INSERT OR IGNORE INTO system_flags (key, enabled, mode, end_at, value_json)
+       VALUES ('toolbox_access', 1, 'permanent', NULL, ?)`
+  ).bind(JSON.stringify(DEFAULT_TOOLBOX_ACCESS)).run();
 }
 __name(ensureSystemFlags, "ensureSystemFlags");
 async function ensureClassSettings(db, classId) {
@@ -391,6 +403,10 @@ function sanitizeFreeRegisterLevel(value) {
   return ["temporary", "vip1", "vip2"].includes(value) ? value : "temporary";
 }
 __name(sanitizeFreeRegisterLevel, "sanitizeFreeRegisterLevel");
+function sanitizeToolboxLevel(value) {
+  return ["temporary", "vip1", "vip2", "permanent"].includes(value) ? value : "temporary";
+}
+__name(sanitizeToolboxLevel, "sanitizeToolboxLevel");
 function resolveFreeRegisterState(flag) {
   const normalized = flag || {
     key: "free_register",
@@ -428,6 +444,27 @@ async function getFreeRegisterFlag(db) {
   return resolveFreeRegisterState(normalizeSystemFlag(row));
 }
 __name(getFreeRegisterFlag, "getFreeRegisterFlag");
+async function getToolboxAccessFlag(db) {
+  await ensureSystemFlags(db);
+  const row = await db.prepare(
+    `SELECT key, enabled, mode, end_at, value_json, updated_by_user_id, updated_at
+       FROM system_flags
+       WHERE key = 'toolbox_access'`
+  ).first();
+  const normalized = normalizeSystemFlag(row);
+  const value = { ...DEFAULT_TOOLBOX_ACCESS };
+  const rawValue = normalized?.value || {};
+  Object.keys(DEFAULT_TOOLBOX_ACCESS).forEach((toolId) => {
+    value[toolId] = sanitizeToolboxLevel(rawValue[toolId]);
+  });
+  return {
+    key: "toolbox_access",
+    value,
+    updated_by_user_id: normalized.updated_by_user_id,
+    updated_at: normalized.updated_at
+  };
+}
+__name(getToolboxAccessFlag, "getToolboxAccessFlag");
 function generateActivationCode(prefix = "CLASS") {
   const cleanedPrefix = String(prefix || "CLASS").replace(/[^A-Z0-9-]/g, "").slice(0, 12) || "CLASS";
   const seed = Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -709,7 +746,8 @@ async function getBootstrapPayload(db, userId, requestedClassId) {
     rules: await getRulesByClassId(db, resolvedClassId),
     logs: await getLogsByClassId(db, resolvedClassId),
     levelThresholds: await getThresholdsByClassId(db, resolvedClassId),
-    smartSeatingConfig: await getSmartSeatingConfigByClassId(db, resolvedClassId)
+    smartSeatingConfig: await getSmartSeatingConfigByClassId(db, resolvedClassId),
+    toolboxAccess: (await getToolboxAccessFlag(db)).value
   };
 }
 __name(getBootstrapPayload, "getBootstrapPayload");
@@ -1725,6 +1763,40 @@ async function handleUpdateFreeRegisterFlag(db, request) {
   });
 }
 __name(handleUpdateFreeRegisterFlag, "handleUpdateFreeRegisterFlag");
+async function handleUpdateToolboxAccessFlag(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const rawConfig = body.config;
+  if (!userId) {
+    return error("\u7F3A\u5C11\u6709\u6548\u7684\u8D85\u7BA1\u8EAB\u4EFD");
+  }
+  if (!rawConfig || typeof rawConfig !== "object") {
+    return error("\u767E\u5B9D\u7BB1\u6743\u9650\u914D\u7F6E\u683C\u5F0F\u4E0D\u6B63\u786E");
+  }
+  await assertSuperAdmin(db, userId);
+  await ensureSystemFlags(db);
+  const nextConfig = { ...DEFAULT_TOOLBOX_ACCESS };
+  Object.keys(DEFAULT_TOOLBOX_ACCESS).forEach((toolId) => {
+    nextConfig[toolId] = sanitizeToolboxLevel(rawConfig[toolId]);
+  });
+  await db.prepare(
+    `UPDATE system_flags
+       SET enabled = 1, mode = 'permanent', end_at = NULL, value_json = ?, updated_by_user_id = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE key = 'toolbox_access'`
+  ).bind(JSON.stringify(nextConfig), userId).run();
+  await appendAdminLog(db, {
+    userId,
+    actionType: "\u7CFB\u7EDF\u914D\u7F6E",
+    detail: `\u66F4\u65B0\u767E\u5B9D\u7BB1\u6743\u9650\uFF1A${Object.entries(nextConfig).map(([toolId, level]) => `${toolId}=${level}`).join("\uFF0C")}`
+  });
+  const flag = await getToolboxAccessFlag(db);
+  return json({
+    toolboxAccess: flag.value,
+    updated_at: flag.updated_at,
+    updated_by_user_id: flag.updated_by_user_id
+  });
+}
+__name(handleUpdateToolboxAccessFlag, "handleUpdateToolboxAccessFlag");
 async function handleUpdateAdminUser(db, request, targetUserId) {
   const body = await readBody(request);
   const userId = parseId(body.userId);
@@ -2076,6 +2148,9 @@ var src_server_default = {
       }
       if (path === "/api/admin/system-flags/free-register" && request.method === "PUT") {
         return await handleUpdateFreeRegisterFlag(db, request);
+      }
+      if (path === "/api/admin/system-flags/toolbox-access" && request.method === "PUT") {
+        return await handleUpdateToolboxAccessFlag(db, request);
       }
       const adminUserMatch = path.match(/^\/api\/admin\/users\/(\d+)$/);
       if (adminUserMatch && request.method === "PATCH") {

@@ -52,6 +52,7 @@ import {
   updateRule,
   updateShopItem,
   updateSmartSeatingConfig,
+  updateToolboxAccessConfig,
   updateClass,
   updateStudent,
   updateThresholds,
@@ -85,6 +86,14 @@ const MEMBERSHIP_LABELS = {
   vip1: '会员一级',
   vip2: '会员二级',
   permanent: '永久会员',
+};
+const DEFAULT_TOOLBOX_ACCESS = {
+  random: 'temporary',
+  timer: 'temporary',
+  smart_seating: 'vip2',
+  read_forest: 'vip2',
+  mic_power: 'vip2',
+  quiet_study: 'vip2',
 };
 
 const readStoredUser = () => {
@@ -185,6 +194,7 @@ function App() {
     default_level: 'temporary',
     updated_at: null,
   });
+  const [toolboxAccessConfig, setToolboxAccessConfig] = useState(DEFAULT_TOOLBOX_ACCESS);
   const [confirmState, setConfirmState] = useState({
     isOpen: false,
     title: '',
@@ -281,6 +291,7 @@ function App() {
       setCurrentClassId(bundle.currentClassId || null);
       syncClassBundle(bundle);
       persistSession(bundle.user || readStoredUser(), bundle.currentClassId || null);
+      setToolboxAccessConfig(bundle.toolboxAccess || DEFAULT_TOOLBOX_ACCESS);
       return bundle;
     } catch (error) {
       if (error.message?.includes('重新登录') || error.message?.includes('教师账号不存在')) {
@@ -1180,6 +1191,26 @@ function App() {
     }
   };
 
+  const handleAdminUpdateToolboxAccessConfig = async (config) => {
+    if (!user || !isSuperAdmin) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+    try {
+      const response = await updateToolboxAccessConfig({ userId: user.id, config });
+      setToolboxAccessConfig(response.toolboxAccess || DEFAULT_TOOLBOX_ACCESS);
+      notify('百宝箱权限配置已更新');
+      await refreshAdminConsole();
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'admin' && isSuperAdmin) {
       refreshAdminConsole();
@@ -1507,6 +1538,7 @@ function App() {
               students={currentStudents}
               savedSmartSeatingConfig={currentSeatingConfig}
               onSaveSmartSeatingConfig={handleSaveSmartSeatingConfig}
+              toolboxAccessConfig={toolboxAccessConfig}
             />
           )}
 
@@ -1555,9 +1587,11 @@ function App() {
               activationCodes={adminCodes}
               adminLogs={adminLogs}
               freeRegisterConfig={freeRegisterConfig}
+              toolboxAccessConfig={toolboxAccessConfig}
               isMutating={isMutating}
               onRefresh={refreshAdminConsole}
               onUpdateFreeRegisterConfig={handleAdminUpdateFreeRegisterConfig}
+              onUpdateToolboxAccessConfig={handleAdminUpdateToolboxAccessConfig}
               onRequestConfirm={requestConfirm}
               onUpdateUser={handleAdminUpdateUser}
               onBatchUpdateUsers={handleAdminBatchUpdateUsers}

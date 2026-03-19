@@ -164,6 +164,12 @@ export const updateFreeRegisterConfig = ({ userId, enabled, mode, end_at, defaul
     body: JSON.stringify({ userId, enabled, mode, end_at, default_level }),
   });
 
+export const updateToolboxAccessConfig = ({ userId, config }) =>
+  request('/admin/system-flags/toolbox-access', {
+    method: 'PUT',
+    body: JSON.stringify({ userId, config }),
+  });
+
 export const updateAdminUser = ({ userId, targetUserId, updates }) =>
   request(`/admin/users/${targetUserId}`, {
     method: 'PATCH',
