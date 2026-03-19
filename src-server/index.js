@@ -887,6 +887,7 @@ async function getBootstrapPayload(db, userId, requestedClassId) {
       rules: [],
       logs: [],
       levelThresholds: DEFAULT_LEVEL_THRESHOLDS,
+      toolboxAccess: (await getToolboxAccessFlag(db)).value,
     };
   }
 

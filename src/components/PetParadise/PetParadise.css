@@ -164,10 +164,9 @@
 
 .pet-paradise-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 240px));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 25px;
   width: 100%;
-  justify-content: center;
 }
 
 .empty-state {

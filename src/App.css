@@ -283,7 +283,8 @@
 .content-area {
   flex: 1;
   width: 100%;
-  max-width: var(--app-shell-width);
+  max-width: var(--app-content-width);
+  margin: 0 auto;
   display: flex;
   justify-content: center;
   position: relative;
@@ -293,12 +294,13 @@
 
 .view-container {
   width: 100%;
-  max-width: var(--app-shell-width);
+  max-width: var(--app-content-width);
+  margin: 0 auto;
 }
 
 .app-error-banner {
   width: 100%;
-  max-width: var(--app-shell-width);
+  max-width: var(--app-content-width);
   margin-inline: auto;
   margin-bottom: 18px;
   padding: 14px 18px;

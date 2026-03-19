@@ -734,7 +734,8 @@ async function getBootstrapPayload(db, userId, requestedClassId) {
       shopItems: [],
       rules: [],
       logs: [],
-      levelThresholds: DEFAULT_LEVEL_THRESHOLDS
+      levelThresholds: DEFAULT_LEVEL_THRESHOLDS,
+      toolboxAccess: (await getToolboxAccessFlag(db)).value
     };
   }
   return {
