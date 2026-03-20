@@ -401,8 +401,8 @@ const PetParadise = ({
           onInteract={async (rule) => {
             const nextPetPoints = Math.max(0, (interactingStudent.pet_points || 0) + rule.exp);
             const nextCoins = Math.max(0, (interactingStudent.coins || 0) + rule.coins);
-            const nextTotalExp = (interactingStudent.total_exp || 0) + Math.max(rule.exp, 0);
-            const nextTotalCoins = (interactingStudent.total_coins || 0) + Math.max(rule.coins, 0);
+            const nextTotalExp = Math.max(0, (interactingStudent.total_exp || 0) + rule.exp);
+            const nextTotalCoins = Math.max(0, (interactingStudent.total_coins || 0) + rule.coins);
             const updated = {
               ...interactingStudent,
               pet_points: nextPetPoints,
