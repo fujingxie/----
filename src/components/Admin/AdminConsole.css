@@ -193,13 +193,60 @@
 
 .admin-layout.tables {
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+  grid-template-columns: 1fr;
   gap: 20px;
 }
 
 .admin-panel {
   min-width: 0;
   padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.admin-collapsible {
+  gap: 16px;
+}
+
+.admin-collapsible-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-collapsible-copy {
+  min-width: 0;
+}
+
+.admin-collapsible-copy h3 {
+  margin: 0;
+}
+
+.admin-collapsible-copy p {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+}
+
+.admin-collapsible-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.admin-collapsible.open .admin-collapsible-icon {
+  transform: rotate(180deg);
+  color: var(--text-main);
+}
+
+.admin-collapsible-body {
   display: flex;
   flex-direction: column;
   gap: 18px;

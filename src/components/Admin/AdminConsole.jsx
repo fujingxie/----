@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import './AdminConsole.css';
-import { ArrowDownUp, CheckSquare, Copy, Download, History, KeyRound, Shield, Square, Ticket, Users, X } from 'lucide-react';
+import { ArrowDownUp, CheckSquare, ChevronDown, Copy, Download, History, KeyRound, Shield, Square, Ticket, Users, X } from 'lucide-react';
 
 const EMPTY_CODE_FORM = {
   code: '',
@@ -175,6 +175,27 @@ const formatAdminLogDetail = (detail) => {
     .replace(/revoked/g, '已作废')
     .replace(/used/g, '已用完');
 };
+
+function CollapsiblePanel({ title, description, defaultOpen = false, children }) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <section className={`admin-panel glass-card admin-collapsible ${isOpen ? 'open' : ''}`}>
+      <button
+        className="admin-collapsible-toggle"
+        onClick={() => setIsOpen((prev) => !prev)}
+        type="button"
+      >
+        <div className="admin-collapsible-copy">
+          <h3>{title}</h3>
+          <p>{description}</p>
+        </div>
+        <ChevronDown className="admin-collapsible-icon" size={18} />
+      </button>
+      {isOpen ? <div className="admin-collapsible-body">{children}</div> : null}
+    </section>
+  );
+}
 
 function AdminConsole({
   users,
@@ -808,13 +829,11 @@ function AdminConsole({
         {renderOverviewCard('激活码分布', '先看库存和状态，再决定是否补码、作废或导出。', codeOverview)}
       </div>
 
-      <section className="admin-panel glass-card">
-        <div className="admin-panel-head">
-          <div>
-            <h3>渠道入口管理</h3>
-            <p>给不同平台生成不同的注册链接，并分别控制是否需要激活码。</p>
-          </div>
-        </div>
+      <CollapsiblePanel
+        title="渠道入口管理"
+        description="给不同平台生成不同的注册链接，并分别控制是否需要激活码。"
+        defaultOpen
+      >
         <div className="admin-code-create-grid">
           <section className="admin-code-create-card">
             <div className="admin-code-create-head">
@@ -1006,15 +1025,13 @@ function AdminConsole({
             </div>
           </section>
         </div>
-      </section>
+      </CollapsiblePanel>
 
-      <section className="admin-panel glass-card">
-        <div className="admin-panel-head">
-          <div>
-            <h3>免激活注册</h3>
-            <p>开启后，登录页的激活新账号模式将直接注册，不再要求输入激活码。</p>
-          </div>
-        </div>
+      <CollapsiblePanel
+        title="免激活注册"
+        description="开启后，登录页的激活新账号模式将直接注册，不再要求输入激活码。"
+        defaultOpen
+      >
         <div className="admin-code-create-grid">
           <section className="admin-code-create-card">
             <div className="admin-code-create-head">
@@ -1121,15 +1138,12 @@ function AdminConsole({
             </div>
           </section>
         </div>
-      </section>
+      </CollapsiblePanel>
 
-      <section className="admin-panel glass-card">
-        <div className="admin-panel-head">
-          <div>
-            <h3>百宝箱权限</h3>
-            <p>按工具单独设置可用等级，前台会自动显示对应的解锁文案。</p>
-          </div>
-        </div>
+      <CollapsiblePanel
+        title="百宝箱权限"
+        description="按工具单独设置可用等级，前台会自动显示对应的解锁文案。"
+      >
         <div className="admin-code-create-grid">
           <section className="admin-code-create-card">
             <div className="admin-code-create-head">
@@ -1185,17 +1199,14 @@ function AdminConsole({
             </div>
           </section>
         </div>
-      </section>
+      </CollapsiblePanel>
 
       <div className="admin-layout tables">
-        <section className="admin-panel glass-card">
-          <div className="admin-panel-head">
-            <div>
-              <h3>账户管理</h3>
-              <p>表格更适合快速扫账号状态，点任意一行查看详情。</p>
-            </div>
-          </div>
-
+        <CollapsiblePanel
+          title="账户管理"
+          description="表格更适合快速扫账号状态，点任意一行查看详情。"
+          defaultOpen
+        >
           <div className="admin-account-toolbar-card">
             <div className="admin-account-toolbar-row">
               <label className="admin-filter-field admin-search-field">
@@ -1406,17 +1417,12 @@ function AdminConsole({
             </table>
           </div>
           {renderPagination(currentUserPage, userTotalPages, setUserPage)}
+        </CollapsiblePanel>
 
-        </section>
-
-        <section className="admin-panel glass-card">
-          <div className="admin-panel-head">
-            <div>
-              <h3>激活码管理</h3>
-              <p>表格看库存、状态和使用情况，点一行再改详情。</p>
-            </div>
-          </div>
-
+        <CollapsiblePanel
+          title="激活码管理"
+          description="表格看库存、状态和使用情况，点一行再改详情。"
+        >
           <div className="admin-code-toolbar-card">
             <div className="admin-code-filter-row">
               <label className="admin-filter-field">
@@ -1702,16 +1708,14 @@ function AdminConsole({
             </table>
           </div>
           {renderPagination(currentCodePage, codeTotalPages, setCodePage)}
-
-        </section>
+        </CollapsiblePanel>
       </div>
 
-      <section className="admin-panel glass-card">
+      <CollapsiblePanel
+        title="超管操作日志"
+        description="记录账户管理、密码重置、激活码创建和状态修改，方便后续追溯。"
+      >
         <div className="admin-panel-head">
-          <div>
-            <h3>超管操作日志</h3>
-            <p>记录账户管理、密码重置、激活码创建和状态修改，方便后续追溯。</p>
-          </div>
         <div className="admin-log-toolbar">
           <div className="admin-log-head-icon">
             <History size={18} />
@@ -1794,7 +1798,7 @@ function AdminConsole({
           </table>
         </div>
         {renderPagination(currentLogPage, logTotalPages, setLogPage)}
-      </section>
+      </CollapsiblePanel>
 
       {(selectedUser && userDraft) || (selectedCode && codeDraft) ? (
         <div className="admin-drawer-layer" role="presentation">
