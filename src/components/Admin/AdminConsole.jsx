@@ -85,7 +85,7 @@ const TOOLBOX_TOOL_OPTIONS = [
   { id: 'random', label: '随机点名' },
   { id: 'timer', label: '倒计时' },
   { id: 'smart_seating', label: '智能排座' },
-  { id: 'read_forest', label: '早读素养' },
+  { id: 'read_forest', label: '安静养鱼' },
   { id: 'mic_power', label: '大声读' },
   { id: 'quiet_study', label: '静心自习' },
 ];
@@ -156,7 +156,7 @@ const formatAdminLogDetail = (detail) => {
   return String(detail)
     .replace(/smart_seating/g, '智能排座')
     .replace(/quiet_study/g, '静心自习')
-    .replace(/read_forest/g, '早读素养')
+    .replace(/read_forest/g, '安静养鱼')
     .replace(/mic_power/g, '大声读')
     .replace(/random/g, '随机点名')
     .replace(/timer/g, '倒计时')

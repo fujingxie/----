@@ -2452,12 +2452,12 @@ async function handleUpdateRule(db, request, ruleId) {
   await assertClassOwnership(db, userId, classId);
 
   const existing = await db
-    .prepare('SELECT id, class_id, name FROM rules WHERE id = ? AND class_id = ?')
+    .prepare('SELECT id, class_id, name FROM rules WHERE id = ? AND (class_id = ? OR class_id IS NULL)')
     .bind(ruleId, classId)
     .first();
 
   if (!existing) {
-    return error('系统预设规则不可编辑，或目标规则不存在');
+    return error('目标规则不存在');
   }
 
   await db
@@ -2490,12 +2490,12 @@ async function handleDeleteRule(db, request, ruleId) {
   await assertClassOwnership(db, userId, classId);
 
   const rule = await db
-    .prepare('SELECT id, class_id, name FROM rules WHERE id = ? AND class_id = ?')
+    .prepare('SELECT id, class_id, name FROM rules WHERE id = ? AND (class_id = ? OR class_id IS NULL)')
     .bind(ruleId, classId)
     .first();
 
   if (!rule) {
-    return error('系统预设规则不可删除，或目标规则不存在');
+    return error('目标规则不存在');
   }
 
   await db.prepare('DELETE FROM rules WHERE id = ?').bind(ruleId).run();

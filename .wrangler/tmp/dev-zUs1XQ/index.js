@@ -1953,9 +1953,9 @@ async function handleUpdateRule(db, request, ruleId) {
     return error("\u8BF7\u8F93\u5165\u89C4\u5219\u540D\u79F0");
   }
   await assertClassOwnership(db, userId, classId);
-  const existing = await db.prepare("SELECT id, class_id, name FROM rules WHERE id = ? AND class_id = ?").bind(ruleId, classId).first();
+  const existing = await db.prepare("SELECT id, class_id, name FROM rules WHERE id = ? AND (class_id = ? OR class_id IS NULL)").bind(ruleId, classId).first();
   if (!existing) {
-    return error("\u7CFB\u7EDF\u9884\u8BBE\u89C4\u5219\u4E0D\u53EF\u7F16\u8F91\uFF0C\u6216\u76EE\u6807\u89C4\u5219\u4E0D\u5B58\u5728");
+    return error("\u76EE\u6807\u89C4\u5219\u4E0D\u5B58\u5728");
   }
   await db.prepare("UPDATE rules SET name = ?, icon = ?, exp = ?, coins = ?, type = ? WHERE id = ?").bind(name, icon, exp, coins, type, ruleId).run();
   await appendLog(db, {
@@ -1978,9 +1978,9 @@ async function handleDeleteRule(db, request, ruleId) {
     return error("\u7F3A\u5C11\u6709\u6548\u7684\u89C4\u5219\u4E0A\u4E0B\u6587");
   }
   await assertClassOwnership(db, userId, classId);
-  const rule = await db.prepare("SELECT id, class_id, name FROM rules WHERE id = ? AND class_id = ?").bind(ruleId, classId).first();
+  const rule = await db.prepare("SELECT id, class_id, name FROM rules WHERE id = ? AND (class_id = ? OR class_id IS NULL)").bind(ruleId, classId).first();
   if (!rule) {
-    return error("\u7CFB\u7EDF\u9884\u8BBE\u89C4\u5219\u4E0D\u53EF\u5220\u9664\uFF0C\u6216\u76EE\u6807\u89C4\u5219\u4E0D\u5B58\u5728");
+    return error("\u76EE\u6807\u89C4\u5219\u4E0D\u5B58\u5728");
   }
   await db.prepare("DELETE FROM rules WHERE id = ?").bind(ruleId).run();
   await appendLog(db, {

@@ -206,108 +206,116 @@ const ClassSettingsPanel = ({
         {students.length === 0 ? (
           <div className="empty-settings-state">暂时还没有学生，先添加几个名字吧。</div>
         ) : (
-          <div className="students-card-grid">
-            {students.map((student) => {
-              const isEditing = editingStudentId === student.id;
-              const isSelected = selectedStudentIds.includes(student.id);
+          <div className="students-table-wrapper">
+            <table className="students-table students-table-modern">
+              <thead>
+                <tr>
+                  <th className="checkbox-col">选择</th>
+                  <th>学生姓名</th>
+                  <th>宠物状态</th>
+                  <th>宠物名称</th>
+                  <th>等级</th>
+                  <th>金币</th>
+                  <th>经验</th>
+                  <th className="actions-col">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {students.map((student) => {
+                  const isEditing = editingStudentId === student.id;
+                  const isSelected = selectedStudentIds.includes(student.id);
 
-              return (
-                <article key={student.id} className={`student-admin-card glass-card ${isSelected ? 'selected' : ''}`}>
-                  <button className="student-select-toggle" onClick={() => toggleStudentSelection(student.id)} type="button">
-                    {isSelected ? <CheckSquare size={18} /> : <Square size={18} />}
-                  </button>
-
-                  <div className="student-admin-head">
-                    <div>
-                      <span className="student-admin-species">{student.pet_name || '未命名伙伴'}</span>
-                      {isEditing ? (
-                        <div className="student-inline-editor">
-                          <input
-                            className="glass-input compact"
-                            value={editingStudentName}
-                            onChange={(event) => setEditingStudentName(event.target.value)}
-                          />
-                          <button className="confirm-btn micro" onClick={() => handleRenameStudent(student)} type="button">
-                            保存
+                  return (
+                    <tr key={student.id} className={isSelected ? 'selected-row' : ''}>
+                      <td className="checkbox-col">
+                        <button className="student-row-select" onClick={() => toggleStudentSelection(student.id)} type="button">
+                          {isSelected ? <CheckSquare size={18} /> : <Square size={18} />}
+                        </button>
+                      </td>
+                      <td>
+                        {isEditing ? (
+                          <div className="student-inline-editor">
+                            <input
+                              className="glass-input compact"
+                              value={editingStudentName}
+                              onChange={(event) => setEditingStudentName(event.target.value)}
+                            />
+                            <button className="confirm-btn micro" onClick={() => handleRenameStudent(student)} type="button">
+                              保存
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="student-name-cell">
+                            <strong>{student.name}</strong>
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <span className={`student-admin-status ${student.pet_status === 'egg' ? 'egg' : 'active'}`}>
+                          {student.pet_status === 'egg' ? '待唤醒' : '已激活'}
+                        </span>
+                      </td>
+                      <td>{student.pet_status === 'egg' ? '神秘蛋' : student.pet_name || '未命名伙伴'}</td>
+                      <td>{student.pet_status === 'egg' ? '-' : `Lv.${student.pet_level || 0}`}</td>
+                      <td>💰 {student.coins || 0}</td>
+                      <td>⭐ {student.total_exp || 0}</td>
+                      <td className="actions-col">
+                        <div className="actions">
+                          {!isEditing && (
+                            <button
+                              className="icon-btn blue"
+                              onClick={() => startEditingStudent(student)}
+                              type="button"
+                              title="编辑学生姓名"
+                            >
+                              <PenSquare size={14} />
+                            </button>
+                          )}
+                          {!isEditing && (
+                            <button
+                              className="icon-btn amber"
+                              onClick={async () => {
+                                const confirmed = await onRequestConfirm({
+                                  title: '重置宠物',
+                                  message: `确定要将 ${student.name} 的当前宠物重置为神秘蛋吗？当前宠物会回到待唤醒状态。`,
+                                  tone: 'danger',
+                                  confirmLabel: '确认重置',
+                                });
+                                if (confirmed) {
+                                  onResetStudentPet(student);
+                                }
+                              }}
+                              type="button"
+                              title="重置宠物"
+                            >
+                              <RotateCcw size={14} />
+                            </button>
+                          )}
+                          <button
+                            className="icon-btn red"
+                            onClick={async () => {
+                              const confirmed = await onRequestConfirm({
+                                title: '删除学生',
+                                message: `确定要移除学生 ${student.name} 吗？该学生会从当前班级列表中移除。`,
+                                tone: 'danger',
+                                confirmLabel: '确认移除',
+                              });
+                              if (confirmed) {
+                                onRemoveStudent(student.id, student.name);
+                              }
+                            }}
+                            type="button"
+                            title="删除学生"
+                          >
+                            <Trash2 size={14} />
                           </button>
                         </div>
-                      ) : (
-                        <h4>{student.name}</h4>
-                      )}
-                    </div>
-                    <span className={`student-admin-status ${student.pet_status === 'egg' ? 'egg' : 'active'}`}>
-                      {student.pet_status === 'egg' ? '待唤醒' : `Lv.${student.pet_level || 0}`}
-                    </span>
-                  </div>
-
-                  <div className="student-admin-stats">
-                    <div>
-                      <label>金币</label>
-                      <strong>💰 {student.coins || 0}</strong>
-                    </div>
-                    <div>
-                      <label>经验</label>
-                      <strong>⭐ {student.total_exp || 0}</strong>
-                    </div>
-                    <div>
-                      <label>宠物</label>
-                      <strong>{student.pet_status === 'egg' ? '神秘蛋' : student.pet_name || '已唤醒'}</strong>
-                    </div>
-                  </div>
-
-                  <div className="student-card-actions">
-                    {!isEditing && (
-                      <button
-                        className="icon-btn blue"
-                        onClick={() => startEditingStudent(student)}
-                        type="button"
-                        title="编辑学生姓名"
-                      >
-                        <PenSquare size={14} />
-                      </button>
-                    )}
-                    {!isEditing && (
-                      <button
-                        className="icon-btn amber"
-                        onClick={async () => {
-                          const confirmed = await onRequestConfirm({
-                            title: '重置宠物',
-                            message: `确定要将 ${student.name} 的当前宠物重置为神秘蛋吗？当前宠物会回到待唤醒状态。`,
-                            tone: 'danger',
-                            confirmLabel: '确认重置',
-                          });
-                          if (confirmed) {
-                            onResetStudentPet(student);
-                          }
-                        }}
-                        type="button"
-                        title="重置宠物"
-                      >
-                        <RotateCcw size={14} />
-                      </button>
-                    )}
-                    <button
-                      className="icon-btn red"
-                      onClick={async () => {
-                        const confirmed = await onRequestConfirm({
-                          title: '删除学生',
-                          message: `确定要移除学生 ${student.name} 吗？该学生会从当前班级列表中移除。`,
-                          tone: 'danger',
-                          confirmLabel: '确认移除',
-                        });
-                        if (confirmed) {
-                          onRemoveStudent(student.id, student.name);
-                        }
-                      }}
-                      type="button"
-                      title="删除学生"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -514,15 +522,12 @@ const RulesSettingsPanel = ({
             </div>
 
             <div className="rule-card-actions">
-              {!rule.isSystem && (
-                <button className="icon-btn blue soft" onClick={() => startEditingRule(rule)} type="button" title="编辑规则">
-                  <PenSquare size={16} />
-                </button>
-              )}
+              <button className="icon-btn blue soft" onClick={() => startEditingRule(rule)} type="button" title="编辑规则">
+                <PenSquare size={16} />
+              </button>
               <button
                 className="icon-btn red soft"
                 onClick={() => onDeleteRule(rule.id)}
-                disabled={rule.isSystem}
                 type="button"
                 title="删除规则"
               >

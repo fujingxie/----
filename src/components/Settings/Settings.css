@@ -750,6 +750,7 @@
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+  border: 1px solid rgba(226, 232, 240, 0.85);
 }
 
 .students-selection-bar {
@@ -891,6 +892,26 @@
   text-align: left;
 }
 
+.students-table-modern thead th {
+  background: rgba(248, 250, 252, 0.95);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.88);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.students-table-modern tbody tr {
+  transition: background 0.18s ease;
+}
+
+.students-table-modern tbody tr:hover {
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.students-table-modern tbody tr.selected-row {
+  background: rgba(224, 231, 255, 0.4);
+}
+
 .students-table th {
   background: rgba(0,0,0,0.02);
   padding: 12px 16px;
@@ -902,6 +923,31 @@
   padding: 12px 16px;
   border-top: 1px solid rgba(0,0,0,0.03);
   font-size: 14px;
+  vertical-align: middle;
+}
+
+.checkbox-col {
+  width: 72px;
+}
+
+.actions-col {
+  width: 144px;
+}
+
+.student-row-select {
+  border: none;
+  background: transparent;
+  color: var(--brand-color);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.student-name-cell strong {
+  color: var(--text-main);
+  font-size: 15px;
+  font-weight: 800;
 }
 
 .empty-table-cell {
