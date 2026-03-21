@@ -1,5 +1,9 @@
 const DEFAULT_LEVEL_THRESHOLDS = [10, 20, 30, 50, 70, 100];
 const DEFAULT_PET_CONDITION_CONFIG = {
+  enabled: true,
+  skip_weekends: true,
+  pause_start_date: null,
+  pause_end_date: null,
   hungry_days: 2,
   weak_days: 4,
   sleeping_days: 7,
@@ -106,6 +110,28 @@ const parsePetCollection = (value) => {
 
 const nowIso = () => new Date().toISOString();
 
+const parseDateOnlyToUtcMs = (value, endOfDay = false) => {
+  if (typeof value !== 'string' || !value.trim()) {
+    return null;
+  }
+
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, day] = match;
+  return Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    endOfDay ? 23 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 999 : 0,
+  );
+};
+
 const createCollectionId = (studentId) =>
   `${studentId || 'student'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -193,13 +219,70 @@ const getDaysSinceLastFed = (lastFedAt) => {
   return Math.floor((Date.now() - timestamp) / DAY_IN_MS);
 };
 
+const isDayPaused = (dayIndex, config) => {
+  const dayStartMs = dayIndex * DAY_IN_MS;
+  const weekday = new Date(dayStartMs).getUTCDay();
+
+  if (config.skip_weekends && (weekday === 0 || weekday === 6)) {
+    return true;
+  }
+
+  const pauseStartMs = parseDateOnlyToUtcMs(config.pause_start_date, false);
+  const pauseEndMs = parseDateOnlyToUtcMs(config.pause_end_date, true);
+
+  if (pauseStartMs !== null && pauseEndMs !== null) {
+    return dayStartMs >= pauseStartMs && dayStartMs <= pauseEndMs;
+  }
+
+  return false;
+};
+
+const countEffectiveDaysBetween = (startMs, endMs, config) => {
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+    return 0;
+  }
+
+  const startDayIndex = Math.floor(startMs / DAY_IN_MS);
+  const endDayIndex = Math.floor(endMs / DAY_IN_MS);
+  let effectiveDays = 0;
+
+  for (let dayIndex = startDayIndex + 1; dayIndex <= endDayIndex; dayIndex += 1) {
+    if (!isDayPaused(dayIndex, config)) {
+      effectiveDays += 1;
+    }
+  }
+
+  return effectiveDays;
+};
+
+const getEffectiveDaysSinceLastFed = (lastFedAt, config) => {
+  if (!config?.enabled) {
+    return 0;
+  }
+
+  if (!lastFedAt) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const timestamp = new Date(lastFedAt).getTime();
+  if (Number.isNaN(timestamp)) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return countEffectiveDaysBetween(timestamp, Date.now(), config);
+};
+
 const derivePetCondition = (student) => {
   if (!student || student.pet_status === 'egg') {
     return 'healthy';
   }
 
   const config = normalizePetConditionConfig(student.pet_condition_config);
-  const daysSinceLastFed = getDaysSinceLastFed(student.last_fed_at);
+  if (!config.enabled) {
+    return 'healthy';
+  }
+
+  const daysSinceLastFed = getEffectiveDaysSinceLastFed(student.last_fed_at, config);
 
   if (daysSinceLastFed >= config.sleeping_days) {
     return 'sleeping';
@@ -277,6 +360,24 @@ const degradeStudentToEgg = (student) => {
 };
 
 const applyPetDecayToRow = (student, levelThresholds, config) => {
+  if (!config.enabled) {
+    const nextCondition = student?.pet_status === 'egg' ? 'healthy' : 'healthy';
+    const changed =
+      (student?.pet_condition || 'healthy') !== nextCondition
+      || (student?.pet_condition_locked_at || null) !== null;
+    return {
+      student: {
+        ...student,
+        pet_condition: nextCondition,
+        pet_condition_locked_at: null,
+      },
+      changed,
+      decayedExp: 0,
+      revertedToEgg: false,
+      nextCondition,
+    };
+  }
+
   if (!student || student.pet_status === 'egg' || !student.last_fed_at) {
     return {
       student,
@@ -300,8 +401,8 @@ const applyPetDecayToRow = (student, levelThresholds, config) => {
 
   const decayBaseMs = student.last_decay_at ? new Date(student.last_decay_at).getTime() : lastFedAtMs;
   const safeDecayBaseMs = Number.isNaN(decayBaseMs) ? lastFedAtMs : decayBaseMs;
-  const currentDayIndex = getDaysSinceLastFed(student.last_fed_at);
-  const lastSettledDayIndex = Math.max(0, Math.floor((safeDecayBaseMs - lastFedAtMs) / DAY_IN_MS));
+  const currentDayIndex = getEffectiveDaysSinceLastFed(student.last_fed_at, config);
+  const lastSettledDayIndex = Math.max(0, countEffectiveDaysBetween(lastFedAtMs, safeDecayBaseMs, config));
 
   let totalDecay = 0;
   for (let dayIndex = lastSettledDayIndex + 1; dayIndex <= currentDayIndex; dayIndex += 1) {
@@ -393,6 +494,21 @@ const normalizePetConditionConfig = (value) => {
     }
   }
 
+  const enabled = parsed?.enabled === undefined
+    ? DEFAULT_PET_CONDITION_CONFIG.enabled
+    : parsed?.enabled === true || parsed?.enabled === 'true' || parsed?.enabled === 1 || parsed?.enabled === '1';
+  const skipWeekends = parsed?.skip_weekends === undefined
+    ? DEFAULT_PET_CONDITION_CONFIG.skip_weekends
+    : parsed?.skip_weekends === true
+      || parsed?.skip_weekends === 'true'
+      || parsed?.skip_weekends === 1
+      || parsed?.skip_weekends === '1';
+  const pauseStartDate = typeof parsed?.pause_start_date === 'string' && parsed.pause_start_date.trim()
+    ? parsed.pause_start_date.trim()
+    : null;
+  const pauseEndDate = typeof parsed?.pause_end_date === 'string' && parsed.pause_end_date.trim()
+    ? parsed.pause_end_date.trim()
+    : null;
   const hungryDays = Math.max(1, Number(parsed?.hungry_days || DEFAULT_PET_CONDITION_CONFIG.hungry_days));
   const weakDays = Math.max(hungryDays + 1, Number(parsed?.weak_days || DEFAULT_PET_CONDITION_CONFIG.weak_days));
   const sleepingDays = Math.max(weakDays + 1, Number(parsed?.sleeping_days || DEFAULT_PET_CONDITION_CONFIG.sleeping_days));
@@ -401,6 +517,10 @@ const normalizePetConditionConfig = (value) => {
   const sleepingDecay = Math.max(0, Number(parsed?.sleeping_decay ?? DEFAULT_PET_CONDITION_CONFIG.sleeping_decay));
 
   return {
+    enabled,
+    skip_weekends: skipWeekends,
+    pause_start_date: pauseStartDate,
+    pause_end_date: pauseEndDate,
     hungry_days: hungryDays,
     weak_days: weakDays,
     sleeping_days: sleepingDays,
@@ -2558,8 +2678,11 @@ async function handleUpdateThresholds(db, request, classId) {
     userId,
     actionType: '规则修改',
     detail:
-      `更新了等级阈值：${thresholds.join(' / ')}；宠物状态阈值：${petConditionConfig.hungry_days}/${petConditionConfig.weak_days}/${petConditionConfig.sleeping_days} 天；` +
-      `日衰减：${petConditionConfig.hungry_decay}/${petConditionConfig.weak_decay}/${petConditionConfig.sleeping_decay} EXP`,
+      `更新了等级阈值：${thresholds.join(' / ')}；宠物衰减：${petConditionConfig.enabled ? '开启' : '关闭'}；` +
+      `状态阈值：${petConditionConfig.hungry_days}/${petConditionConfig.weak_days}/${petConditionConfig.sleeping_days} 天；` +
+      `日衰减：${petConditionConfig.hungry_decay}/${petConditionConfig.weak_decay}/${petConditionConfig.sleeping_decay} EXP；` +
+      `跳过周末：${petConditionConfig.skip_weekends ? '是' : '否'}；` +
+      `假期保护：${petConditionConfig.pause_start_date && petConditionConfig.pause_end_date ? `${petConditionConfig.pause_start_date} ~ ${petConditionConfig.pause_end_date}` : '未设置'}`,
   });
 
   return json({

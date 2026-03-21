@@ -42,6 +42,7 @@ const PetParadise = ({
   onFeedStudentsBatch,
   rules,
   levelThresholds,
+  petConditionConfig,
 }) => {
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
@@ -387,6 +388,7 @@ const PetParadise = ({
               adoptionCount={getAdoptionCount(student)}
               isReadyForNewPet={isStudentAtMaxLevel(student, levelThresholds)}
               levelThresholds={levelThresholds}
+              petConditionConfig={petConditionConfig}
               effect={petEffects[student.id] || null}
               onOpenCollection={setCollectionStudent}
               onActivate={handlePetPrimaryAction}

@@ -30,6 +30,7 @@ const getNextLevelInfo = (student, levelThresholds = []) => {
 const PetCard = ({
   student,
   levelThresholds = [],
+  petConditionConfig = null,
   effect = null,
   onActivate,
   onOpenCollection,
@@ -149,7 +150,7 @@ const PetCard = ({
         {!isEgg && (
           <div className="pet-status-copy">
             <span className={`pet-status-last-fed ${visualCondition}`}>{formatLastFedLabel(student.last_fed_at)}</span>
-            <p className="pet-status-hint">{getPetSafetyHint(student)}</p>
+            <p className="pet-status-hint">{getPetSafetyHint(student, petConditionConfig)}</p>
           </div>
         )}
         <p className="pet-level-caption">{nextLevelInfo.label}</p>

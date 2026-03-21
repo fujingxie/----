@@ -20,6 +20,10 @@ import { graduateToNewEgg } from '../../lib/petCollection';
 
 const DEFAULT_THRESHOLDS = [10, 20, 30, 50, 70, 100];
 const DEFAULT_PET_CONDITION_CONFIG = {
+  enabled: true,
+  skip_weekends: true,
+  pause_start_date: null,
+  pause_end_date: null,
   hungry_days: 2,
   weak_days: 4,
   sleeping_days: 7,
@@ -372,6 +376,10 @@ const RulesSettingsPanel = ({
     }
 
     const normalizedCondition = {
+      enabled: Boolean(conditionDraft.enabled),
+      skip_weekends: Boolean(conditionDraft.skip_weekends),
+      pause_start_date: conditionDraft.pause_start_date || null,
+      pause_end_date: conditionDraft.pause_end_date || null,
       hungry_days: Number(conditionDraft.hungry_days || 0),
       weak_days: Number(conditionDraft.weak_days || 0),
       sleeping_days: Number(conditionDraft.sleeping_days || 0),
@@ -389,6 +397,20 @@ const RulesSettingsPanel = ({
       || normalizedCondition.sleeping_decay < 0
     ) {
       window.alert('宠物状态配置需要满足：饥饿 < 虚弱 < 休眠，衰减经验不能小于 0');
+      return;
+    }
+
+    if (Boolean(normalizedCondition.pause_start_date) !== Boolean(normalizedCondition.pause_end_date)) {
+      window.alert('假期保护需要同时填写开始日期和结束日期');
+      return;
+    }
+
+    if (
+      normalizedCondition.pause_start_date
+      && normalizedCondition.pause_end_date
+      && normalizedCondition.pause_start_date > normalizedCondition.pause_end_date
+    ) {
+      window.alert('假期保护的结束日期不能早于开始日期');
       return;
     }
 
@@ -669,7 +691,69 @@ const RulesSettingsPanel = ({
         <div className="thresholds-panel-header">
           <div>
             <h4>宠物状态时间</h4>
-            <p className="hint inline-hint">设置宠物在多少天未获得积极课堂互动后进入饥饿、虚弱和休眠。</p>
+            <p className="hint inline-hint">可控制是否启用长期未喂养衰减，并配置周末与假期保护。</p>
+          </div>
+        </div>
+        <div className="pet-condition-switches">
+          <label className={`pet-condition-toggle ${conditionDraft.enabled ? 'active' : ''}`}>
+            <input
+              type="checkbox"
+              checked={Boolean(conditionDraft.enabled)}
+              onChange={(event) =>
+                setConditionDraft((prev) => ({ ...prev, enabled: event.target.checked }))
+              }
+            />
+            <div>
+              <strong>启用宠物衰减机制</strong>
+              <span>关闭后，宠物不会因长期未喂养而进入饥饿、虚弱、休眠或经验衰减。</span>
+            </div>
+          </label>
+          <label className={`pet-condition-toggle ${conditionDraft.skip_weekends ? 'active' : ''}`}>
+            <input
+              type="checkbox"
+              checked={Boolean(conditionDraft.skip_weekends)}
+              onChange={(event) =>
+                setConditionDraft((prev) => ({ ...prev, skip_weekends: event.target.checked }))
+              }
+            />
+            <div>
+              <strong>跳过周末</strong>
+              <span>开启后，周六和周日不会计入未喂养天数，也不会触发经验衰减。</span>
+            </div>
+          </label>
+        </div>
+        <div className="thresholds-grid pet-condition-grid holiday-grid">
+          <div className="lv-input-box">
+            <label>假期保护开始</label>
+            <input
+              className="glass-input small"
+              type="date"
+              value={conditionDraft.pause_start_date || ''}
+              onChange={(event) =>
+                setConditionDraft((prev) => ({ ...prev, pause_start_date: event.target.value || null }))
+              }
+            />
+            <span className="input-unit">可留空</span>
+          </div>
+          <div className="lv-input-box">
+            <label>假期保护结束</label>
+            <input
+              className="glass-input small"
+              type="date"
+              value={conditionDraft.pause_end_date || ''}
+              onChange={(event) =>
+                setConditionDraft((prev) => ({ ...prev, pause_end_date: event.target.value || null }))
+              }
+            />
+            <span className="input-unit">可留空</span>
+          </div>
+          <div className="pet-condition-summary-card">
+            <strong>{conditionDraft.enabled ? '当前已启用衰减机制' : '当前已暂停衰减机制'}</strong>
+            <p>
+              {conditionDraft.pause_start_date && conditionDraft.pause_end_date
+                ? `假期保护：${conditionDraft.pause_start_date} 至 ${conditionDraft.pause_end_date}`
+                : '未设置假期保护区间'}
+            </p>
           </div>
         </div>
         <div className="thresholds-grid pet-condition-grid">
@@ -1411,6 +1495,10 @@ const Settings = ({
             ) : (
               <RulesSettingsPanel
                 key={`${currentClass.id}-${(levelThresholds || DEFAULT_THRESHOLDS).join('-')}-${
+                  petConditionConfig?.enabled === false ? 'off' : 'on'
+                }-${petConditionConfig?.skip_weekends === false ? 'weekdays-all' : 'skip-weekends'}-${
+                  petConditionConfig?.pause_start_date || 'nostart'
+                }-${petConditionConfig?.pause_end_date || 'noend'}-${
                   (petConditionConfig?.hungry_days || DEFAULT_PET_CONDITION_CONFIG.hungry_days)
                 }-${(petConditionConfig?.weak_days || DEFAULT_PET_CONDITION_CONFIG.weak_days)}-${
                   petConditionConfig?.sleeping_days || DEFAULT_PET_CONDITION_CONFIG.sleeping_days

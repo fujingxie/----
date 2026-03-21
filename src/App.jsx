@@ -65,6 +65,10 @@ import './App.css';
 
 const DEFAULT_LEVEL_THRESHOLDS = [10, 20, 30, 50, 70, 100];
 const DEFAULT_PET_CONDITION_CONFIG = {
+  enabled: true,
+  skip_weekends: true,
+  pause_start_date: null,
+  pause_end_date: null,
   hungry_days: 2,
   weak_days: 4,
   sleeping_days: 7,

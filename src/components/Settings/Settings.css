@@ -1012,6 +1012,74 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.holiday-grid {
+  align-items: stretch;
+}
+
+.pet-condition-switches {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.pet-condition-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  cursor: pointer;
+}
+
+.pet-condition-toggle.active {
+  border-color: rgba(59, 130, 246, 0.28);
+  box-shadow: 0 12px 24px rgba(59, 130, 246, 0.08);
+}
+
+.pet-condition-toggle input {
+  margin-top: 2px;
+}
+
+.pet-condition-toggle strong {
+  display: block;
+  color: #0f172a;
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+
+.pet-condition-toggle span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.pet-condition-summary-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px 20px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.92), rgba(248, 250, 252, 0.92));
+  border: 1px solid rgba(191, 219, 254, 0.8);
+}
+
+.pet-condition-summary-card strong {
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.pet-condition-summary-card p {
+  margin: 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
 .lv-input-box {
   display: flex;
   flex-direction: column;
@@ -1454,6 +1522,12 @@
 
   .thresholds-grid {
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  .pet-condition-switches,
+  .holiday-grid,
+  .pet-condition-grid {
+    grid-template-columns: 1fr;
   }
 
   .students-admin-grid,

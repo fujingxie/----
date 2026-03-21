@@ -78,7 +78,7 @@ CREATE TABLE rules (
 CREATE TABLE class_settings (
     class_id INTEGER PRIMARY KEY,
     level_thresholds TEXT NOT NULL DEFAULT '[10,20,30,50,70,100]',
-    pet_condition_config TEXT NOT NULL DEFAULT '{"hungry_days":2,"weak_days":4,"sleeping_days":7,"hungry_decay":0,"weak_decay":1,"sleeping_decay":2}',
+    pet_condition_config TEXT NOT NULL DEFAULT '{"enabled":true,"skip_weekends":true,"pause_start_date":null,"pause_end_date":null,"hungry_days":2,"weak_days":4,"sleeping_days":7,"hungry_decay":0,"weak_decay":1,"sleeping_decay":2}',
     smart_seating_config TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (class_id) REFERENCES classes(id)
