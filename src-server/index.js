@@ -1,4 +1,14 @@
 const DEFAULT_LEVEL_THRESHOLDS = [10, 20, 30, 50, 70, 100];
+const DEFAULT_PET_CONDITION_CONFIG = {
+  hungry_days: 2,
+  weak_days: 4,
+  sleeping_days: 7,
+  hungry_decay: 0,
+  weak_decay: 1,
+  sleeping_decay: 2,
+};
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const STUDENT_SELECT_FIELDS = `id, class_id, name, pet_status, pet_condition, last_fed_at, last_decay_at, pet_condition_locked_at, pet_name, pet_type_id, pet_level, pet_points, coins, total_exp, total_coins, reward_count, pet_collection, created_at`;
 const FREE_REGISTER_LEVEL_EXPIRES_IN_DAYS = {
   temporary: null,
   vip1: null,
@@ -94,6 +104,258 @@ const parsePetCollection = (value) => {
   }
 };
 
+const nowIso = () => new Date().toISOString();
+
+const createCollectionId = (studentId) =>
+  `${studentId || 'student'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const parseServerPetCollection = (value, student = null) => {
+  const collection = parsePetCollection(value);
+
+  if (collection.length > 0) {
+    return collection
+      .filter(Boolean)
+      .map((entry) => ({
+        id: entry.id || createCollectionId(student?.id),
+        pet_type_id: entry.pet_type_id || null,
+        pet_name: entry.pet_name || (entry.pet_type_id ? '未命名伙伴' : '神秘蛋'),
+        pet_level: Number(entry.pet_level || 0),
+        adopted_at: entry.adopted_at || nowIso(),
+        completed_at: entry.completed_at || null,
+        status: entry.status || 'graduated',
+      }));
+  }
+
+  if (student?.pet_status === 'egg' || student?.pet_type_id) {
+    return student?.pet_status === 'egg' && !student?.pet_type_id
+      ? []
+      : [
+          {
+            id: createCollectionId(student?.id),
+            pet_type_id: student?.pet_type_id || null,
+            pet_name: student?.pet_name || '未命名伙伴',
+            pet_level: Number(student?.pet_level || 1),
+            adopted_at: student?.created_at || nowIso(),
+            completed_at: null,
+            status: student?.pet_status === 'egg' ? 'active-egg' : 'active',
+          },
+        ];
+  }
+
+  return [];
+};
+
+const syncStudentCollectionProgress = (student) => {
+  const collection = parseServerPetCollection(student?.pet_collection, student);
+  if (collection.length === 0) {
+    return collection;
+  }
+
+  const currentIndex = collection.findIndex((entry) => entry.status === 'active' || entry.status === 'active-egg');
+  if (currentIndex < 0) {
+    return collection;
+  }
+
+  const currentEntry = collection[currentIndex];
+  collection[currentIndex] = {
+    ...currentEntry,
+    pet_type_id: student?.pet_type_id || currentEntry.pet_type_id || null,
+    pet_name: student?.pet_name || currentEntry.pet_name,
+    pet_level: Number(student?.pet_level || currentEntry.pet_level || 0),
+    status: student?.pet_status === 'egg' ? 'active-egg' : 'active',
+  };
+
+  return collection;
+};
+
+const resolvePetLevel = (totalExp, thresholds = DEFAULT_LEVEL_THRESHOLDS) => {
+  let nextLevel = 1;
+
+  thresholds.forEach((threshold, index) => {
+    if (Number(totalExp || 0) >= Number(threshold || 0)) {
+      nextLevel = index + 2;
+    }
+  });
+
+  return nextLevel;
+};
+
+const getDaysSinceLastFed = (lastFedAt) => {
+  if (!lastFedAt) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const timestamp = new Date(lastFedAt).getTime();
+  if (Number.isNaN(timestamp)) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return Math.floor((Date.now() - timestamp) / DAY_IN_MS);
+};
+
+const derivePetCondition = (student) => {
+  if (!student || student.pet_status === 'egg') {
+    return 'healthy';
+  }
+
+  const config = normalizePetConditionConfig(student.pet_condition_config);
+  const daysSinceLastFed = getDaysSinceLastFed(student.last_fed_at);
+
+  if (daysSinceLastFed >= config.sleeping_days) {
+    return 'sleeping';
+  }
+
+  if (daysSinceLastFed >= config.weak_days) {
+    return 'weak';
+  }
+
+  if (daysSinceLastFed >= config.hungry_days) {
+    return 'hungry';
+  }
+
+  return 'healthy';
+};
+
+const getDailyDecayForDay = (dayIndex, config) => {
+  if (dayIndex >= config.sleeping_days) {
+    return Number(config.sleeping_decay || 0);
+  }
+
+  if (dayIndex >= config.weak_days) {
+    return Number(config.weak_decay || 0);
+  }
+
+  if (dayIndex >= config.hungry_days) {
+    return Number(config.hungry_decay || 0);
+  }
+
+  return 0;
+};
+
+const degradeStudentToEgg = (student) => {
+  const collection = parseServerPetCollection(student?.pet_collection, student);
+  const currentIndex = collection.findIndex((entry) => entry.status === 'active' || entry.status === 'active-egg');
+  const completedAt = nowIso();
+  const nextCollection = [...collection];
+
+  if (currentIndex >= 0) {
+    nextCollection[currentIndex] = {
+      ...nextCollection[currentIndex],
+      pet_type_id: student?.pet_type_id || nextCollection[currentIndex].pet_type_id || null,
+      pet_name: student?.pet_name || nextCollection[currentIndex].pet_name || '未命名伙伴',
+      pet_level: 0,
+      status: 'active-egg',
+      completed_at: null,
+      adopted_at: nextCollection[currentIndex].adopted_at || completedAt,
+    };
+  } else {
+    nextCollection.push({
+      id: createCollectionId(student?.id),
+      pet_type_id: null,
+      pet_name: '神秘蛋',
+      pet_level: 0,
+      adopted_at: completedAt,
+      completed_at: null,
+      status: 'active-egg',
+    });
+  }
+
+  return {
+    ...student,
+    pet_status: 'egg',
+    pet_condition: 'healthy',
+    last_fed_at: null,
+    last_decay_at: null,
+    pet_condition_locked_at: null,
+    pet_name: null,
+    pet_type_id: null,
+    pet_level: 0,
+    pet_points: 0,
+    total_exp: 0,
+    pet_collection: nextCollection,
+  };
+};
+
+const applyPetDecayToRow = (student, levelThresholds, config) => {
+  if (!student || student.pet_status === 'egg' || !student.last_fed_at) {
+    return {
+      student,
+      changed: false,
+      decayedExp: 0,
+      revertedToEgg: false,
+      nextCondition: derivePetCondition(student),
+    };
+  }
+
+  const lastFedAtMs = new Date(student.last_fed_at).getTime();
+  if (Number.isNaN(lastFedAtMs)) {
+    return {
+      student,
+      changed: false,
+      decayedExp: 0,
+      revertedToEgg: false,
+      nextCondition: derivePetCondition(student),
+    };
+  }
+
+  const decayBaseMs = student.last_decay_at ? new Date(student.last_decay_at).getTime() : lastFedAtMs;
+  const safeDecayBaseMs = Number.isNaN(decayBaseMs) ? lastFedAtMs : decayBaseMs;
+  const currentDayIndex = getDaysSinceLastFed(student.last_fed_at);
+  const lastSettledDayIndex = Math.max(0, Math.floor((safeDecayBaseMs - lastFedAtMs) / DAY_IN_MS));
+
+  let totalDecay = 0;
+  for (let dayIndex = lastSettledDayIndex + 1; dayIndex <= currentDayIndex; dayIndex += 1) {
+    totalDecay += getDailyDecayForDay(dayIndex, config);
+  }
+
+  let nextStudent = {
+    ...student,
+    last_decay_at: currentDayIndex > lastSettledDayIndex ? nowIso() : student.last_decay_at || student.last_fed_at,
+  };
+  let revertedToEgg = false;
+
+  if (totalDecay > 0) {
+    const nextTotalExp = Math.max(0, Number(student.total_exp || 0) - totalDecay);
+    nextStudent = {
+      ...nextStudent,
+      total_exp: nextTotalExp,
+      pet_points: nextTotalExp,
+      pet_level: nextTotalExp > 0 ? resolvePetLevel(nextTotalExp, levelThresholds) : 0,
+    };
+
+    if (nextTotalExp <= 0) {
+      nextStudent = degradeStudentToEgg(nextStudent);
+      revertedToEgg = true;
+    } else {
+      nextStudent.pet_collection = syncStudentCollectionProgress(nextStudent);
+    }
+  }
+
+  const nextCondition = derivePetCondition(nextStudent);
+  nextStudent.pet_condition = nextStudent.pet_status === 'egg' ? 'healthy' : nextCondition;
+  nextStudent.pet_condition_locked_at =
+    nextStudent.pet_status === 'egg'
+      ? null
+      : nextCondition === 'sleeping'
+        ? nextStudent.pet_condition_locked_at || nowIso()
+        : null;
+
+  const changed =
+    totalDecay > 0
+    || (student.pet_condition || 'healthy') !== nextStudent.pet_condition
+    || (student.pet_condition_locked_at || null) !== (nextStudent.pet_condition_locked_at || null)
+    || (student.last_decay_at || null) !== (nextStudent.last_decay_at || null)
+    || student.pet_status !== nextStudent.pet_status;
+
+  return {
+    student: nextStudent,
+    changed,
+    decayedExp: totalDecay,
+    revertedToEgg,
+    nextCondition: nextStudent.pet_condition,
+  };
+};
+
 const normalizeClass = (row) => ({
   id: Number(row.id),
   name: row.name,
@@ -105,6 +367,10 @@ const normalizeStudent = (row) => ({
   class_id: Number(row.class_id),
   name: row.name,
   pet_status: row.pet_status,
+  pet_condition: derivePetCondition(row),
+  last_fed_at: row.last_fed_at || null,
+  last_decay_at: row.last_decay_at || null,
+  pet_condition_locked_at: row.pet_condition_locked_at || null,
   pet_name: row.pet_name,
   pet_type_id: row.pet_type_id,
   pet_level: Number(row.pet_level || 0),
@@ -116,11 +382,41 @@ const normalizeStudent = (row) => ({
   pet_collection: parsePetCollection(row.pet_collection),
 });
 
+const normalizePetConditionConfig = (value) => {
+  let parsed = value;
+
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      parsed = null;
+    }
+  }
+
+  const hungryDays = Math.max(1, Number(parsed?.hungry_days || DEFAULT_PET_CONDITION_CONFIG.hungry_days));
+  const weakDays = Math.max(hungryDays + 1, Number(parsed?.weak_days || DEFAULT_PET_CONDITION_CONFIG.weak_days));
+  const sleepingDays = Math.max(weakDays + 1, Number(parsed?.sleeping_days || DEFAULT_PET_CONDITION_CONFIG.sleeping_days));
+  const hungryDecay = Math.max(0, Number(parsed?.hungry_decay ?? DEFAULT_PET_CONDITION_CONFIG.hungry_decay));
+  const weakDecay = Math.max(0, Number(parsed?.weak_decay ?? DEFAULT_PET_CONDITION_CONFIG.weak_decay));
+  const sleepingDecay = Math.max(0, Number(parsed?.sleeping_decay ?? DEFAULT_PET_CONDITION_CONFIG.sleeping_decay));
+
+  return {
+    hungry_days: hungryDays,
+    weak_days: weakDays,
+    sleeping_days: sleepingDays,
+    hungry_decay: hungryDecay,
+    weak_decay: weakDecay,
+    sleeping_decay: sleepingDecay,
+  };
+};
+
 const normalizeShopItem = (row) => ({
   id: Number(row.id),
   class_id: Number(row.class_id),
   name: row.name,
   icon: row.icon,
+  item_type: row.item_type || 'gift',
+  exp_value: Number(row.exp_value || 0),
   price: Number(row.price || 0),
   stock: Number(row.stock || 0),
 });
@@ -375,8 +671,8 @@ async function ensureClassSettings(db, classId) {
   }
 
   await db
-    .prepare('INSERT INTO class_settings (class_id, level_thresholds, smart_seating_config) VALUES (?, ?, NULL)')
-    .bind(classId, JSON.stringify(DEFAULT_LEVEL_THRESHOLDS))
+    .prepare('INSERT INTO class_settings (class_id, level_thresholds, pet_condition_config, smart_seating_config) VALUES (?, ?, ?, NULL)')
+    .bind(classId, JSON.stringify(DEFAULT_LEVEL_THRESHOLDS), JSON.stringify(DEFAULT_PET_CONDITION_CONFIG))
     .run();
 }
 
@@ -761,9 +1057,10 @@ async function assertClassOwnership(db, userId, classId) {
 async function assertStudentOwnership(db, userId, studentId) {
   const student = await db
     .prepare(
-      `SELECT s.*
+      `SELECT s.*, cs.pet_condition_config
        FROM students s
        JOIN classes c ON c.id = s.class_id
+       LEFT JOIN class_settings cs ON cs.class_id = s.class_id
        WHERE s.id = ? AND c.user_id = ?`,
     )
     .bind(studentId, userId)
@@ -776,25 +1073,111 @@ async function assertStudentOwnership(db, userId, studentId) {
   return student;
 }
 
-async function getStudentsByClassId(db, classId) {
+async function reconcileStudentConditions(db, classId, userId = null) {
+  const levelThresholds = await getThresholdsByClassId(db, classId);
   const result = await db
     .prepare(
-      `SELECT id, class_id, name, pet_status, pet_name, pet_type_id, pet_level, pet_points, coins, total_exp, total_coins
-       , reward_count, pet_collection
+      `SELECT students.id AS id,
+              students.class_id AS class_id,
+              students.name AS name,
+              students.pet_status AS pet_status,
+              students.pet_condition AS pet_condition,
+              students.last_fed_at AS last_fed_at,
+              students.last_decay_at AS last_decay_at,
+              students.pet_condition_locked_at AS pet_condition_locked_at,
+              students.pet_name AS pet_name,
+              students.pet_type_id AS pet_type_id,
+              students.pet_level AS pet_level,
+              students.pet_points AS pet_points,
+              students.coins AS coins,
+              students.total_exp AS total_exp,
+              students.total_coins AS total_coins,
+              students.reward_count AS reward_count,
+              students.pet_collection AS pet_collection,
+              students.created_at AS created_at,
+              cs.pet_condition_config
        FROM students
-       WHERE class_id = ?
-       ORDER BY created_at ASC, id ASC`,
+       LEFT JOIN class_settings cs ON cs.class_id = students.class_id
+       WHERE students.class_id = ?
+       ORDER BY students.created_at ASC, students.id ASC`,
     )
     .bind(classId)
     .all();
 
-  return (result.results || []).map(normalizeStudent);
+  const rows = result.results || [];
+  const updates = [];
+
+  for (const row of rows) {
+    const config = normalizePetConditionConfig(row.pet_condition_config);
+    const currentCondition = row.pet_condition || 'healthy';
+    const currentStatus = row.pet_status;
+    const decayResult = applyPetDecayToRow(row, levelThresholds, config);
+    const nextStudent = decayResult.student;
+
+    if (decayResult.changed) {
+      updates.push(
+        db
+          .prepare(
+            `UPDATE students
+             SET pet_status = ?, pet_condition = ?, last_fed_at = ?, last_decay_at = ?, pet_condition_locked_at = ?,
+                 pet_name = ?, pet_type_id = ?, pet_level = ?, pet_points = ?, total_exp = ?, pet_collection = ?
+             WHERE id = ?`,
+          )
+          .bind(
+            nextStudent.pet_status,
+            nextStudent.pet_condition,
+            nextStudent.last_fed_at,
+            nextStudent.last_decay_at,
+            nextStudent.pet_condition_locked_at,
+            nextStudent.pet_name,
+            nextStudent.pet_type_id,
+            nextStudent.pet_level,
+            nextStudent.pet_points,
+            nextStudent.total_exp,
+            JSON.stringify(nextStudent.pet_collection || []),
+            row.id,
+          ),
+      );
+      Object.assign(row, nextStudent);
+
+      if (userId && currentCondition !== 'sleeping' && decayResult.nextCondition === 'sleeping' && currentStatus !== 'egg') {
+        await appendLog(db, {
+          classId,
+          userId,
+          actionType: '宠物休眠',
+          detail: `${row.name} 的宠物因超过 ${config.sleeping_days} 天未照料，进入了休眠状态`,
+        });
+      }
+
+      if (userId && decayResult.decayedExp > 0) {
+        await appendLog(db, {
+          classId,
+          userId,
+          actionType: '宠物衰减',
+          detail: decayResult.revertedToEgg
+            ? `${row.name} 的宠物因长期未照料，经验衰减 ${decayResult.decayedExp} 点并退化成了神秘蛋`
+            : `${row.name} 的宠物因长期未照料，经验衰减 ${decayResult.decayedExp} 点`,
+        });
+      }
+    }
+  }
+
+  if (updates.length > 0) {
+    await db.batch(updates);
+  }
+
+  return rows;
+}
+
+async function getStudentsByClassId(db, classId, userId = null) {
+  const rows = await reconcileStudentConditions(db, classId, userId);
+  return rows.map(normalizeStudent);
 }
 
 async function getShopItemsByClassId(db, classId) {
   const result = await db
     .prepare(
-      `SELECT id, class_id, name, icon, price, stock
+      `SELECT id, class_id, name, icon, item_type, exp_value, price, stock
        FROM shop_items
        WHERE class_id = ?
        ORDER BY created_at DESC, id DESC`,
@@ -858,6 +1241,17 @@ async function getThresholdsByClassId(db, classId) {
   }
 
   return DEFAULT_LEVEL_THRESHOLDS;
+}
+
+async function getPetConditionConfigByClassId(db, classId) {
+  await ensureClassSettings(db, classId);
+
+  const settings = await db
+    .prepare('SELECT pet_condition_config FROM class_settings WHERE class_id = ?')
+    .bind(classId)
+    .first();
+
+  return normalizePetConditionConfig(settings?.pet_condition_config);
 }
 
 async function getSmartSeatingConfigByClassId(db, classId) {
@@ -957,6 +1351,7 @@ async function getBootstrapPayload(db, userId, requestedClassId) {
       rules: [],
       logs: [],
       levelThresholds: DEFAULT_LEVEL_THRESHOLDS,
+      petConditionConfig: DEFAULT_PET_CONDITION_CONFIG,
       toolboxAccess: (await getToolboxAccessFlag(db)).value,
     };
   }
@@ -965,11 +1360,12 @@ async function getBootstrapPayload(db, userId, requestedClassId) {
     user,
     classes,
     currentClassId: resolvedClassId,
-    students: await getStudentsByClassId(db, resolvedClassId),
+    students: await getStudentsByClassId(db, resolvedClassId, userId),
     shopItems: await getShopItemsByClassId(db, resolvedClassId),
     rules: await getRulesByClassId(db, resolvedClassId),
     logs: await getLogsByClassId(db, resolvedClassId),
     levelThresholds: await getThresholdsByClassId(db, resolvedClassId),
+    petConditionConfig: await getPetConditionConfigByClassId(db, resolvedClassId),
     smartSeatingConfig: await getSmartSeatingConfigByClassId(db, resolvedClassId),
     toolboxAccess: (await getToolboxAccessFlag(db)).value,
   };
@@ -1358,8 +1754,8 @@ async function handleImportStudents(db, request, classId) {
   const statements = cleanedNames.map((name) =>
     db
       .prepare(
-        `INSERT INTO students (class_id, name, pet_status, pet_level, pet_points, coins, total_exp, total_coins)
-         VALUES (?, ?, 'egg', 0, 0, 0, 0, 0)`,
+        `INSERT INTO students (class_id, name, pet_status, pet_condition, last_fed_at, pet_condition_locked_at, pet_level, pet_points, coins, total_exp, total_coins)
+         VALUES (?, ?, 'egg', 'healthy', NULL, NULL, 0, 0, 0, 0, 0)`,
       )
       .bind(classId, name),
   );
@@ -1373,7 +1769,7 @@ async function handleImportStudents(db, request, classId) {
   });
 
   return json({
-    students: await getStudentsByClassId(db, classId),
+    students: await getStudentsByClassId(db, classId, userId),
     logs: await getLogsByClassId(db, classId),
   });
 }
@@ -1391,8 +1787,8 @@ async function handleCreateStudent(db, request, classId) {
 
   await db
     .prepare(
-      `INSERT INTO students (class_id, name, pet_status, pet_level, pet_points, coins, total_exp, total_coins)
-       VALUES (?, ?, 'egg', 0, 0, 0, 0, 0)`,
+      `INSERT INTO students (class_id, name, pet_status, pet_condition, last_fed_at, pet_condition_locked_at, pet_level, pet_points, coins, total_exp, total_coins)
+       VALUES (?, ?, 'egg', 'healthy', NULL, NULL, 0, 0, 0, 0, 0)`,
     )
     .bind(classId, name)
     .run();
@@ -1405,7 +1801,7 @@ async function handleCreateStudent(db, request, classId) {
   });
 
   return json({
-    students: await getStudentsByClassId(db, classId),
+    students: await getStudentsByClassId(db, classId, userId),
     logs: await getLogsByClassId(db, classId),
   });
 }
@@ -1454,7 +1850,7 @@ async function handleBatchDeleteStudents(db, request, classId) {
   });
 
   return json({
-    students: await getStudentsByClassId(db, classId),
+    students: await getStudentsByClassId(db, classId, userId),
     logs: await getLogsByClassId(db, classId),
   });
 }
@@ -1471,6 +1867,7 @@ async function handleUpdateStudent(db, request, studentId) {
   }
 
   const currentStudent = await assertStudentOwnership(db, userId, studentId);
+  const currentCondition = derivePetCondition(currentStudent);
 
   if (Number(currentStudent.class_id) !== classId) {
     return error('学生与当前班级不匹配');
@@ -1503,6 +1900,10 @@ async function handleUpdateStudent(db, request, studentId) {
   const nextStudent = {
     name: nextName,
     pet_status: String(updates.pet_status ?? currentStudent.pet_status ?? 'egg'),
+    pet_condition: String(updates.pet_condition ?? currentCondition),
+    last_fed_at: updates.last_fed_at ?? currentStudent.last_fed_at ?? null,
+    last_decay_at: updates.last_decay_at ?? currentStudent.last_decay_at ?? currentStudent.last_fed_at ?? null,
+    pet_condition_locked_at: updates.pet_condition_locked_at ?? currentStudent.pet_condition_locked_at ?? null,
     pet_name: updates.pet_name ?? currentStudent.pet_name,
     pet_type_id: updates.pet_type_id ?? currentStudent.pet_type_id,
     pet_level: Math.max(0, Number(updates.pet_level ?? currentStudent.pet_level ?? 0)),
@@ -1514,15 +1915,37 @@ async function handleUpdateStudent(db, request, studentId) {
     pet_collection: parsePetCollection(updates.pet_collection ?? currentStudent.pet_collection ?? '[]'),
   };
 
+  if (currentStudent.pet_status === 'egg' && nextStudent.pet_status !== 'egg' && !nextStudent.last_fed_at) {
+    nextStudent.last_fed_at = nowIso();
+    nextStudent.last_decay_at = nextStudent.last_fed_at;
+  }
+
+  if (nextStudent.pet_status === 'egg') {
+    nextStudent.pet_condition = 'healthy';
+    nextStudent.last_fed_at = null;
+    nextStudent.last_decay_at = null;
+    nextStudent.pet_condition_locked_at = null;
+  } else {
+    nextStudent.pet_condition = derivePetCondition(nextStudent);
+    nextStudent.pet_condition_locked_at =
+      nextStudent.pet_condition === 'sleeping'
+        ? nextStudent.pet_condition_locked_at || nowIso()
+        : null;
+  }
+
   await db
     .prepare(
       `UPDATE students
-       SET name = ?, pet_status = ?, pet_name = ?, pet_type_id = ?, pet_level = ?, pet_points = ?, coins = ?, total_exp = ?, total_coins = ?, reward_count = ?, pet_collection = ?
+       SET name = ?, pet_status = ?, pet_condition = ?, last_fed_at = ?, last_decay_at = ?, pet_condition_locked_at = ?, pet_name = ?, pet_type_id = ?, pet_level = ?, pet_points = ?, coins = ?, total_exp = ?, total_coins = ?, reward_count = ?, pet_collection = ?
        WHERE id = ?`,
     )
     .bind(
       nextStudent.name,
       nextStudent.pet_status,
+      nextStudent.pet_condition,
+      nextStudent.last_fed_at,
+      nextStudent.last_decay_at,
+      nextStudent.pet_condition_locked_at,
       nextStudent.pet_name,
       nextStudent.pet_type_id,
       nextStudent.pet_level,
@@ -1547,17 +1970,151 @@ async function handleUpdateStudent(db, request, studentId) {
   }
 
   const refreshedStudent = await db
-    .prepare(
-      `SELECT id, class_id, name, pet_status, pet_name, pet_type_id, pet_level, pet_points, coins, total_exp, total_coins
-       , reward_count, pet_collection
-       FROM students
-       WHERE id = ?`,
-    )
+    .prepare(`SELECT ${STUDENT_SELECT_FIELDS} FROM students WHERE id = ?`)
     .bind(studentId)
     .first();
 
   return json({
     student: normalizeStudent(refreshedStudent),
+    logs: await getLogsByClassId(db, classId),
+  });
+}
+
+async function applyFeedToStudents(db, classId, userId, studentIds) {
+  if (studentIds.length === 0) {
+    return [];
+  }
+
+  const placeholders = studentIds.map(() => '?').join(', ');
+  const result = await db
+    .prepare(`SELECT ${STUDENT_SELECT_FIELDS} FROM students WHERE class_id = ? AND id IN (${placeholders})`)
+    .bind(classId, ...studentIds)
+    .all();
+
+  const rows = result.results || [];
+
+  if (rows.length !== studentIds.length) {
+    throw new Error('部分学生不存在或已被移除');
+  }
+
+  const thresholds = await getThresholdsByClassId(db, classId);
+  const feedAt = nowIso();
+  const statements = [];
+  const pendingLogs = [];
+
+  for (const row of rows) {
+    if (row.pet_status === 'egg') {
+      throw new Error(`${row.name} 还没有唤醒宠物，暂时无法喂养`);
+    }
+
+    const beforeCondition = derivePetCondition(row);
+    const nextTotalExp = Math.max(0, Number(row.total_exp || 0) + 1);
+    const nextPetPoints = Math.max(0, Number(row.pet_points || 0) + 1);
+    const nextLevel = resolvePetLevel(nextTotalExp, thresholds);
+    const nextStudent = {
+      ...row,
+      total_exp: nextTotalExp,
+      pet_points: nextPetPoints,
+      pet_level: nextLevel,
+      last_fed_at: feedAt,
+      last_decay_at: feedAt,
+      pet_condition: 'healthy',
+      pet_condition_locked_at: null,
+    };
+    const nextCollection = syncStudentCollectionProgress(nextStudent);
+
+    statements.push(
+      db
+        .prepare(
+          `UPDATE students
+           SET pet_condition = 'healthy',
+               last_fed_at = ?,
+               last_decay_at = ?,
+               pet_condition_locked_at = NULL,
+               pet_level = ?,
+               pet_points = ?,
+               total_exp = ?,
+               pet_collection = ?
+           WHERE id = ? AND class_id = ?`,
+        )
+        .bind(feedAt, feedAt, nextLevel, nextPetPoints, nextTotalExp, JSON.stringify(nextCollection), row.id, classId),
+    );
+
+    if (beforeCondition === 'sleeping') {
+      pendingLogs.push({
+        classId,
+        userId,
+        actionType: '宠物唤醒',
+        detail: `老师喂养了 ${row.name} 的宠物，它从休眠中醒来了`,
+      });
+    }
+
+    pendingLogs.push({
+      classId,
+      userId,
+      actionType: '宠物喂养',
+      detail: `老师为 ${row.name} 的宠物喂养了一次，成长值 +1`,
+    });
+  }
+
+  await db.batch(statements);
+
+  for (const entry of pendingLogs) {
+    await appendLog(db, entry);
+  }
+
+  return getStudentsByClassId(db, classId, userId);
+}
+
+async function handleFeedStudent(db, request, studentId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const classId = parseId(body.classId);
+
+  if (!userId || !classId) {
+    return error('缺少有效的班级上下文');
+  }
+
+  const currentStudent = await assertStudentOwnership(db, userId, studentId);
+
+  if (Number(currentStudent.class_id) !== classId) {
+    return error('学生与当前班级不匹配');
+  }
+
+  await applyFeedToStudents(db, classId, userId, [studentId]);
+
+  const refreshedStudent = await db
+    .prepare(`SELECT ${STUDENT_SELECT_FIELDS} FROM students WHERE id = ?`)
+    .bind(studentId)
+    .first();
+
+  return json({
+    student: normalizeStudent(refreshedStudent),
+    logs: await getLogsByClassId(db, classId),
+  });
+}
+
+async function handleFeedStudentsBatch(db, request, classId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const studentIds = Array.isArray(body.studentIds)
+    ? Array.from(new Set(body.studentIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)))
+    : [];
+
+  if (!userId) {
+    return error('缺少有效的教师身份');
+  }
+
+  if (studentIds.length === 0) {
+    return error('请至少选择一名学生');
+  }
+
+  await assertClassOwnership(db, userId, classId);
+
+  const students = await applyFeedToStudents(db, classId, userId, studentIds);
+
+  return json({
+    students,
     logs: await getLogsByClassId(db, classId),
   });
 }
@@ -1568,6 +2125,8 @@ async function handleCreateShopItem(db, request, classId) {
   const item = body.item && typeof body.item === 'object' ? body.item : {};
   const name = String(item.name || '').trim();
   const icon = String(item.icon || '🎁').trim() || '🎁';
+  const itemType = item.item_type === 'exp_pack' ? 'exp_pack' : 'gift';
+  const expValue = Math.max(0, Number(item.exp_value || 0));
   const price = Number(item.price || 0);
   const stock = Math.max(0, Number(item.stock || 0));
 
@@ -1575,18 +2134,24 @@ async function handleCreateShopItem(db, request, classId) {
     return error('请填写有效的商品名称与价格');
   }
 
+  if (itemType === 'exp_pack' && expValue <= 0) {
+    return error('经验包必须设置大于 0 的经验值');
+  }
+
   await assertClassOwnership(db, userId, classId);
 
   await db
-    .prepare('INSERT INTO shop_items (class_id, name, icon, price, stock) VALUES (?, ?, ?, ?, ?)')
-    .bind(classId, name, icon, price, stock || 99)
+    .prepare('INSERT INTO shop_items (class_id, name, icon, item_type, exp_value, price, stock) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(classId, name, icon, itemType, itemType === 'exp_pack' ? expValue : 0, price, stock || 99)
     .run();
 
   await appendLog(db, {
     classId,
     userId,
     actionType: '商品管理',
-    detail: `新增商品 ${name}，库存 ${stock || 99}`,
+    detail: itemType === 'exp_pack'
+      ? `新增经验包 ${name}（+${expValue} EXP），库存 ${stock || 99}`
+      : `新增商品 ${name}，库存 ${stock || 99}`,
   });
 
   return json({
@@ -1602,11 +2167,17 @@ async function handleUpdateShopItem(db, request, itemId) {
   const item = body.item && typeof body.item === 'object' ? body.item : {};
   const name = String(item.name || '').trim();
   const icon = String(item.icon || '🎁').trim() || '🎁';
+  const itemType = item.item_type === 'exp_pack' ? 'exp_pack' : 'gift';
+  const expValue = Math.max(0, Number(item.exp_value || 0));
   const price = Number(item.price || 0);
   const stock = Math.max(0, Number(item.stock || 0));
 
   if (!userId || !classId || !name || price <= 0) {
     return error('请填写有效的商品名称与价格');
+  }
+
+  if (itemType === 'exp_pack' && expValue <= 0) {
+    return error('经验包必须设置大于 0 的经验值');
   }
 
   await assertClassOwnership(db, userId, classId);
@@ -1621,15 +2192,17 @@ async function handleUpdateShopItem(db, request, itemId) {
   }
 
   await db
-    .prepare('UPDATE shop_items SET name = ?, icon = ?, price = ?, stock = ? WHERE id = ?')
-    .bind(name, icon, price, stock, itemId)
+    .prepare('UPDATE shop_items SET name = ?, icon = ?, item_type = ?, exp_value = ?, price = ?, stock = ? WHERE id = ?')
+    .bind(name, icon, itemType, itemType === 'exp_pack' ? expValue : 0, price, stock, itemId)
     .run();
 
   await appendLog(db, {
     classId,
     userId,
     actionType: '商品管理',
-    detail: `更新了商品 ${name}，价格 ${price}，库存 ${stock}`,
+    detail: itemType === 'exp_pack'
+      ? `更新了经验包 ${name}（+${expValue} EXP），价格 ${price}，库存 ${stock}`
+      : `更新了商品 ${name}，价格 ${price}，库存 ${stock}`,
   });
 
   return json({
@@ -1691,7 +2264,7 @@ async function handleRedeemShopItem(db, request, itemId) {
   await assertClassOwnership(db, userId, classId);
 
   const item = await db
-    .prepare('SELECT id, class_id, name, icon, price, stock FROM shop_items WHERE id = ? AND class_id = ?')
+    .prepare('SELECT id, class_id, name, icon, item_type, exp_value, price, stock FROM shop_items WHERE id = ? AND class_id = ?')
     .bind(itemId, classId)
     .first();
 
@@ -1705,12 +2278,7 @@ async function handleRedeemShopItem(db, request, itemId) {
 
   const placeholders = studentIds.map(() => '?').join(', ');
   const selectedStudents = await db
-    .prepare(
-      `SELECT id, class_id, name, pet_status, pet_name, pet_type_id, pet_level, pet_points, coins, total_exp, total_coins
-       , reward_count, pet_collection
-       FROM students
-       WHERE class_id = ? AND id IN (${placeholders})`,
-    )
+    .prepare(`SELECT ${STUDENT_SELECT_FIELDS} FROM students WHERE class_id = ? AND id IN (${placeholders})`)
     .bind(classId, ...studentIds)
     .all();
 
@@ -1726,11 +2294,57 @@ async function handleRedeemShopItem(db, request, itemId) {
     return error(`学生 ${unaffordableStudent.name} 的金币不足，兑换已取消`);
   }
 
-  const statements = students.map((student) =>
-    db
+  if (item.item_type === 'exp_pack') {
+    const ineligibleStudent = students.find((student) => student.pet_status === 'egg');
+
+    if (ineligibleStudent) {
+      return error(`学生 ${ineligibleStudent.name} 还没有唤醒宠物，暂时不能使用经验包`);
+    }
+  }
+
+  const thresholds = await getThresholdsByClassId(db, classId);
+  const rewardExp = Math.max(0, Number(item.exp_value || 0));
+  const now = nowIso();
+  const statements = students.map((student) => {
+    if (item.item_type === 'exp_pack') {
+      const nextTotalExp = Math.max(0, Number(student.total_exp || 0) + rewardExp);
+      const nextPetPoints = Math.max(0, Number(student.pet_points || 0) + rewardExp);
+      const nextLevel = resolvePetLevel(nextTotalExp, thresholds);
+      const updatedStudent = {
+        ...student,
+        coins: (student.coins || 0) - Number(item.price || 0),
+        total_exp: nextTotalExp,
+        pet_points: nextPetPoints,
+        pet_level: nextLevel,
+        last_fed_at: now,
+        last_decay_at: now,
+        pet_condition: 'healthy',
+        pet_condition_locked_at: null,
+      };
+      const nextCollection = syncStudentCollectionProgress(updatedStudent);
+
+      return db
+        .prepare(
+          `UPDATE students
+           SET coins = ?, total_exp = ?, pet_points = ?, pet_level = ?, last_fed_at = ?, last_decay_at = ?, pet_condition = 'healthy', pet_condition_locked_at = NULL, pet_collection = ?
+           WHERE id = ?`,
+        )
+        .bind(
+          updatedStudent.coins,
+          nextTotalExp,
+          nextPetPoints,
+          nextLevel,
+          now,
+          now,
+          JSON.stringify(nextCollection),
+          student.id,
+        );
+    }
+
+    return db
       .prepare('UPDATE students SET coins = ? WHERE id = ?')
-      .bind(student.coins - Number(item.price || 0), student.id),
-  );
+      .bind((student.coins || 0) - Number(item.price || 0), student.id);
+  });
 
   statements.push(
     db
@@ -1743,13 +2357,17 @@ async function handleRedeemShopItem(db, request, itemId) {
     classId,
     userId,
     actionType: '商品兑换',
-    detail: `为 ${students.map((student) => student.name).join('、')} 兑换了 ${item.name}`,
+    detail: item.item_type === 'exp_pack'
+      ? `为 ${students.map((student) => student.name).join('、')} 兑换了经验包 ${item.name}（每人 +${rewardExp} EXP）`
+      : `为 ${students.map((student) => student.name).join('、')} 兑换了 ${item.name}`,
     meta: {
       undoable: true,
       kind: 'shop-redeem',
       item: {
         id: Number(item.id),
         name: item.name,
+        item_type: item.item_type || 'gift',
+        exp_value: rewardExp,
         stockBefore: Number(item.stock || 0),
         stockAfter: Number(item.stock || 0) - studentIds.length,
       },
@@ -1757,16 +2375,26 @@ async function handleRedeemShopItem(db, request, itemId) {
         id: student.id,
         name: student.name,
         coins: student.coins || 0,
+        total_exp: student.total_exp || 0,
+        pet_points: student.pet_points || 0,
+        pet_level: student.pet_level || 0,
+        last_fed_at: student.last_fed_at || null,
+        last_decay_at: student.last_decay_at || null,
+        pet_condition: student.pet_condition || 'healthy',
+        pet_condition_locked_at: student.pet_condition_locked_at || null,
+        pet_collection: student.pet_collection || [],
       })),
       studentsAfter: students.map((student) => ({
         id: student.id,
         coins: (student.coins || 0) - Number(item.price || 0),
+        total_exp: item.item_type === 'exp_pack' ? (student.total_exp || 0) + rewardExp : (student.total_exp || 0),
+        pet_points: item.item_type === 'exp_pack' ? (student.pet_points || 0) + rewardExp : (student.pet_points || 0),
       })),
     },
   });
 
   return json({
-    students: await getStudentsByClassId(db, classId),
+    students: await getStudentsByClassId(db, classId, userId),
     shopItems: await getShopItemsByClassId(db, classId),
     logs: await getLogsByClassId(db, classId),
   });
@@ -1888,6 +2516,7 @@ async function handleUpdateThresholds(db, request, classId) {
   const body = await readBody(request);
   const userId = parseId(body.userId);
   const thresholds = Array.isArray(body.thresholds) ? body.thresholds.map((value) => Number(value)) : [];
+  const petConditionConfig = normalizePetConditionConfig(body.petConditionConfig);
 
   if (!userId || thresholds.length !== DEFAULT_LEVEL_THRESHOLDS.length) {
     return error('等级阈值格式不正确');
@@ -1914,22 +2543,28 @@ async function handleUpdateThresholds(db, request, classId) {
 
   await db
     .prepare(
-      `INSERT INTO class_settings (class_id, level_thresholds, updated_at)
-       VALUES (?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT(class_id) DO UPDATE SET level_thresholds = excluded.level_thresholds, updated_at = CURRENT_TIMESTAMP`,
+      `INSERT INTO class_settings (class_id, level_thresholds, pet_condition_config, updated_at)
+       VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(class_id) DO UPDATE SET
+         level_thresholds = excluded.level_thresholds,
+         pet_condition_config = excluded.pet_condition_config,
+         updated_at = CURRENT_TIMESTAMP`,
     )
-    .bind(classId, JSON.stringify(thresholds))
+    .bind(classId, JSON.stringify(thresholds), JSON.stringify(petConditionConfig))
     .run();
 
   await appendLog(db, {
     classId,
     userId,
     actionType: '规则修改',
-    detail: `更新了等级阈值：${thresholds.join(' / ')}`,
+    detail:
+      `更新了等级阈值：${thresholds.join(' / ')}；宠物状态阈值：${petConditionConfig.hungry_days}/${petConditionConfig.weak_days}/${petConditionConfig.sleeping_days} 天；` +
+      `日衰减：${petConditionConfig.hungry_decay}/${petConditionConfig.weak_decay}/${petConditionConfig.sleeping_decay} EXP`,
   });
 
   return json({
     levelThresholds: await getThresholdsByClassId(db, classId),
+    petConditionConfig: await getPetConditionConfigByClassId(db, classId),
     logs: await getLogsByClassId(db, classId),
   });
 }
@@ -1985,11 +2620,11 @@ async function handleUpdateSmartSeatingConfig(db, request, classId) {
 
   await db
     .prepare(
-      `INSERT INTO class_settings (class_id, level_thresholds, smart_seating_config, updated_at)
-       VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      `INSERT INTO class_settings (class_id, level_thresholds, pet_condition_config, smart_seating_config, updated_at)
+       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
        ON CONFLICT(class_id) DO UPDATE SET smart_seating_config = excluded.smart_seating_config, updated_at = CURRENT_TIMESTAMP`,
     )
-    .bind(classId, JSON.stringify(DEFAULT_LEVEL_THRESHOLDS), JSON.stringify(payload))
+    .bind(classId, JSON.stringify(DEFAULT_LEVEL_THRESHOLDS), JSON.stringify(DEFAULT_PET_CONDITION_CONFIG), JSON.stringify(payload))
     .run();
 
   await appendLog(db, {
@@ -2016,12 +2651,7 @@ async function handleResetClassProgress(db, request, classId) {
   await assertClassOwnership(db, userId, classId);
 
   const result = await db
-    .prepare(
-      `SELECT id, class_id, name, pet_status, pet_name, pet_type_id, pet_level, pet_points, coins, total_exp, total_coins
-       , reward_count, pet_collection
-       FROM students
-       WHERE class_id = ?`,
-    )
+    .prepare(`SELECT ${STUDENT_SELECT_FIELDS} FROM students WHERE class_id = ?`)
     .bind(classId)
     .all();
 
@@ -2036,6 +2666,10 @@ async function handleResetClassProgress(db, request, classId) {
       .prepare(
         `UPDATE students
          SET pet_status = 'egg',
+             pet_condition = 'healthy',
+             last_fed_at = NULL,
+             last_decay_at = NULL,
+             pet_condition_locked_at = NULL,
              pet_name = NULL,
              pet_type_id = NULL,
              pet_level = 0,
@@ -2058,7 +2692,7 @@ async function handleResetClassProgress(db, request, classId) {
   });
 
   return json({
-    students: await getStudentsByClassId(db, classId),
+    students: await getStudentsByClassId(db, classId, userId),
     logs: await getLogsByClassId(db, classId),
   });
 }
@@ -2137,12 +2771,16 @@ async function handleUndoLog(db, request, logId) {
     await db
       .prepare(
         `UPDATE students
-         SET name = ?, pet_status = ?, pet_name = ?, pet_type_id = ?, pet_level = ?, pet_points = ?, coins = ?, total_exp = ?, total_coins = ?, reward_count = ?, pet_collection = ?
+         SET name = ?, pet_status = ?, pet_condition = ?, last_fed_at = ?, last_decay_at = ?, pet_condition_locked_at = ?, pet_name = ?, pet_type_id = ?, pet_level = ?, pet_points = ?, coins = ?, total_exp = ?, total_coins = ?, reward_count = ?, pet_collection = ?
          WHERE id = ? AND class_id = ?`,
       )
       .bind(
         snapshot.name,
         snapshot.pet_status,
+        snapshot.pet_condition || 'healthy',
+        snapshot.last_fed_at || null,
+        snapshot.last_decay_at || null,
+        snapshot.pet_condition_locked_at || null,
         snapshot.pet_name,
         snapshot.pet_type_id,
         snapshot.pet_level,
@@ -2157,9 +2795,31 @@ async function handleUndoLog(db, request, logId) {
       )
       .run();
   } else if (meta.kind === 'shop-redeem') {
-    const studentStatements = (meta.studentsBefore || []).map((student) =>
-      db.prepare('UPDATE students SET coins = ? WHERE id = ? AND class_id = ?').bind(student.coins, student.id, classId),
-    );
+    const studentStatements = (meta.studentsBefore || []).map((student) => {
+      if (meta.item?.item_type === 'exp_pack') {
+        return db
+          .prepare(
+            `UPDATE students
+             SET coins = ?, total_exp = ?, pet_points = ?, pet_level = ?, last_fed_at = ?, last_decay_at = ?, pet_condition = ?, pet_condition_locked_at = ?, pet_collection = ?
+             WHERE id = ? AND class_id = ?`,
+          )
+          .bind(
+            student.coins,
+            student.total_exp || 0,
+            student.pet_points || 0,
+            student.pet_level || 0,
+            student.last_fed_at || null,
+            student.last_decay_at || null,
+            student.pet_condition || 'healthy',
+            student.pet_condition_locked_at || null,
+            JSON.stringify(student.pet_collection || []),
+            student.id,
+            classId,
+          );
+      }
+
+      return db.prepare('UPDATE students SET coins = ? WHERE id = ? AND class_id = ?').bind(student.coins, student.id, classId);
+    });
 
     if (studentStatements.length === 0 || !meta.item?.id) {
       return error('缺少商品兑换回滚快照');
@@ -2193,7 +2853,7 @@ async function handleUndoLog(db, request, logId) {
   });
 
   return json({
-    students: await getStudentsByClassId(db, classId),
+    students: await getStudentsByClassId(db, classId, userId),
     shopItems: await getShopItemsByClassId(db, classId),
     logs: await getLogsByClassId(db, classId),
   });
@@ -3175,9 +3835,19 @@ export default {
         return await handleBatchDeleteStudents(db, request, Number(batchDeleteStudentsMatch[1]));
       }
 
+      const batchFeedStudentsMatch = path.match(/^\/api\/classes\/(\d+)\/students\/feed$/);
+      if (batchFeedStudentsMatch && request.method === 'POST') {
+        return await handleFeedStudentsBatch(db, request, Number(batchFeedStudentsMatch[1]));
+      }
+
       const studentMatch = path.match(/^\/api\/students\/(\d+)$/);
       if (studentMatch && request.method === 'PATCH') {
         return await handleUpdateStudent(db, request, Number(studentMatch[1]));
+      }
+
+      const studentFeedMatch = path.match(/^\/api\/students\/(\d+)\/feed$/);
+      if (studentFeedMatch && request.method === 'POST') {
+        return await handleFeedStudent(db, request, Number(studentFeedMatch[1]));
       }
 
       const shopItemsMatch = path.match(/^\/api\/classes\/(\d+)\/shop-items$/);

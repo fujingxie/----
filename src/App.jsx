@@ -27,6 +27,7 @@ import {
   createAdminCode,
   createClass,
   createRule,
+  feedStudentsBatch,
   createShopItem,
   archiveClassStudents,
   deleteStudentsBatch,
@@ -63,6 +64,14 @@ import {
 import './App.css';
 
 const DEFAULT_LEVEL_THRESHOLDS = [10, 20, 30, 50, 70, 100];
+const DEFAULT_PET_CONDITION_CONFIG = {
+  hungry_days: 2,
+  weak_days: 4,
+  sleeping_days: 7,
+  hungry_decay: 0,
+  weak_decay: 1,
+  sleeping_decay: 2,
+};
 const STORAGE_KEYS = {
   user: 'classPets.user',
   currentClassId: 'classPets.currentClassId',
@@ -174,6 +183,7 @@ function App() {
   const [rulesByClassId, setRulesByClassId] = useState({});
   const [logsByClassId, setLogsByClassId] = useState({});
   const [thresholdsByClassId, setThresholdsByClassId] = useState({});
+  const [petConditionConfigsByClassId, setPetConditionConfigsByClassId] = useState({});
   const [seatingConfigsByClassId, setSeatingConfigsByClassId] = useState({});
   const [authErrorMessage, setAuthErrorMessage] = useState('');
   const [appErrorMessage, setAppErrorMessage] = useState('');
@@ -225,6 +235,9 @@ function App() {
   const currentThresholds = currentClassId
     ? thresholdsByClassId[currentClassId] || DEFAULT_LEVEL_THRESHOLDS
     : DEFAULT_LEVEL_THRESHOLDS;
+  const currentPetConditionConfig = currentClassId
+    ? petConditionConfigsByClassId[currentClassId] || DEFAULT_PET_CONDITION_CONFIG
+    : DEFAULT_PET_CONDITION_CONFIG;
   const currentSeatingConfig = currentClassId ? seatingConfigsByClassId[currentClassId] || null : null;
   const isSuperAdmin = user?.role === 'super_admin';
   const membershipLabel = user?.level ? MEMBERSHIP_LABELS[user.level] || user.level : '';
@@ -259,6 +272,10 @@ function App() {
     setThresholdsByClassId((prev) => ({
       ...prev,
       [classId]: bundle.levelThresholds || DEFAULT_LEVEL_THRESHOLDS,
+    }));
+    setPetConditionConfigsByClassId((prev) => ({
+      ...prev,
+      [classId]: bundle.petConditionConfig || DEFAULT_PET_CONDITION_CONFIG,
     }));
     setSeatingConfigsByClassId((prev) => ({
       ...prev,
@@ -473,6 +490,7 @@ function App() {
     setRulesByClassId({});
     setLogsByClassId({});
     setThresholdsByClassId({});
+    setPetConditionConfigsByClassId({});
     setClassDropdownOpen(false);
     setAuthErrorMessage('');
     setAppErrorMessage('');
@@ -745,6 +763,10 @@ function App() {
           id: originalStudent.id,
           name: originalStudent.name,
           pet_status: originalStudent.pet_status,
+          pet_condition: originalStudent.pet_condition,
+          last_fed_at: originalStudent.last_fed_at,
+          last_decay_at: originalStudent.last_decay_at,
+          pet_condition_locked_at: originalStudent.pet_condition_locked_at,
           pet_name: originalStudent.pet_name,
           pet_type_id: originalStudent.pet_type_id,
           pet_level: originalStudent.pet_level,
@@ -757,6 +779,37 @@ function App() {
         },
       },
     });
+  };
+
+  const handleFeedStudentsBatch = async (studentIds) => {
+    if (!user || !currentClassId || studentIds.length === 0) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+
+    try {
+      const response = await feedStudentsBatch({
+        userId: user.id,
+        classId: currentClassId,
+        studentIds,
+      });
+
+      setStudentsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.students || [],
+      }));
+      setLogsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.logs || [],
+      }));
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
   };
 
   const handleUndoLog = async (logId) => {
@@ -1014,7 +1067,7 @@ function App() {
     }
   };
 
-  const handleSaveThresholds = async (thresholds) => {
+  const handleSaveThresholds = async ({ thresholds, petConditionConfig }) => {
     if (!user || !currentClassId) {
       return;
     }
@@ -1027,10 +1080,15 @@ function App() {
         userId: user.id,
         classId: currentClassId,
         thresholds,
+        petConditionConfig,
       });
       setThresholdsByClassId((prev) => ({
         ...prev,
         [currentClassId]: response.levelThresholds || DEFAULT_LEVEL_THRESHOLDS,
+      }));
+      setPetConditionConfigsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.petConditionConfig || DEFAULT_PET_CONDITION_CONFIG,
       }));
       setLogsByClassId((prev) => ({
         ...prev,
@@ -1119,6 +1177,9 @@ function App() {
         total_exp: student.total_exp || 0,
         total_coins: student.total_coins || 0,
         pet_status: student.pet_status,
+        pet_condition: student.pet_condition,
+        last_fed_at: student.last_fed_at || null,
+        last_decay_at: student.last_decay_at || null,
         pet_name: student.pet_name,
         pet_type_id: student.pet_type_id,
         pet_level: student.pet_level || 0,
@@ -1128,6 +1189,7 @@ function App() {
       })),
       rules: currentRules,
       levelThresholds: currentThresholds,
+      petConditionConfig: currentPetConditionConfig,
       shopItems: currentItems,
       redemptionLogs,
     };
@@ -1573,6 +1635,7 @@ function App() {
               onActivatePet={handleActivatePet}
               onGraduatePet={handleGraduatePet}
               onInteractStudent={handleInteractStudent}
+              onFeedStudentsBatch={handleFeedStudentsBatch}
             />
           )}
 
@@ -1616,6 +1679,7 @@ function App() {
               rules={currentRules}
               logs={currentLogs}
               levelThresholds={currentThresholds}
+              petConditionConfig={currentPetConditionConfig}
               onUpdateClass={handleRenameClass}
               onImportStudents={handleImportStudents}
               onRemoveStudent={handleRemoveStudent}

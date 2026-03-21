@@ -125,6 +125,8 @@ export const syncStudentCollectionProgress = (student) => {
   return collection;
 };
 
+export const isStudentSleeping = (student) => student?.pet_status !== 'egg' && student?.pet_condition === 'sleeping';
+
 export const graduateToNewEgg = (student) => {
   const collection = parsePetCollection(student?.pet_collection, student);
   const nextCollection = [...collection];

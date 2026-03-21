@@ -203,6 +203,11 @@
   font-weight: 800;
 }
 
+.item-badge.exp-pack {
+  background: rgba(251, 191, 36, 0.16);
+  color: #b45309;
+}
+
 .item-head-copy h3 {
   font-size: 22px;
   font-weight: 900;
@@ -219,7 +224,8 @@
 }
 
 .item-meta .price,
-.item-meta .stock {
+.item-meta .stock,
+.exp-pack-value {
   display: inline-flex;
   align-items: center;
   padding: 6px 10px;
@@ -238,6 +244,11 @@
   background: rgba(148, 163, 184, 0.12);
 }
 
+.exp-pack-value {
+  color: #7c3aed;
+  background: rgba(167, 139, 250, 0.16);
+}
+
 .item-meta .stock.low {
   color: #be123c;
   background: rgba(244, 63, 94, 0.12);
@@ -247,6 +258,29 @@
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
+}
+
+.shop-type-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.shop-type-toggle button {
+  min-height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.9);
+  color: #475569;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.shop-type-toggle button.active {
+  border-color: rgba(34, 197, 184, 0.32);
+  background: rgba(240, 253, 250, 0.96);
+  color: #0f766e;
 }
 
 .shop-icon-option {

@@ -2,6 +2,7 @@ import React from 'react';
 import { BookOpen, Star } from 'lucide-react';
 import './PetCard.css';
 import { getPetImagePath, getPetNameById, PET_IMAGE_FALLBACK } from '../../api/petLibrary';
+import { getPetConditionLabel, getPetSafetyHint, formatLastFedLabel } from '../../lib/petCondition';
 
 const getNextLevelInfo = (student, levelThresholds = []) => {
   if (student.pet_status === 'egg') {
@@ -41,6 +42,19 @@ const PetCard = ({
   const isEgg = student.pet_status === 'egg';
   const petTypeLabel = isEgg ? '神秘蛋' : student.pet_type_name || getPetNameById(student.pet_type_id);
   const nextLevelInfo = getNextLevelInfo(student, levelThresholds);
+  const conditionLabel = getPetConditionLabel(student.pet_condition);
+  const visualCondition = student.pet_condition || 'healthy';
+  const conditionDecoration = {
+    healthy: { icon: '✨', accent: '状态稳定' },
+    hungry: { icon: '🍽️', accent: '肚子饿了' },
+    weak: { icon: '⚠️', accent: '急需照顾' },
+    sleeping: { icon: '💤', accent: '正在休眠' },
+  }[visualCondition];
+  const primaryButtonLabel = isEgg
+    ? '点击唤醒宠物'
+    : isReadyForNewPet
+      ? '查看图鉴，领取新宠'
+      : '课堂互动';
 
   const handleImageError = (event) => {
     event.currentTarget.onerror = null;
@@ -48,8 +62,13 @@ const PetCard = ({
   };
 
   return (
-    <div className={`pet-card glass-card ${effect ? `is-${effect.type}` : ''} ${isSelected ? 'selected' : ''}`}>
+    <div
+      className={`pet-card glass-card ${effect ? `is-${effect.type}` : ''} ${isSelected ? 'selected' : ''} ${
+        !isEgg ? `condition-${student.pet_condition || 'healthy'}` : ''
+      }`}
+    >
       <div className="pet-lv-badge">Lv.{student.pet_level || 0}</div>
+      {!isEgg && <div className={`pet-condition-badge ${student.pet_condition || 'healthy'}`}>{conditionLabel}</div>}
 
       {isSelectable && (
         <button
@@ -72,6 +91,19 @@ const PetCard = ({
       )}
 
       <button className="pet-visual pet-visual-trigger" type="button" onClick={() => onActivate(student)}>
+        {!isEgg && (
+          <>
+            <div className={`pet-status-aura ${visualCondition}`} />
+            <div className={`pet-status-orb ${visualCondition}`}>
+              <span>{conditionDecoration.icon}</span>
+            </div>
+            <div className={`pet-status-particles ${visualCondition}`} aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+          </>
+        )}
         {effect && (
           <>
             <div className={`pet-exp-burst ${effect.type}`}>
@@ -107,12 +139,19 @@ const PetCard = ({
           <div>
             <span className="pet-type-label">{petTypeLabel}</span>
             <h3 className="student-name">{student.name}</h3>
+            {!isEgg && <span className={`pet-condition-accent ${visualCondition}`}>{conditionDecoration.accent}</span>}
           </div>
           <div className="reward-count">
             <Star size={16} />
             <strong>{student.reward_count || 0}</strong>
           </div>
         </div>
+        {!isEgg && (
+          <div className="pet-status-copy">
+            <span className={`pet-status-last-fed ${visualCondition}`}>{formatLastFedLabel(student.last_fed_at)}</span>
+            <p className="pet-status-hint">{getPetSafetyHint(student)}</p>
+          </div>
+        )}
         <p className="pet-level-caption">{nextLevelInfo.label}</p>
         <div className="pet-progress-track">
           <div className="pet-progress-fill" style={{ width: `${nextLevelInfo.progress}%` }} />
@@ -124,7 +163,7 @@ const PetCard = ({
         onClick={() => onActivate(student)}
         type="button"
       >
-        {isEgg ? '点击唤醒宠物' : isReadyForNewPet ? '查看图鉴，领取新宠' : '奖励 / 惩罚'}
+        {primaryButtonLabel}
       </button>
     </div>
   );

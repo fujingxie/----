@@ -83,6 +83,18 @@ export const updateStudent = ({ userId, classId, studentId, updates, actionType,
     body: JSON.stringify({ userId, classId, updates, actionType, detail, undoMeta }),
   });
 
+export const feedStudent = ({ userId, classId, studentId }) =>
+  request(`/students/${studentId}/feed`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, classId }),
+  });
+
+export const feedStudentsBatch = ({ userId, classId, studentIds }) =>
+  request(`/classes/${classId}/students/feed`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, studentIds }),
+  });
+
 export const createShopItem = ({ userId, classId, item }) =>
   request(`/classes/${classId}/shop-items`, {
     method: 'POST',
@@ -125,10 +137,10 @@ export const deleteRule = ({ userId, classId, ruleId }) =>
     body: JSON.stringify({ userId, classId }),
   });
 
-export const updateThresholds = ({ userId, classId, thresholds }) =>
+export const updateThresholds = ({ userId, classId, thresholds, petConditionConfig }) =>
   request(`/classes/${classId}/settings/thresholds`, {
     method: 'PUT',
-    body: JSON.stringify({ userId, thresholds }),
+    body: JSON.stringify({ userId, thresholds, petConditionConfig }),
   });
 
 export const updateSmartSeatingConfig = ({ userId, classId, config }) =>

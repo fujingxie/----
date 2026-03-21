@@ -39,6 +39,7 @@ const PetParadise = ({
   onActivatePet,
   onGraduatePet,
   onInteractStudent,
+  onFeedStudentsBatch,
   rules,
   levelThresholds,
 }) => {
@@ -51,14 +52,38 @@ const PetParadise = ({
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [isBulkFeeding, setIsBulkFeeding] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('all');
   const activePetsCount = students.filter((student) => student.pet_status !== 'egg').length;
   const totalAdoptions = students.reduce((sum, student) => sum + getAdoptionCount(student), 0);
   const classCoins = students.reduce((sum, student) => sum + (student.coins || 0), 0);
   const totalRewards = students.reduce((sum, student) => sum + (student.reward_count || 0), 0);
-  const feedableStudents = useMemo(
-    () => students.filter((student) => student.pet_status !== 'egg' && !isStudentAtMaxLevel(student, levelThresholds)),
-    [students, levelThresholds],
+  const feedableStudents = useMemo(() => students.filter((student) => student.pet_status !== 'egg'), [students]);
+  const conditionSummary = useMemo(
+    () =>
+      students.reduce(
+        (summary, student) => {
+          if (student.pet_status === 'egg') {
+            return summary;
+          }
+
+          summary[student.pet_condition || 'healthy'] += 1;
+          return summary;
+        },
+        { healthy: 0, hungry: 0, weak: 0, sleeping: 0 },
+      ),
+    [students],
   );
+  const filteredStudents = useMemo(() => {
+    if (activeFilter === 'attention') {
+      return students.filter((student) => student.pet_status !== 'egg' && student.pet_condition !== 'healthy');
+    }
+
+    if (activeFilter === 'sleeping') {
+      return students.filter((student) => student.pet_status !== 'egg' && student.pet_condition === 'sleeping');
+    }
+
+    return students;
+  }, [activeFilter, students]);
   const achievements = useMemo(() => {
     const rewardMaster = totalRewards >= 10;
     const firstGraduate = students.some((student) => isStudentAtMaxLevel(student, levelThresholds))
@@ -150,7 +175,7 @@ const PetParadise = ({
   };
 
   const toggleSelectStudent = (student) => {
-    if (student.pet_status === 'egg' || isStudentAtMaxLevel(student, levelThresholds)) {
+    if (student.pet_status === 'egg') {
       return;
     }
 
@@ -180,22 +205,11 @@ const PetParadise = ({
     setIsBulkFeeding(true);
 
     try {
-      for (const student of selectedStudents) {
-        const nextPetPoints = Math.max(0, (student.pet_points || 0) + BULK_FEED_RULE.exp);
-        const nextTotalExp = (student.total_exp || 0) + BULK_FEED_RULE.exp;
-        const updated = {
-          ...student,
-          pet_points: nextPetPoints,
-          total_exp: nextTotalExp,
-          reward_count: (student.reward_count || 0) + 1,
-          pet_level: resolvePetLevel(nextTotalExp, levelThresholds),
-        };
-        updated.pet_collection = syncStudentCollectionProgress(updated);
-
+      selectedStudents.forEach((student) => {
         triggerPetEffect(student.id, 'positive', BULK_FEED_RULE);
-        playActionSound('positive');
-        await onInteractStudent(student, BULK_FEED_RULE, updated);
-      }
+      });
+      playActionSound('positive');
+      await onFeedStudentsBatch(selectedStudentIds);
 
       setSelectedStudentIds([]);
       setIsBulkMode(false);
@@ -286,6 +300,22 @@ const PetParadise = ({
             <span className="pet-stat-label">班级金币</span>
             <strong>{classCoins}</strong>
           </div>
+          <div className="pet-stat-card status healthy">
+            <span className="pet-stat-label">健康中</span>
+            <strong>{conditionSummary.healthy}</strong>
+          </div>
+          <div className="pet-stat-card status hungry">
+            <span className="pet-stat-label">即将饥饿</span>
+            <strong>{conditionSummary.hungry}</strong>
+          </div>
+          <div className="pet-stat-card status weak">
+            <span className="pet-stat-label">虚弱中</span>
+            <strong>{conditionSummary.weak}</strong>
+          </div>
+          <div className="pet-stat-card status sleeping">
+            <span className="pet-stat-label">休眠中</span>
+            <strong>{conditionSummary.sleeping}</strong>
+          </div>
         </div>
 
         <div className="pet-achievement-row">
@@ -326,8 +356,31 @@ const PetParadise = ({
       )}
 
       <section className="pet-paradise-grid-wrap glass-card">
+        <div className="pet-filter-row">
+          <button
+            className={`pet-filter-chip ${activeFilter === 'all' ? 'active' : ''}`}
+            onClick={() => setActiveFilter('all')}
+            type="button"
+          >
+            全部
+          </button>
+          <button
+            className={`pet-filter-chip ${activeFilter === 'attention' ? 'active' : ''}`}
+            onClick={() => setActiveFilter('attention')}
+            type="button"
+          >
+            需喂养
+          </button>
+          <button
+            className={`pet-filter-chip ${activeFilter === 'sleeping' ? 'active' : ''}`}
+            onClick={() => setActiveFilter('sleeping')}
+            type="button"
+          >
+            已休眠
+          </button>
+        </div>
         <div className="pet-paradise-grid">
-          {students.map(student => (
+          {filteredStudents.map(student => (
             <PetCard 
               key={student.id} 
               student={student} 
@@ -337,7 +390,7 @@ const PetParadise = ({
               effect={petEffects[student.id] || null}
               onOpenCollection={setCollectionStudent}
               onActivate={handlePetPrimaryAction}
-              isSelectable={isBulkMode && student.pet_status !== 'egg' && !isStudentAtMaxLevel(student, levelThresholds)}
+              isSelectable={isBulkMode && student.pet_status !== 'egg'}
               isSelected={selectedStudentIds.includes(student.id)}
               onToggleSelect={toggleSelectStudent}
             />
@@ -413,6 +466,14 @@ const PetParadise = ({
                 (interactingStudent.reward_count || 0) + (rule.type === 'positive' ? 1 : 0),
               pet_level: resolvePetLevel(nextTotalExp, levelThresholds),
             };
+
+            if (rule.type === 'positive') {
+              updated.last_fed_at = new Date().toISOString();
+              updated.last_decay_at = updated.last_fed_at;
+              updated.pet_condition = 'healthy';
+              updated.pet_condition_locked_at = null;
+            }
+
             updated.pet_collection = syncStudentCollectionProgress(updated);
 
             triggerPetEffect(interactingStudent.id, rule.type, rule);

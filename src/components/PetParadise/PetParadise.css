@@ -134,6 +134,29 @@
   gap: 4px;
 }
 
+.pet-stat-card.status.healthy {
+  border-color: rgba(16, 185, 129, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.08);
+}
+
+.pet-stat-card.status.hungry {
+  border-color: rgba(245, 158, 11, 0.22);
+  background: rgba(255, 251, 235, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.08);
+}
+
+.pet-stat-card.status.weak {
+  border-color: rgba(248, 113, 113, 0.2);
+  background: rgba(255, 241, 242, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.08);
+}
+
+.pet-stat-card.status.sleeping {
+  border-color: rgba(100, 116, 139, 0.2);
+  background: rgba(241, 245, 249, 0.82);
+  box-shadow: inset 0 0 0 1px rgba(100, 116, 139, 0.08);
+}
+
 .pet-stat-card strong {
   font-size: 16px;
   line-height: 1;
@@ -160,6 +183,30 @@
 .pet-paradise-grid-wrap {
   width: 100%;
   padding: 24px;
+}
+
+.pet-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.pet-filter-chip {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(255, 255, 255, 0.84);
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pet-filter-chip.active {
+  border-color: rgba(34, 197, 184, 0.3);
+  background: rgba(240, 253, 250, 0.95);
+  color: #0f766e;
 }
 
 .pet-paradise-grid {
@@ -402,11 +449,11 @@
   }
 
   .pet-paradise-stats {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .pet-achievement-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .pet-paradise-grid-wrap {
@@ -440,6 +487,11 @@
 }
 
 @media (max-width: 640px) {
+  .pet-paradise-stats,
+  .pet-achievement-row {
+    grid-template-columns: 1fr;
+  }
+
   .bulk-feed-toolbar {
     flex-direction: column;
     align-items: stretch;

@@ -19,6 +19,14 @@ import {
 import { graduateToNewEgg } from '../../lib/petCollection';
 
 const DEFAULT_THRESHOLDS = [10, 20, 30, 50, 70, 100];
+const DEFAULT_PET_CONDITION_CONFIG = {
+  hungry_days: 2,
+  weak_days: 4,
+  sleeping_days: 7,
+  hungry_decay: 0,
+  weak_decay: 1,
+  sleeping_decay: 2,
+};
 const EMPTY_RULE = {
   name: '',
   icon: '⭐',
@@ -309,6 +317,7 @@ const ClassSettingsPanel = ({
 
 const RulesSettingsPanel = ({
   levelThresholds,
+  petConditionConfig,
   rules,
   onAddRule,
   onUpdateRule,
@@ -316,6 +325,7 @@ const RulesSettingsPanel = ({
   onSaveThresholds,
 }) => {
   const [thresholdDraft, setThresholdDraft] = useState(levelThresholds || DEFAULT_THRESHOLDS);
+  const [conditionDraft, setConditionDraft] = useState(petConditionConfig || DEFAULT_PET_CONDITION_CONFIG);
   const [newRule, setNewRule] = useState(EMPTY_RULE);
   const [editingRuleId, setEditingRuleId] = useState(null);
   const [editingRule, setEditingRule] = useState(EMPTY_RULE);
@@ -353,7 +363,31 @@ const RulesSettingsPanel = ({
       return;
     }
 
-    await onSaveThresholds(normalizedThresholds);
+    const normalizedCondition = {
+      hungry_days: Number(conditionDraft.hungry_days || 0),
+      weak_days: Number(conditionDraft.weak_days || 0),
+      sleeping_days: Number(conditionDraft.sleeping_days || 0),
+      hungry_decay: Number(conditionDraft.hungry_decay || 0),
+      weak_decay: Number(conditionDraft.weak_decay || 0),
+      sleeping_decay: Number(conditionDraft.sleeping_decay || 0),
+    };
+
+    if (
+      normalizedCondition.hungry_days < 1
+      || normalizedCondition.weak_days <= normalizedCondition.hungry_days
+      || normalizedCondition.sleeping_days <= normalizedCondition.weak_days
+      || normalizedCondition.hungry_decay < 0
+      || normalizedCondition.weak_decay < 0
+      || normalizedCondition.sleeping_decay < 0
+    ) {
+      window.alert('宠物状态配置需要满足：饥饿 < 虚弱 < 休眠，衰减经验不能小于 0');
+      return;
+    }
+
+    await onSaveThresholds({
+      thresholds: normalizedThresholds,
+      petConditionConfig: normalizedCondition,
+    });
   };
 
   const submitRule = async (rule, onDone) => {
@@ -623,6 +657,103 @@ const RulesSettingsPanel = ({
               />
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="subsection mt-30 thresholds-panel">
+        <div className="thresholds-panel-header">
+          <div>
+            <h4>宠物状态时间</h4>
+            <p className="hint inline-hint">设置宠物在多少天未获得积极课堂互动后进入饥饿、虚弱和休眠。</p>
+          </div>
+        </div>
+        <div className="thresholds-grid pet-condition-grid">
+          <div className="lv-input-box">
+            <label>进入饥饿</label>
+            <input
+              className="glass-input small"
+              type="number"
+              min="1"
+              step="1"
+              value={conditionDraft.hungry_days}
+              onChange={(event) =>
+                setConditionDraft((prev) => ({ ...prev, hungry_days: Number(event.target.value || 0) }))
+              }
+            />
+            <span className="input-unit">天</span>
+          </div>
+          <div className="lv-input-box">
+            <label>进入虚弱</label>
+            <input
+              className="glass-input small"
+              type="number"
+              min="2"
+              step="1"
+              value={conditionDraft.weak_days}
+              onChange={(event) =>
+                setConditionDraft((prev) => ({ ...prev, weak_days: Number(event.target.value || 0) }))
+              }
+            />
+            <span className="input-unit">天</span>
+          </div>
+          <div className="lv-input-box">
+            <label>进入休眠</label>
+            <input
+              className="glass-input small"
+              type="number"
+              min="3"
+              step="1"
+              value={conditionDraft.sleeping_days}
+              onChange={(event) =>
+                setConditionDraft((prev) => ({ ...prev, sleeping_days: Number(event.target.value || 0) }))
+              }
+            />
+            <span className="input-unit">天</span>
+          </div>
+        </div>
+        <div className="thresholds-grid pet-condition-grid">
+          <div className="lv-input-box">
+            <label>饥饿日衰减</label>
+            <input
+              className="glass-input small"
+              type="number"
+              min="0"
+              step="1"
+              value={conditionDraft.hungry_decay}
+              onChange={(event) =>
+                setConditionDraft((prev) => ({ ...prev, hungry_decay: Number(event.target.value || 0) }))
+              }
+            />
+            <span className="input-unit">EXP / 天</span>
+          </div>
+          <div className="lv-input-box">
+            <label>虚弱日衰减</label>
+            <input
+              className="glass-input small"
+              type="number"
+              min="0"
+              step="1"
+              value={conditionDraft.weak_decay}
+              onChange={(event) =>
+                setConditionDraft((prev) => ({ ...prev, weak_decay: Number(event.target.value || 0) }))
+              }
+            />
+            <span className="input-unit">EXP / 天</span>
+          </div>
+          <div className="lv-input-box">
+            <label>休眠日衰减</label>
+            <input
+              className="glass-input small"
+              type="number"
+              min="0"
+              step="1"
+              value={conditionDraft.sleeping_decay}
+              onChange={(event) =>
+                setConditionDraft((prev) => ({ ...prev, sleeping_decay: Number(event.target.value || 0) }))
+              }
+            />
+            <span className="input-unit">EXP / 天</span>
+          </div>
         </div>
       </div>
     </>
@@ -1151,6 +1282,7 @@ const Settings = ({
   rules,
   logs = [],
   levelThresholds,
+  petConditionConfig,
   onUpdateClass,
   onImportStudents,
   onRemoveStudent,
@@ -1273,8 +1405,16 @@ const Settings = ({
               <div className="empty-settings-state">请先创建班级，再设置课堂奖惩规则。</div>
             ) : (
               <RulesSettingsPanel
-                key={`${currentClass.id}-${(levelThresholds || DEFAULT_THRESHOLDS).join('-')}`}
+                key={`${currentClass.id}-${(levelThresholds || DEFAULT_THRESHOLDS).join('-')}-${
+                  (petConditionConfig?.hungry_days || DEFAULT_PET_CONDITION_CONFIG.hungry_days)
+                }-${(petConditionConfig?.weak_days || DEFAULT_PET_CONDITION_CONFIG.weak_days)}-${
+                  petConditionConfig?.sleeping_days || DEFAULT_PET_CONDITION_CONFIG.sleeping_days
+                }-${(petConditionConfig?.hungry_decay ?? DEFAULT_PET_CONDITION_CONFIG.hungry_decay)}-${
+                  petConditionConfig?.weak_decay ?? DEFAULT_PET_CONDITION_CONFIG.weak_decay
+                }-${petConditionConfig?.sleeping_decay ?? DEFAULT_PET_CONDITION_CONFIG.sleeping_decay
+                }`}
                 levelThresholds={levelThresholds}
+                petConditionConfig={petConditionConfig}
                 rules={rules}
                 onAddRule={onAddRule}
                 onUpdateRule={onUpdateRule}

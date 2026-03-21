@@ -5,7 +5,7 @@ import Modal from '../Common/Modal';
 import EmptyState from '../Common/EmptyState';
 import { notify } from '../../lib/notify';
 
-const EMPTY_ITEM = { name: '', price: '', stock: '', icon: '🎁' };
+const EMPTY_ITEM = { name: '', price: '', stock: '', icon: '🎁', item_type: 'gift', exp_value: '' };
 const SHOP_ICON_OPTIONS = ['🎁', '🍬', '🍪', '🧃', '📚', '✏️', '🏅', '🎨', '🧩', '🪁', '🎯', '⭐'];
 
 const toSafeNonNegativeInteger = (value) => {
@@ -65,6 +65,8 @@ const MiniShop = ({
 
   const normalizeItem = (item) => ({
     ...item,
+    item_type: item.item_type === 'exp_pack' ? 'exp_pack' : 'gift',
+    exp_value: parseInt(item.exp_value, 10) || 0,
     price: parseInt(item.price, 10),
     stock: parseInt(item.stock, 10) || 99,
   });
@@ -72,7 +74,7 @@ const MiniShop = ({
   const handleAddItem = async () => {
     const normalized = normalizeItem(newItem);
 
-    if (!newItem.name || !newItem.price || normalized.price <= 0) {
+    if (!newItem.name || !newItem.price || normalized.price <= 0 || (normalized.item_type === 'exp_pack' && normalized.exp_value <= 0)) {
       notify('商品价格必须大于 0，库存不能为负数', 'warning');
       return;
     }
@@ -85,7 +87,7 @@ const MiniShop = ({
   const handleEditItem = async () => {
     const normalized = normalizeItem(editDraft);
 
-    if (!editingItem || !editDraft.name || !editDraft.price || normalized.price <= 0) {
+    if (!editingItem || !editDraft.name || !editDraft.price || normalized.price <= 0 || (normalized.item_type === 'exp_pack' && normalized.exp_value <= 0)) {
       notify('商品价格必须大于 0，库存不能为负数', 'warning');
       return;
     }
@@ -105,6 +107,8 @@ const MiniShop = ({
       price: String(item.price),
       stock: String(item.stock),
       icon: item.icon || '🎁',
+      item_type: item.item_type || 'gift',
+      exp_value: item.exp_value ? String(item.exp_value) : '',
     });
   };
 
@@ -182,19 +186,24 @@ const MiniShop = ({
               <div className="item-card-top">
                 <div className="item-icon">{item.icon}</div>
                 <div className="item-head-copy">
-                  <div className="item-badge">
+                  <div className={`item-badge ${item.item_type === 'exp_pack' ? 'exp-pack' : ''}`}>
                     <Sparkles size={12} />
-                    <span>课堂奖励</span>
+                    <span>{item.item_type === 'exp_pack' ? '经验包' : '课堂奖励'}</span>
                   </div>
                   <h3>{item.name}</h3>
                   <div className="item-meta">
                     <span className="price">💰 {item.price}</span>
+                    {item.item_type === 'exp_pack' && <span className="exp-pack-value">+{item.exp_value} EXP</span>}
                     <span className={`stock ${item.stock <= 3 ? 'low' : ''}`}>库存 {item.stock}</span>
                   </div>
                 </div>
               </div>
               <div className="item-details">
-                <p>把课堂表现兑换成看得见的惊喜奖励，让积极行为更有反馈。</p>
+                <p>
+                  {item.item_type === 'exp_pack'
+                    ? '把金币兑换成宠物经验包，发放后会直接补充宠物成长并刷新喂养状态。'
+                    : '把课堂表现兑换成看得见的惊喜奖励，让积极行为更有反馈。'}
+                </p>
               </div>
               <div className="shop-card-actions">
                 <button className="icon-btn blue" onClick={() => openEditItem(item)} type="button" title="编辑商品">
@@ -269,6 +278,25 @@ const MiniShop = ({
               onChange={(event) => setNewItem({ ...newItem, name: event.target.value })}
             />
           </div>
+          <div className="form-group">
+            <label>商品类型</label>
+            <div className="shop-type-toggle">
+              <button
+                className={newItem.item_type === 'gift' ? 'active' : ''}
+                onClick={() => setNewItem((prev) => ({ ...prev, item_type: 'gift', exp_value: '' }))}
+                type="button"
+              >
+                礼品
+              </button>
+              <button
+                className={newItem.item_type === 'exp_pack' ? 'active' : ''}
+                onClick={() => setNewItem((prev) => ({ ...prev, item_type: 'exp_pack' }))}
+                type="button"
+              >
+                经验包
+              </button>
+            </div>
+          </div>
           <div className="form-row">
             <div className="form-group">
               <label>兑换价格 (金币)</label>
@@ -295,6 +323,20 @@ const MiniShop = ({
               />
             </div>
           </div>
+          {newItem.item_type === 'exp_pack' && (
+            <div className="form-group">
+              <label>经验包数值</label>
+              <input
+                className="glass-input"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="5"
+                value={newItem.exp_value}
+                onChange={(event) => setNewItem({ ...newItem, exp_value: toSafeNonNegativeInteger(event.target.value) })}
+              />
+            </div>
+          )}
           <div className="modal-footer">
             <button className="cancel-btn" onClick={() => setIsAddingItem(false)} type="button">取消</button>
             <button className="confirm-btn" onClick={handleAddItem} type="button">确认上架</button>
@@ -315,6 +357,25 @@ const MiniShop = ({
               value={editDraft.name}
               onChange={(event) => setEditDraft((prev) => ({ ...prev, name: event.target.value }))}
             />
+          </div>
+          <div className="form-group">
+            <label>商品类型</label>
+            <div className="shop-type-toggle">
+              <button
+                className={editDraft.item_type === 'gift' ? 'active' : ''}
+                onClick={() => setEditDraft((prev) => ({ ...prev, item_type: 'gift', exp_value: '' }))}
+                type="button"
+              >
+                礼品
+              </button>
+              <button
+                className={editDraft.item_type === 'exp_pack' ? 'active' : ''}
+                onClick={() => setEditDraft((prev) => ({ ...prev, item_type: 'exp_pack' }))}
+                type="button"
+              >
+                经验包
+              </button>
+            </div>
           </div>
           <div className="form-row">
             <div className="form-group">
@@ -340,6 +401,19 @@ const MiniShop = ({
               />
             </div>
           </div>
+          {editDraft.item_type === 'exp_pack' && (
+            <div className="form-group">
+              <label>经验包数值</label>
+              <input
+                className="glass-input"
+                type="number"
+                min="1"
+                step="1"
+                value={editDraft.exp_value}
+                onChange={(event) => setEditDraft((prev) => ({ ...prev, exp_value: toSafeNonNegativeInteger(event.target.value) }))}
+              />
+            </div>
+          )}
           <div className="modal-footer">
             <button className="cancel-btn" onClick={() => setEditingItem(null)} type="button">取消</button>
             <button className="confirm-btn" onClick={handleEditItem} type="button">保存商品</button>
@@ -364,20 +438,22 @@ const MiniShop = ({
           <div className="student-selection-grid">
             {students.map((student) => {
               const canAfford = (student.coins || 0) >= (selectedItemForRedeem?.price || 0);
+              const canUseExpPack = selectedItemForRedeem?.item_type !== 'exp_pack' || student.pet_status !== 'egg';
               const isSelected = selectedStudents.includes(student.id);
               const soldOutForSelection = !isSelected && selectedItemForRedeem && selectedCount >= selectedItemForRedeem.stock;
 
               return (
                 <div
                   key={student.id}
-                  className={`student-item ${!canAfford ? 'insufficient' : ''} ${soldOutForSelection ? 'soldout' : ''} ${isSelected ? 'selected' : ''}`}
-                  onClick={() => toggleStudentSelection(student.id, canAfford && !soldOutForSelection)}
+                  className={`student-item ${!canAfford || !canUseExpPack ? 'insufficient' : ''} ${soldOutForSelection ? 'soldout' : ''} ${isSelected ? 'selected' : ''}`}
+                  onClick={() => toggleStudentSelection(student.id, canAfford && !soldOutForSelection && canUseExpPack)}
                 >
                   <span className="s-name">{student.name}</span>
                   <span className="s-coins">💰{student.coins || 0}</span>
                   {!canAfford && <span className="s-status danger">金币不足</span>}
-                  {canAfford && soldOutForSelection && <span className="s-status warn">库存已满</span>}
-                  {canAfford && !soldOutForSelection && !isSelected && <span className="s-status ok">可兑换</span>}
+                  {canAfford && !canUseExpPack && <span className="s-status danger">宠物未唤醒</span>}
+                  {canAfford && canUseExpPack && soldOutForSelection && <span className="s-status warn">库存已满</span>}
+                  {canAfford && canUseExpPack && !soldOutForSelection && !isSelected && <span className="s-status ok">可兑换</span>}
                   {isSelected && <div className="check-mark">✓</div>}
                 </div>
               );

@@ -31,6 +31,10 @@ CREATE TABLE students (
     class_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     pet_status TEXT DEFAULT 'egg', -- egg, active
+    pet_condition TEXT NOT NULL DEFAULT 'healthy', -- healthy, hungry, weak, sleeping
+    last_fed_at DATETIME,
+    last_decay_at DATETIME,
+    pet_condition_locked_at DATETIME,
     pet_name TEXT,
     pet_type_id TEXT,
     pet_level INTEGER DEFAULT 0,
@@ -50,6 +54,8 @@ CREATE TABLE shop_items (
     class_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     icon TEXT,
+    item_type TEXT NOT NULL DEFAULT 'gift', -- gift, exp_pack
+    exp_value INTEGER NOT NULL DEFAULT 0,
     price INTEGER NOT NULL,
     stock INTEGER DEFAULT 99,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -72,6 +78,7 @@ CREATE TABLE rules (
 CREATE TABLE class_settings (
     class_id INTEGER PRIMARY KEY,
     level_thresholds TEXT NOT NULL DEFAULT '[10,20,30,50,70,100]',
+    pet_condition_config TEXT NOT NULL DEFAULT '{"hungry_days":2,"weak_days":4,"sleeping_days":7,"hungry_decay":0,"weak_decay":1,"sleeping_decay":2}',
     smart_seating_config TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (class_id) REFERENCES classes(id)
