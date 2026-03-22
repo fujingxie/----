@@ -137,6 +137,12 @@ export const deleteRule = ({ userId, classId, ruleId }) =>
     body: JSON.stringify({ userId, classId }),
   });
 
+export const moveRule = ({ userId, classId, ruleId, direction }) =>
+  request(`/rules/${ruleId}/move`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, classId, direction }),
+  });
+
 export const updateThresholds = ({ userId, classId, thresholds, petConditionConfig }) =>
   request(`/classes/${classId}/settings/thresholds`, {
     method: 'PUT',

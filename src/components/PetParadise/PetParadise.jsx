@@ -6,7 +6,8 @@ import PetCollectionModal from './PetCollectionModal';
 import './PetParadise.css';
 import { CheckCircle2, UserPlus } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { getAdoptionCount, graduateToNewEgg, isStudentAtMaxLevel, syncStudentCollectionProgress } from '../../lib/petCollection';
+import { PET_LIBRARY } from '../../api/petLibrary';
+import { activateStudentPet, getAdoptionCount, graduateToNewEgg, isStudentAtMaxLevel, syncStudentCollectionProgress } from '../../lib/petCollection';
 import { playActionSound } from '../../lib/sounds';
 
 const POSITIVE_EFFECT_ICONS = ['✨', '💖', '🌟', '🍗', '🎉'];
@@ -40,6 +41,7 @@ const PetParadise = ({
   onGraduatePet,
   onInteractStudent,
   onFeedStudentsBatch,
+  onRequestConfirm,
   rules,
   levelThresholds,
   petConditionConfig,
@@ -53,8 +55,10 @@ const PetParadise = ({
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [isBulkFeeding, setIsBulkFeeding] = useState(false);
+  const [isBulkAdopting, setIsBulkAdopting] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
   const activePetsCount = students.filter((student) => student.pet_status !== 'egg').length;
+  const eggStudents = useMemo(() => students.filter((student) => student.pet_status === 'egg'), [students]);
   const totalAdoptions = students.reduce((sum, student) => sum + getAdoptionCount(student), 0);
   const classCoins = students.reduce((sum, student) => sum + (student.coins || 0), 0);
   const totalRewards = students.reduce((sum, student) => sum + (student.reward_count || 0), 0);
@@ -219,6 +223,42 @@ const PetParadise = ({
     }
   };
 
+  const handleBulkAdopt = async () => {
+    if (eggStudents.length === 0 || isBulkAdopting) {
+      return;
+    }
+
+    const confirmed = await onRequestConfirm?.({
+      title: '批量领养宠物',
+      message: `批量领养会为 ${eggStudents.length} 个神秘蛋随机选择宠物，确认继续吗？`,
+      confirmLabel: '确认领养',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsBulkAdopting(true);
+
+    try {
+      for (const student of eggStudents) {
+        const randomPet = PET_LIBRARY[Math.floor(Math.random() * PET_LIBRARY.length)];
+        await onActivatePet(activateStudentPet(student, randomPet));
+      }
+
+      playActionSound('adopt');
+      confetti({
+        particleCount: Math.min(220, Math.max(90, eggStudents.length * 18)),
+        spread: 82,
+        origin: { y: 0.58 },
+        colors: ['#6366f1', '#10b981', '#f59e0b'],
+      });
+      setActiveFilter('all');
+    } finally {
+      setIsBulkAdopting(false);
+    }
+  };
+
   if (!currentClass) {
     return (
       <div className="empty-state">
@@ -269,6 +309,16 @@ const PetParadise = ({
         </div>
 
         <div className="pet-paradise-hero-actions">
+          {eggStudents.length > 0 && (
+            <button
+              className="bulk-adopt-btn"
+              onClick={handleBulkAdopt}
+              disabled={isBulkAdopting}
+              type="button"
+            >
+              {isBulkAdopting ? '领养中...' : '批量领养'}
+            </button>
+          )}
           {feedableStudents.length > 0 && (
             <button
               className={`bulk-mode-btn ${isBulkMode ? 'active' : ''}`}

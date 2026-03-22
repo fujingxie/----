@@ -66,6 +66,7 @@ CREATE TABLE shop_items (
 CREATE TABLE rules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     class_id INTEGER, -- NULL 表示系统预设
+    sort_order INTEGER NOT NULL DEFAULT 0,
     name TEXT NOT NULL,
     icon TEXT,
     exp INTEGER NOT NULL,

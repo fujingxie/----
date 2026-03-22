@@ -33,6 +33,7 @@ import {
   deleteStudentsBatch,
   deleteShopItem,
   deleteRule,
+  moveRule,
   fetchAdminCodes,
   fetchAdminLogs,
   fetchAdminRegisterChannels,
@@ -1071,6 +1072,37 @@ function App() {
     }
   };
 
+  const handleMoveRule = async (ruleId, direction) => {
+    if (!user || !currentClassId) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+
+    try {
+      const response = await moveRule({
+        userId: user.id,
+        classId: currentClassId,
+        ruleId,
+        direction,
+      });
+      setRulesByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.rules || [],
+      }));
+      setLogsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.logs || [],
+      }));
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
   const handleSaveThresholds = async ({ thresholds, petConditionConfig }) => {
     if (!user || !currentClassId) {
       return;
@@ -1635,11 +1667,13 @@ function App() {
               rules={currentRules}
               logs={currentLogs}
               levelThresholds={currentThresholds}
+              petConditionConfig={currentPetConditionConfig}
               onImportStudents={handleImportStudents}
               onActivatePet={handleActivatePet}
               onGraduatePet={handleGraduatePet}
               onInteractStudent={handleInteractStudent}
               onFeedStudentsBatch={handleFeedStudentsBatch}
+              onRequestConfirm={requestConfirm}
             />
           )}
 
@@ -1691,6 +1725,7 @@ function App() {
               onAddRule={handleAddRule}
               onUpdateRule={handleUpdateRule}
               onDeleteRule={handleDeleteRule}
+              onMoveRule={handleMoveRule}
               onSaveThresholds={handleSaveThresholds}
               onUpdateStudent={(student, actionType, detail) =>
                 handleUpdateStudent({ student, actionType, detail })

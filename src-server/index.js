@@ -548,6 +548,7 @@ const normalizeRule = (row) => ({
   exp: Number(row.exp || 0),
   coins: Number(row.coins || 0),
   type: row.type,
+  sort_order: Number(row.sort_order || 0),
   isSystem: row.class_id === null,
 });
 
@@ -746,10 +747,10 @@ async function ensureSystemRules(db) {
     return;
   }
 
-  const statements = SYSTEM_RULES.map((rule) =>
+  const statements = SYSTEM_RULES.map((rule, index) =>
     db
-      .prepare('INSERT INTO rules (class_id, name, icon, exp, coins, type) VALUES (NULL, ?, ?, ?, ?, ?)')
-      .bind(rule.name, rule.icon, rule.exp, rule.coins, rule.type),
+      .prepare('INSERT INTO rules (class_id, sort_order, name, icon, exp, coins, type) VALUES (NULL, ?, ?, ?, ?, ?, ?)')
+      .bind(index + 1, rule.name, rule.icon, rule.exp, rule.coins, rule.type),
   );
 
   await db.batch(statements);
@@ -1311,10 +1312,10 @@ async function getShopItemsByClassId(db, classId) {
 async function getRulesByClassId(db, classId) {
   const result = await db
     .prepare(
-      `SELECT id, class_id, name, icon, exp, coins, type
+      `SELECT id, class_id, sort_order, name, icon, exp, coins, type
        FROM rules
        WHERE class_id IS NULL OR class_id = ?
-       ORDER BY CASE WHEN class_id IS NULL THEN 0 ELSE 1 END ASC, created_at ASC, id ASC`,
+       ORDER BY type ASC, sort_order ASC, id ASC`,
     )
     .bind(classId)
     .all();
@@ -2536,9 +2537,15 @@ async function handleCreateRule(db, request, classId) {
 
   await assertClassOwnership(db, userId, classId);
 
+  const maxOrderRow = await db
+    .prepare('SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM rules WHERE type = ? AND (class_id = ? OR class_id IS NULL)')
+    .bind(type, classId)
+    .first();
+  const nextSortOrder = Number(maxOrderRow?.max_order || 0) + 1;
+
   await db
-    .prepare('INSERT INTO rules (class_id, name, icon, exp, coins, type) VALUES (?, ?, ?, ?, ?, ?)')
-    .bind(classId, name, icon, exp, coins, type)
+    .prepare('INSERT INTO rules (class_id, sort_order, name, icon, exp, coins, type) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(classId, nextSortOrder, name, icon, exp, coins, type)
     .run();
 
   await appendLog(db, {
@@ -2624,6 +2631,65 @@ async function handleDeleteRule(db, request, ruleId) {
     userId,
     actionType: '规则修改',
     detail: `删除规则 ${rule.name}`,
+  });
+
+  return json({
+    rules: await getRulesByClassId(db, classId),
+    logs: await getLogsByClassId(db, classId),
+  });
+}
+
+async function handleMoveRule(db, request, ruleId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const classId = parseId(body.classId);
+  const direction = body.direction === 'down' ? 'down' : 'up';
+
+  if (!userId || !classId) {
+    return error('缺少有效的规则上下文');
+  }
+
+  await assertClassOwnership(db, userId, classId);
+
+  const currentRule = await db
+    .prepare('SELECT id, class_id, sort_order, name, type FROM rules WHERE id = ? AND (class_id = ? OR class_id IS NULL)')
+    .bind(ruleId, classId)
+    .first();
+
+  if (!currentRule) {
+    return error('目标规则不存在');
+  }
+
+  const currentSortOrder = Number(currentRule.sort_order || 0);
+  const neighbor = await db
+    .prepare(
+      `SELECT id, sort_order, name
+       FROM rules
+       WHERE type = ? AND id != ? AND (class_id = ? OR class_id IS NULL)
+         AND sort_order ${direction === 'up' ? '<' : '>'} ?
+       ORDER BY sort_order ${direction === 'up' ? 'DESC' : 'ASC'}, id ${direction === 'up' ? 'DESC' : 'ASC'}
+       LIMIT 1`,
+    )
+    .bind(currentRule.type, ruleId, classId, currentSortOrder)
+    .first();
+
+  if (!neighbor) {
+    return json({
+      rules: await getRulesByClassId(db, classId),
+      logs: await getLogsByClassId(db, classId),
+    });
+  }
+
+  await db.batch([
+    db.prepare('UPDATE rules SET sort_order = ? WHERE id = ?').bind(Number(neighbor.sort_order || 0), currentRule.id),
+    db.prepare('UPDATE rules SET sort_order = ? WHERE id = ?').bind(currentSortOrder, neighbor.id),
+  ]);
+
+  await appendLog(db, {
+    classId,
+    userId,
+    actionType: '规则修改',
+    detail: `调整规则顺序：${currentRule.name}${direction === 'up' ? ' 上移' : ' 下移'}`,
   });
 
   return json({
@@ -4004,6 +4070,11 @@ export default {
 
       if (ruleMatch && request.method === 'DELETE') {
         return await handleDeleteRule(db, request, Number(ruleMatch[1]));
+      }
+
+      const moveRuleMatch = path.match(/^\/api\/rules\/(\d+)\/move$/);
+      if (moveRuleMatch && request.method === 'POST') {
+        return await handleMoveRule(db, request, Number(moveRuleMatch[1]));
       }
 
       const thresholdMatch = path.match(/^\/api\/classes\/(\d+)\/settings\/thresholds$/);

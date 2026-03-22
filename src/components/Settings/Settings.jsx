@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import './Settings.css';
 import {
+  ArrowDown,
+  ArrowUp,
   CheckSquare,
   ClipboardList,
   Download,
@@ -334,6 +336,7 @@ const RulesSettingsPanel = ({
   onAddRule,
   onUpdateRule,
   onDeleteRule,
+  onMoveRule,
   onSaveThresholds,
 }) => {
   const [thresholdDraft, setThresholdDraft] = useState(levelThresholds || DEFAULT_THRESHOLDS);
@@ -452,9 +455,12 @@ const RulesSettingsPanel = ({
     setEditingRule(EMPTY_RULE);
   };
 
-  const renderRuleCard = (rule, theme = 'positive') => {
+  const renderRuleCard = (rule, theme = 'positive', groupRules = []) => {
     const isEditing = editingRuleId === rule.id;
     const currentRule = isEditing ? editingRule : rule;
+    const ruleIndex = groupRules.findIndex((item) => item.id === rule.id);
+    const canMoveUp = ruleIndex > 0;
+    const canMoveDown = ruleIndex >= 0 && ruleIndex < groupRules.length - 1;
 
     return (
       <article
@@ -544,6 +550,24 @@ const RulesSettingsPanel = ({
             </div>
 
             <div className="rule-card-actions">
+              <button
+                className="icon-btn soft"
+                onClick={() => onMoveRule(rule.id, 'up')}
+                type="button"
+                title="上移规则"
+                disabled={!canMoveUp}
+              >
+                <ArrowUp size={16} />
+              </button>
+              <button
+                className="icon-btn soft"
+                onClick={() => onMoveRule(rule.id, 'down')}
+                type="button"
+                title="下移规则"
+                disabled={!canMoveDown}
+              >
+                <ArrowDown size={16} />
+              </button>
               <button className="icon-btn blue soft" onClick={() => startEditingRule(rule)} type="button" title="编辑规则">
                 <PenSquare size={16} />
               </button>
@@ -643,7 +667,7 @@ const RulesSettingsPanel = ({
           <div className="empty-settings-state">还没有积极行为规则，先新建一条吧。</div>
         ) : (
           <div className="rule-card-grid">
-            {positiveRules.map((rule) => renderRuleCard(rule, 'positive'))}
+            {positiveRules.map((rule) => renderRuleCard(rule, 'positive', positiveRules))}
           </div>
         )}
       </section>
@@ -657,7 +681,7 @@ const RulesSettingsPanel = ({
           <div className="empty-settings-state">当前还没有惩罚类规则。</div>
         ) : (
           <div className="rule-card-grid">
-            {negativeRules.map((rule) => renderRuleCard(rule, 'negative'))}
+            {negativeRules.map((rule) => renderRuleCard(rule, 'negative', negativeRules))}
           </div>
         )}
       </section>
@@ -1379,6 +1403,7 @@ const Settings = ({
   onAddRule,
   onUpdateRule,
   onDeleteRule,
+  onMoveRule,
   onSaveThresholds,
   onUpdateStudent,
   onUpdatePassword,
@@ -1512,6 +1537,7 @@ const Settings = ({
                 onAddRule={onAddRule}
                 onUpdateRule={onUpdateRule}
                 onDeleteRule={onDeleteRule}
+                onMoveRule={onMoveRule}
                 onSaveThresholds={onSaveThresholds}
               />
             )}

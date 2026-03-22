@@ -65,6 +65,25 @@
   cursor: pointer;
 }
 
+.bulk-adopt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  background: rgba(238, 242, 255, 0.92);
+  color: #4338ca;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.bulk-adopt-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
 .bulk-mode-btn.active {
   background: rgba(34, 197, 184, 0.14);
   border-color: rgba(34, 197, 184, 0.45);
@@ -405,6 +424,12 @@
   border-color: rgba(57, 209, 198, 0.22);
 }
 
+:root[data-theme='night'] .bulk-adopt-btn {
+  background: rgba(31, 41, 55, 0.94);
+  color: #dbeafe;
+  border-color: rgba(129, 140, 248, 0.28);
+}
+
 :root[data-theme='night'] .bulk-mode-btn.active {
   background: linear-gradient(180deg, rgba(13, 54, 61, 0.92), rgba(9, 31, 38, 0.9));
   color: #ecffff;
@@ -445,6 +470,10 @@
   }
 
   .bulk-mode-btn {
+    width: 100%;
+  }
+
+  .bulk-adopt-btn {
     width: 100%;
   }
 
