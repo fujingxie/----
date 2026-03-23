@@ -82,37 +82,6 @@
   z-index: 3;
 }
 
-.pet-condition-badge {
-  position: absolute;
-  top: 14px;
-  left: 86px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 800;
-  z-index: 3;
-}
-
-.pet-condition-badge.healthy {
-  background: rgba(16, 185, 129, 0.12);
-  color: #047857;
-}
-
-.pet-condition-badge.hungry {
-  background: rgba(245, 158, 11, 0.14);
-  color: #b45309;
-}
-
-.pet-condition-badge.weak {
-  background: rgba(248, 113, 113, 0.14);
-  color: #b91c1c;
-}
-
-.pet-condition-badge.sleeping {
-  background: rgba(71, 85, 105, 0.14);
-  color: #334155;
-}
-
 .pet-collection-trigger {
   position: absolute;
   top: 14px;
@@ -402,6 +371,13 @@
   gap: 8px;
 }
 
+.pet-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .pet-type-label {
   font-size: 12px;
   color: #94a3b8;
@@ -415,6 +391,36 @@
   font-weight: 800;
   color: #0f172a;
   line-height: 1.18;
+}
+
+.pet-condition-inline {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.pet-condition-inline.healthy {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+}
+
+.pet-condition-inline.hungry {
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+}
+
+.pet-condition-inline.weak {
+  background: rgba(248, 113, 113, 0.14);
+  color: #b91c1c;
+}
+
+.pet-condition-inline.sleeping {
+  background: rgba(71, 85, 105, 0.14);
+  color: #334155;
 }
 
 .pet-condition-accent {

@@ -34,6 +34,7 @@ import {
   deleteShopItem,
   deleteRule,
   moveRule,
+  importRules,
   fetchAdminCodes,
   fetchAdminLogs,
   fetchAdminRegisterChannels,
@@ -786,7 +787,7 @@ function App() {
     });
   };
 
-  const handleFeedStudentsBatch = async (studentIds) => {
+  const handleFeedStudentsBatch = async (studentIds, rule = null) => {
     if (!user || !currentClassId || studentIds.length === 0) {
       return;
     }
@@ -799,6 +800,7 @@ function App() {
         userId: user.id,
         classId: currentClassId,
         studentIds,
+        rule,
       });
 
       setStudentsByClassId((prev) => ({
@@ -1086,6 +1088,37 @@ function App() {
         classId: currentClassId,
         ruleId,
         direction,
+      });
+      setRulesByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.rules || [],
+      }));
+      setLogsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.logs || [],
+      }));
+    } catch (error) {
+      setAppErrorMessage(error.message);
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleImportRules = async ({ sourceClassId, mode }) => {
+    if (!user || !currentClassId || !sourceClassId) {
+      return;
+    }
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+
+    try {
+      const response = await importRules({
+        userId: user.id,
+        classId: currentClassId,
+        sourceClassId,
+        mode,
       });
       setRulesByClassId((prev) => ({
         ...prev,
@@ -1706,6 +1739,7 @@ function App() {
           {activeTab === 'settings' && (
             <Settings
               user={user}
+              classes={classes}
               theme={theme}
               themeOptions={THEME_OPTIONS}
               density={density}
@@ -1726,6 +1760,7 @@ function App() {
               onUpdateRule={handleUpdateRule}
               onDeleteRule={handleDeleteRule}
               onMoveRule={handleMoveRule}
+              onImportRules={handleImportRules}
               onSaveThresholds={handleSaveThresholds}
               onUpdateStudent={(student, actionType, detail) =>
                 handleUpdateStudent({ student, actionType, detail })

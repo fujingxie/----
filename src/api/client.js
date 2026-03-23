@@ -89,10 +89,10 @@ export const feedStudent = ({ userId, classId, studentId }) =>
     body: JSON.stringify({ userId, classId }),
   });
 
-export const feedStudentsBatch = ({ userId, classId, studentIds }) =>
+export const feedStudentsBatch = ({ userId, classId, studentIds, rule = null }) =>
   request(`/classes/${classId}/students/feed`, {
     method: 'POST',
-    body: JSON.stringify({ userId, studentIds }),
+    body: JSON.stringify({ userId, studentIds, rule }),
   });
 
 export const createShopItem = ({ userId, classId, item }) =>
@@ -141,6 +141,12 @@ export const moveRule = ({ userId, classId, ruleId, direction }) =>
   request(`/rules/${ruleId}/move`, {
     method: 'POST',
     body: JSON.stringify({ userId, classId, direction }),
+  });
+
+export const importRules = ({ userId, classId, sourceClassId, mode }) =>
+  request(`/classes/${classId}/rules/import`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, sourceClassId, mode }),
   });
 
 export const updateThresholds = ({ userId, classId, thresholds, petConditionConfig }) =>

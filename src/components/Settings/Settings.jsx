@@ -40,6 +40,11 @@ const EMPTY_RULE = {
   coins: 5,
   type: 'positive',
 };
+const RULE_ICON_OPTIONS = ['⭐', '🌟', '✨', '🎯', '📚', '📝', '🎤', '🤝', '🏅', '💡', '🍀', '🚀', '⚠️', '📢', '🧹', '⏰', '😴', '🤫'];
+const DEFAULT_RULE_IMPORT = {
+  sourceClassId: '',
+  mode: 'append',
+};
 
 const formatAccountExpireAt = (value) => {
   if (!value) {
@@ -330,6 +335,8 @@ const ClassSettingsPanel = ({
 };
 
 const RulesSettingsPanel = ({
+  classes,
+  currentClass,
   levelThresholds,
   petConditionConfig,
   rules,
@@ -337,6 +344,7 @@ const RulesSettingsPanel = ({
   onUpdateRule,
   onDeleteRule,
   onMoveRule,
+  onImportRules,
   onSaveThresholds,
 }) => {
   const [thresholdDraft, setThresholdDraft] = useState(levelThresholds || DEFAULT_THRESHOLDS);
@@ -345,6 +353,12 @@ const RulesSettingsPanel = ({
   const [editingRuleId, setEditingRuleId] = useState(null);
   const [editingRule, setEditingRule] = useState(EMPTY_RULE);
   const [isCreatePanelOpen, setIsCreatePanelOpen] = useState(false);
+  const [isImportPanelOpen, setIsImportPanelOpen] = useState(false);
+  const [importDraft, setImportDraft] = useState(DEFAULT_RULE_IMPORT);
+  const importableClasses = useMemo(
+    () => (classes || []).filter((item) => item.id !== currentClass?.id),
+    [classes, currentClass],
+  );
 
   const positiveRules = useMemo(
     () => rules.filter((rule) => rule.type !== 'negative'),
@@ -455,6 +469,97 @@ const RulesSettingsPanel = ({
     setEditingRule(EMPTY_RULE);
   };
 
+  const renderRuleForm = (draft, setDraft, onSubmit, submitLabel = '保存规则') => (
+    <div className="rule-form-shell">
+      <div className="rule-form-preview">
+        <div className={`rule-form-preview-icon ${draft.type === 'negative' ? 'negative' : 'positive'}`}>
+          <span>{draft.icon || '⭐'}</span>
+        </div>
+        <div className="rule-form-preview-copy">
+          <strong>{draft.name.trim() || '未命名规则'}</strong>
+          <span>{draft.type === 'negative' ? '需要改进' : '积极行为'}</span>
+        </div>
+      </div>
+
+      <div className="rule-form-grid">
+        <label className="rule-form-field wide">
+          <span>规则名称</span>
+          <input
+            className="glass-input"
+            value={draft.name}
+            onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
+            placeholder="例如：积极发言、作业认真"
+          />
+          <small>这个名称会直接显示在互动面板和批量互动里。</small>
+        </label>
+
+        <label className="rule-form-field">
+          <span>规则类型</span>
+          <select
+            className="glass-input"
+            value={draft.type}
+            onChange={(event) => setDraft((prev) => ({ ...prev, type: event.target.value }))}
+          >
+            <option value="positive">积极行为</option>
+            <option value="negative">需要改进</option>
+          </select>
+          <small>积极行为通常用于奖励，需改进用于提醒和扣减。</small>
+        </label>
+
+        <label className="rule-form-field">
+          <span>经验值变化</span>
+          <input
+            className="glass-input"
+            type="number"
+            step="1"
+            value={draft.exp}
+            onChange={(event) => setDraft((prev) => ({ ...prev, exp: event.target.value }))}
+            placeholder="例如：1 或 -1"
+          />
+          <small>正数表示增加经验，负数表示扣减经验。</small>
+        </label>
+
+        <label className="rule-form-field">
+          <span>金币变化</span>
+          <input
+            className="glass-input"
+            type="number"
+            step="1"
+            value={draft.coins}
+            onChange={(event) => setDraft((prev) => ({ ...prev, coins: event.target.value }))}
+            placeholder="例如：5 或 -2"
+          />
+          <small>金币会同步显示在学生资源和兑换模块里。</small>
+        </label>
+      </div>
+
+      <div className="rule-icon-picker">
+        <div className="rule-icon-picker-head">
+          <strong>选择图标</strong>
+          <span>点一下就能选中，不需要手动输入 emoji</span>
+        </div>
+        <div className="rule-icon-options">
+          {RULE_ICON_OPTIONS.map((icon) => (
+            <button
+              key={icon}
+              className={`rule-icon-option ${draft.icon === icon ? 'active' : ''}`}
+              onClick={() => setDraft((prev) => ({ ...prev, icon }))}
+              type="button"
+            >
+              {icon}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="rule-form-actions">
+        <button className="confirm-btn" onClick={onSubmit} type="button">
+          {submitLabel}
+        </button>
+      </div>
+    </div>
+  );
+
   const renderRuleCard = (rule, theme = 'positive', groupRules = []) => {
     const isEditing = editingRuleId === rule.id;
     const currentRule = isEditing ? editingRule : rule;
@@ -473,59 +578,17 @@ const RulesSettingsPanel = ({
 
         {isEditing ? (
           <div className="rule-card-edit">
-            <input
-              className="glass-input compact"
-              value={editingRule.name}
-              onChange={(event) => setEditingRule((prev) => ({ ...prev, name: event.target.value }))}
-              placeholder="规则名称"
-            />
-            <div className="rule-edit-inline">
-              <input
-                className="glass-input compact icon-input"
-                value={editingRule.icon}
-                onChange={(event) => setEditingRule((prev) => ({ ...prev, icon: event.target.value }))}
-                placeholder="图标"
-              />
-              <select
-                className="glass-input compact select-input"
-                value={editingRule.type}
-                onChange={(event) => setEditingRule((prev) => ({ ...prev, type: event.target.value }))}
-              >
-                <option value="positive">积极行为</option>
-                <option value="negative">需要改进</option>
-              </select>
-            </div>
-            <div className="rule-edit-inline">
-              <input
-                className="glass-input compact stat-input"
-                type="number"
-                step="1"
-                value={editingRule.exp}
-                onChange={(event) => setEditingRule((prev) => ({ ...prev, exp: event.target.value }))}
-                placeholder="EXP"
-              />
-              <input
-                className="glass-input compact stat-input"
-                type="number"
-                step="1"
-                value={editingRule.coins}
-                onChange={(event) => setEditingRule((prev) => ({ ...prev, coins: event.target.value }))}
-                placeholder="金币"
-              />
-            </div>
+            {renderRuleForm(
+              editingRule,
+              setEditingRule,
+              () =>
+                submitRule(editingRule, async (normalizedRule) => {
+                  await onUpdateRule(normalizedRule);
+                  cancelEditingRule();
+                }),
+              '保存修改',
+            )}
             <div className="rule-card-actions editing">
-              <button
-                className="confirm-btn micro"
-                onClick={() =>
-                  submitRule(editingRule, async (normalizedRule) => {
-                    await onUpdateRule(normalizedRule);
-                    cancelEditingRule();
-                  })
-                }
-                type="button"
-              >
-                保存
-              </button>
               <button className="select-all-btn" onClick={cancelEditingRule} type="button">
                 取消
               </button>
@@ -600,61 +663,76 @@ const RulesSettingsPanel = ({
         >
           <Plus size={18} /> {isCreatePanelOpen ? '收起表单' : '新建规则'}
         </button>
+        <button
+          className="rules-import-btn"
+          onClick={() => setIsImportPanelOpen((prev) => !prev)}
+          type="button"
+        >
+          <Download size={18} /> {isImportPanelOpen ? '收起导入' : '导入规则'}
+        </button>
       </section>
 
-      {isCreatePanelOpen && (
-        <section className="rules-create-panel glass-card">
-          <div className="rules-create-grid">
-            <input
-              className="glass-input"
-              placeholder="规则名称"
-              value={newRule.name}
-              onChange={(event) => setNewRule((prev) => ({ ...prev, name: event.target.value }))}
-            />
-            <input
-              className="glass-input"
-              placeholder="图标"
-              value={newRule.icon}
-              onChange={(event) => setNewRule((prev) => ({ ...prev, icon: event.target.value }))}
-            />
-            <input
-              className="glass-input"
-              type="number"
-              step="1"
-              placeholder="EXP"
-              value={newRule.exp}
-              onChange={(event) => setNewRule((prev) => ({ ...prev, exp: event.target.value }))}
-            />
-            <input
-              className="glass-input"
-              type="number"
-              step="1"
-              placeholder="金币"
-              value={newRule.coins}
-              onChange={(event) => setNewRule((prev) => ({ ...prev, coins: event.target.value }))}
-            />
+      {isImportPanelOpen && (
+        <section className="rules-import-panel glass-card">
+          <div className="rules-import-grid">
             <select
               className="glass-input"
-              value={newRule.type}
-              onChange={(event) => setNewRule((prev) => ({ ...prev, type: event.target.value }))}
+              value={importDraft.sourceClassId}
+              onChange={(event) =>
+                setImportDraft((prev) => ({ ...prev, sourceClassId: event.target.value }))
+              }
             >
-              <option value="positive">积极行为</option>
-              <option value="negative">需要改进</option>
+              <option value="">选择来源班级</option>
+              {importableClasses.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className="glass-input"
+              value={importDraft.mode}
+              onChange={(event) =>
+                setImportDraft((prev) => ({ ...prev, mode: event.target.value }))
+              }
+            >
+              <option value="append">追加导入</option>
+              <option value="replace">覆盖当前规则</option>
             </select>
             <button
               className="confirm-btn"
-              onClick={() =>
-                submitRule(newRule, async (normalizedRule) => {
-                  await onAddRule(normalizedRule);
-                  setNewRule(EMPTY_RULE);
-                  setIsCreatePanelOpen(false);
-                })
-              }
+              disabled={!importDraft.sourceClassId}
+              onClick={async () => {
+                if (!importDraft.sourceClassId) {
+                  return;
+                }
+
+                await onImportRules({
+                  sourceClassId: Number(importDraft.sourceClassId),
+                  mode: importDraft.mode,
+                });
+                setImportDraft(DEFAULT_RULE_IMPORT);
+                setIsImportPanelOpen(false);
+              }}
               type="button"
             >
-              保存规则
+              开始导入
             </button>
           </div>
+          <p className="hint inline-hint">
+            可从你名下的其他班级复制规则到当前班级。覆盖模式只会清空当前班级的自定义规则，不会删除系统预设。
+          </p>
+        </section>
+      )}
+
+      {isCreatePanelOpen && (
+        <section className="rules-create-panel glass-card">
+          {renderRuleForm(newRule, setNewRule, () =>
+            submitRule(newRule, async (normalizedRule) => {
+              await onAddRule(normalizedRule);
+              setNewRule(EMPTY_RULE);
+              setIsCreatePanelOpen(false);
+            }))}
         </section>
       )}
 
@@ -1384,6 +1462,7 @@ const ExportPanel = ({ currentClass, students, rules, logs, onExportClassData })
 
 const Settings = ({
   user,
+  classes,
   theme,
   themeOptions,
   density,
@@ -1404,6 +1483,7 @@ const Settings = ({
   onUpdateRule,
   onDeleteRule,
   onMoveRule,
+  onImportRules,
   onSaveThresholds,
   onUpdateStudent,
   onUpdatePassword,
@@ -1531,6 +1611,8 @@ const Settings = ({
                   petConditionConfig?.weak_decay ?? DEFAULT_PET_CONDITION_CONFIG.weak_decay
                 }-${petConditionConfig?.sleeping_decay ?? DEFAULT_PET_CONDITION_CONFIG.sleeping_decay
                 }`}
+                classes={classes}
+                currentClass={currentClass}
                 levelThresholds={levelThresholds}
                 petConditionConfig={petConditionConfig}
                 rules={rules}
@@ -1538,6 +1620,7 @@ const Settings = ({
                 onUpdateRule={onUpdateRule}
                 onDeleteRule={onDeleteRule}
                 onMoveRule={onMoveRule}
+                onImportRules={onImportRules}
                 onSaveThresholds={onSaveThresholds}
               />
             )}

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import Modal from '../Common/Modal';
 import { Sparkles } from 'lucide-react';
-import { getPetImagePath, getPetNameById, PET_IMAGE_FALLBACK, PET_LIBRARY } from '../../api/petLibrary';
+import { ADOPTABLE_PET_LIBRARY, getPetImagePath, getPetNameById, PET_IMAGE_FALLBACK } from '../../api/petLibrary';
 import './PetCollectionModal.css';
 
 const PetCollectionModal = ({
@@ -30,7 +30,7 @@ const PetCollectionModal = ({
         .map((entry) => entry.pet_type_id)
         .filter(Boolean),
     );
-    const lockedEntries = PET_LIBRARY
+    const lockedEntries = ADOPTABLE_PET_LIBRARY
       .filter((pet) => !ownedPetIds.has(pet.id))
       .map((pet) => ({
         id: `locked-${pet.id}`,

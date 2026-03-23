@@ -6,20 +6,12 @@ import PetCollectionModal from './PetCollectionModal';
 import './PetParadise.css';
 import { CheckCircle2, UserPlus } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { PET_LIBRARY } from '../../api/petLibrary';
+import { ADOPTABLE_PET_LIBRARY } from '../../api/petLibrary';
 import { activateStudentPet, getAdoptionCount, graduateToNewEgg, isStudentAtMaxLevel, syncStudentCollectionProgress } from '../../lib/petCollection';
 import { playActionSound } from '../../lib/sounds';
 
 const POSITIVE_EFFECT_ICONS = ['✨', '💖', '🌟', '🍗', '🎉'];
 const NEGATIVE_EFFECT_ICONS = ['💩', '😵', '⚠️', '🌧️', '🥀'];
-const BULK_FEED_RULE = {
-  id: 'bulk-feed',
-  name: '批量喂养',
-  exp: 1,
-  coins: 0,
-  type: 'positive',
-};
-
 const resolvePetLevel = (totalExp, thresholds) => {
   let nextLevel = 1;
 
@@ -54,8 +46,9 @@ const PetParadise = ({
   const [petEffects, setPetEffects] = useState({});
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [isBulkMode, setIsBulkMode] = useState(false);
-  const [isBulkFeeding, setIsBulkFeeding] = useState(false);
+  const [isBulkApplyingRule, setIsBulkApplyingRule] = useState(false);
   const [isBulkAdopting, setIsBulkAdopting] = useState(false);
+  const [isBulkRuleOpen, setIsBulkRuleOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
   const activePetsCount = students.filter((student) => student.pet_status !== 'egg').length;
   const eggStudents = useMemo(() => students.filter((student) => student.pet_status === 'egg'), [students]);
@@ -197,7 +190,7 @@ const PetParadise = ({
   };
 
   const handleBulkFeed = async () => {
-    if (selectedStudentIds.length === 0 || isBulkFeeding) {
+    if (selectedStudentIds.length === 0 || isBulkApplyingRule) {
       return;
     }
 
@@ -207,19 +200,34 @@ const PetParadise = ({
       return;
     }
 
-    setIsBulkFeeding(true);
+    setIsBulkRuleOpen(true);
+  };
+
+  const handleBulkFeedByRule = async (rule) => {
+    if (selectedStudentIds.length === 0 || isBulkApplyingRule) {
+      return;
+    }
+
+    const selectedStudents = feedableStudents.filter((student) => selectedStudentIds.includes(student.id));
+
+    if (selectedStudents.length === 0) {
+      return;
+    }
+
+    setIsBulkApplyingRule(true);
 
     try {
       selectedStudents.forEach((student) => {
-        triggerPetEffect(student.id, 'positive', BULK_FEED_RULE);
+        triggerPetEffect(student.id, rule.type, rule);
       });
-      playActionSound('positive');
-      await onFeedStudentsBatch(selectedStudentIds);
+      playActionSound(rule.type === 'negative' ? 'negative' : 'positive');
+      await onFeedStudentsBatch(selectedStudentIds, rule);
 
       setSelectedStudentIds([]);
       setIsBulkMode(false);
+      setIsBulkRuleOpen(false);
     } finally {
-      setIsBulkFeeding(false);
+      setIsBulkApplyingRule(false);
     }
   };
 
@@ -242,7 +250,7 @@ const PetParadise = ({
 
     try {
       for (const student of eggStudents) {
-        const randomPet = PET_LIBRARY[Math.floor(Math.random() * PET_LIBRARY.length)];
+        const randomPet = ADOPTABLE_PET_LIBRARY[Math.floor(Math.random() * ADOPTABLE_PET_LIBRARY.length)];
         await onActivatePet(activateStudentPet(student, randomPet));
       }
 
@@ -325,7 +333,7 @@ const PetParadise = ({
               onClick={() => setIsBulkMode((prev) => !prev)}
               type="button"
             >
-              {isBulkMode ? '退出批量' : '批量喂养'}
+              {isBulkMode ? '退出批量' : '批量互动'}
             </button>
           )}
           <button className="import-btn-large compact" onClick={() => setIsImporting(true)} type="button">
@@ -468,10 +476,10 @@ const PetParadise = ({
           <button
             className="bulk-feed-action"
             onClick={handleBulkFeed}
-            disabled={selectedStudentIds.length === 0 || isBulkFeeding}
+            disabled={selectedStudentIds.length === 0 || isBulkApplyingRule}
             type="button"
           >
-            {isBulkFeeding ? '喂养中...' : '批量喂养'}
+            {isBulkApplyingRule ? '应用中...' : '批量互动'}
           </button>
         </div>
       )}
@@ -495,6 +503,16 @@ const PetParadise = ({
           }}
         />
       )}
+
+      <InteractionModal
+        isOpen={isBulkRuleOpen}
+        onClose={() => setIsBulkRuleOpen(false)}
+        student={{ name: `${selectedStudentIds.length} 名学生` }}
+        rules={rules}
+        title="选择批量互动规则"
+        emptyHint="暂无可用于批量互动的规则，请先去系统设置添加"
+        onInteract={handleBulkFeedByRule}
+      />
 
       {interactingStudent && (
         <InteractionModal 

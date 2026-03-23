@@ -1,7 +1,7 @@
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
-// .wrangler/tmp/bundle-bx2aBO/checked-fetch.js
+// .wrangler/tmp/bundle-IbQhs8/checked-fetch.js
 var urls = /* @__PURE__ */ new Set();
 function checkURL(request, init) {
   const url = request instanceof URL ? request : new URL(
@@ -1677,7 +1677,7 @@ async function handleUpdateStudent(db, request, studentId) {
   });
 }
 __name(handleUpdateStudent, "handleUpdateStudent");
-async function applyFeedToStudents(db, classId, userId, studentIds) {
+async function applyFeedToStudents(db, classId, userId, studentIds, selectedRule = null) {
   if (studentIds.length === 0) {
     return [];
   }
@@ -1691,40 +1691,76 @@ async function applyFeedToStudents(db, classId, userId, studentIds) {
   const feedAt = nowIso();
   const statements = [];
   const pendingLogs = [];
+  const interactionRule = {
+    name: String(selectedRule?.name || "\u6279\u91CF\u4E92\u52A8"),
+    exp: Number(selectedRule?.exp ?? 1),
+    coins: Number(selectedRule?.coins || 0),
+    type: selectedRule?.type === "negative" ? "negative" : "positive"
+  };
   for (const row of rows) {
     if (row.pet_status === "egg") {
-      throw new Error(`${row.name} \u8FD8\u6CA1\u6709\u5524\u9192\u5BA0\u7269\uFF0C\u6682\u65F6\u65E0\u6CD5\u5582\u517B`);
+      throw new Error(`${row.name} \u8FD8\u6CA1\u6709\u5524\u9192\u5BA0\u7269\uFF0C\u6682\u65F6\u65E0\u6CD5\u53C2\u4E0E\u6279\u91CF\u4E92\u52A8`);
     }
     const beforeCondition = derivePetCondition(row);
-    const nextTotalExp = Math.max(0, Number(row.total_exp || 0) + 1);
-    const nextPetPoints = Math.max(0, Number(row.pet_points || 0) + 1);
+    const nextTotalExp = Math.max(0, Number(row.total_exp || 0) + interactionRule.exp);
+    const nextPetPoints = Math.max(0, Number(row.pet_points || 0) + interactionRule.exp);
+    const nextCoins = Math.max(0, Number(row.coins || 0) + interactionRule.coins);
+    const nextTotalCoins = Math.max(0, Number(row.total_coins || 0) + interactionRule.coins);
+    const nextRewardCount = Math.max(
+      0,
+      Number(row.reward_count || 0) + (interactionRule.type === "positive" ? 1 : 0)
+    );
     const nextLevel = resolvePetLevel(nextTotalExp, thresholds);
+    const nextLastFedAt = interactionRule.type === "positive" ? feedAt : row.last_fed_at || null;
+    const nextLastDecayAt = interactionRule.type === "positive" ? feedAt : row.last_decay_at ?? row.last_fed_at ?? null;
+    const nextCondition = interactionRule.type === "positive" ? "healthy" : row.pet_condition || beforeCondition || "healthy";
+    const nextLockedAt = interactionRule.type === "positive" ? null : row.pet_condition_locked_at || null;
     const nextStudent = {
       ...row,
+      coins: nextCoins,
       total_exp: nextTotalExp,
+      total_coins: nextTotalCoins,
       pet_points: nextPetPoints,
+      reward_count: nextRewardCount,
       pet_level: nextLevel,
-      last_fed_at: feedAt,
-      last_decay_at: feedAt,
-      pet_condition: "healthy",
-      pet_condition_locked_at: null
+      last_fed_at: nextLastFedAt,
+      last_decay_at: nextLastDecayAt,
+      pet_condition: nextCondition,
+      pet_condition_locked_at: nextLockedAt
     };
     const nextCollection = syncStudentCollectionProgress(nextStudent);
     statements.push(
       db.prepare(
         `UPDATE students
-           SET pet_condition = 'healthy',
+           SET pet_condition = ?,
                last_fed_at = ?,
                last_decay_at = ?,
-               pet_condition_locked_at = NULL,
+               pet_condition_locked_at = ?,
                pet_level = ?,
                pet_points = ?,
+               coins = ?,
                total_exp = ?,
+               total_coins = ?,
+               reward_count = ?,
                pet_collection = ?
            WHERE id = ? AND class_id = ?`
-      ).bind(feedAt, feedAt, nextLevel, nextPetPoints, nextTotalExp, JSON.stringify(nextCollection), row.id, classId)
+      ).bind(
+        nextCondition,
+        nextLastFedAt,
+        nextLastDecayAt,
+        nextLockedAt,
+        nextLevel,
+        nextPetPoints,
+        nextCoins,
+        nextTotalExp,
+        nextTotalCoins,
+        nextRewardCount,
+        JSON.stringify(nextCollection),
+        row.id,
+        classId
+      )
     );
-    if (beforeCondition === "sleeping") {
+    if (interactionRule.type === "positive" && beforeCondition === "sleeping") {
       pendingLogs.push({
         classId,
         userId,
@@ -1735,8 +1771,8 @@ async function applyFeedToStudents(db, classId, userId, studentIds) {
     pendingLogs.push({
       classId,
       userId,
-      actionType: "\u5BA0\u7269\u5582\u517B",
-      detail: `\u8001\u5E08\u4E3A ${row.name} \u7684\u5BA0\u7269\u5582\u517B\u4E86\u4E00\u6B21\uFF0C\u6210\u957F\u503C +1`
+      actionType: "\u8BFE\u5802\u4E92\u52A8",
+      detail: `\u8001\u5E08\u4E3A ${row.name} \u7684\u5BA0\u7269\u5E94\u7528\u4E86\u6279\u91CF\u4E92\u52A8\u89C4\u5219\u300C${interactionRule.name}\u300D(EXP: ${interactionRule.exp >= 0 ? `+${interactionRule.exp}` : interactionRule.exp}, \u91D1\u5E01: ${interactionRule.coins >= 0 ? `+${interactionRule.coins}` : interactionRule.coins})`
     });
   }
   await db.batch(statements);
@@ -1769,6 +1805,7 @@ async function handleFeedStudentsBatch(db, request, classId) {
   const body = await readBody(request);
   const userId = parseId(body.userId);
   const studentIds = Array.isArray(body.studentIds) ? Array.from(new Set(body.studentIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))) : [];
+  const rule = body.rule && typeof body.rule === "object" ? body.rule : null;
   if (!userId) {
     return error("\u7F3A\u5C11\u6709\u6548\u7684\u6559\u5E08\u8EAB\u4EFD");
   }
@@ -1776,7 +1813,7 @@ async function handleFeedStudentsBatch(db, request, classId) {
     return error("\u8BF7\u81F3\u5C11\u9009\u62E9\u4E00\u540D\u5B66\u751F");
   }
   await assertClassOwnership(db, userId, classId);
-  const students = await applyFeedToStudents(db, classId, userId, studentIds);
+  const students = await applyFeedToStudents(db, classId, userId, studentIds, rule);
   return json({
     students,
     logs: await getLogsByClassId(db, classId)
@@ -2121,6 +2158,68 @@ async function handleMoveRule(db, request, ruleId) {
   });
 }
 __name(handleMoveRule, "handleMoveRule");
+async function handleImportRules(db, request, classId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const sourceClassId = parseId(body.sourceClassId);
+  const mode = body.mode === "replace" ? "replace" : "append";
+  if (!userId || !sourceClassId || !classId) {
+    return error("\u7F3A\u5C11\u6709\u6548\u7684\u89C4\u5219\u5BFC\u5165\u4E0A\u4E0B\u6587");
+  }
+  if (sourceClassId === classId) {
+    return error("\u4E0D\u80FD\u4ECE\u5F53\u524D\u73ED\u7EA7\u5BFC\u5165\u81EA\u8EAB\u89C4\u5219");
+  }
+  await assertClassOwnership(db, userId, classId);
+  const sourceClass = await assertClassOwnership(db, userId, sourceClassId);
+  const sourceRulesResult = await db.prepare(
+    `SELECT id, name, icon, exp, coins, type, sort_order
+       FROM rules
+       WHERE class_id = ?
+       ORDER BY type ASC, sort_order ASC, id ASC`
+  ).bind(sourceClassId).all();
+  const sourceRules = sourceRulesResult.results || [];
+  if (sourceRules.length === 0) {
+    return error("\u6765\u6E90\u73ED\u7EA7\u8FD8\u6CA1\u6709\u53EF\u5BFC\u5165\u7684\u81EA\u5B9A\u4E49\u89C4\u5219");
+  }
+  const statements = [];
+  if (mode === "replace") {
+    statements.push(
+      db.prepare("DELETE FROM rules WHERE class_id = ?").bind(classId)
+    );
+  }
+  const targetRulesResult = await db.prepare(
+    `SELECT type, COALESCE(MAX(sort_order), 0) AS max_order
+       FROM rules
+       WHERE class_id = ?
+       GROUP BY type`
+  ).bind(classId).all();
+  const orderMap = Object.fromEntries(
+    (targetRulesResult.results || []).map((row) => [row.type || "positive", Number(row.max_order || 0)])
+  );
+  if (mode === "replace") {
+    orderMap.positive = 0;
+    orderMap.negative = 0;
+  }
+  sourceRules.forEach((rule) => {
+    const type = rule.type === "negative" ? "negative" : "positive";
+    orderMap[type] = Number(orderMap[type] || 0) + 1;
+    statements.push(
+      db.prepare("INSERT INTO rules (class_id, sort_order, name, icon, exp, coins, type) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(classId, orderMap[type], rule.name, rule.icon || "\u2B50", Number(rule.exp || 0), Number(rule.coins || 0), type)
+    );
+  });
+  await db.batch(statements);
+  await appendLog(db, {
+    classId,
+    userId,
+    actionType: "\u89C4\u5219\u4FEE\u6539",
+    detail: `${mode === "replace" ? "\u8986\u76D6\u5BFC\u5165" : "\u8FFD\u52A0\u5BFC\u5165"}\u4E86\u73ED\u7EA7 ${sourceClass.name} \u7684 ${sourceRules.length} \u6761\u89C4\u5219`
+  });
+  return json({
+    rules: await getRulesByClassId(db, classId),
+    logs: await getLogsByClassId(db, classId)
+  });
+}
+__name(handleImportRules, "handleImportRules");
 async function handleUpdateThresholds(db, request, classId) {
   const body = await readBody(request);
   const userId = parseId(body.userId);
@@ -3130,6 +3229,10 @@ var src_server_default = {
       if (rulesMatch && request.method === "POST") {
         return await handleCreateRule(db, request, Number(rulesMatch[1]));
       }
+      const importRulesMatch = path.match(/^\/api\/classes\/(\d+)\/rules\/import$/);
+      if (importRulesMatch && request.method === "POST") {
+        return await handleImportRules(db, request, Number(importRulesMatch[1]));
+      }
       const ruleMatch = path.match(/^\/api\/rules\/(\d+)$/);
       if (ruleMatch && request.method === "PATCH") {
         return await handleUpdateRule(db, request, Number(ruleMatch[1]));
@@ -3209,7 +3312,7 @@ var jsonError = /* @__PURE__ */ __name(async (request, env, _ctx, middlewareCtx)
 }, "jsonError");
 var middleware_miniflare3_json_error_default = jsonError;
 
-// .wrangler/tmp/bundle-bx2aBO/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-IbQhs8/middleware-insertion-facade.js
 var __INTERNAL_WRANGLER_MIDDLEWARE__ = [
   middleware_ensure_req_body_drained_default,
   middleware_miniflare3_json_error_default
@@ -3241,7 +3344,7 @@ function __facade_invoke__(request, env, ctx, dispatch, finalMiddleware) {
 }
 __name(__facade_invoke__, "__facade_invoke__");
 
-// .wrangler/tmp/bundle-bx2aBO/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-IbQhs8/middleware-loader.entry.ts
 var __Facade_ScheduledController__ = class ___Facade_ScheduledController__ {
   constructor(scheduledTime, cron, noRetry) {
     this.scheduledTime = scheduledTime;

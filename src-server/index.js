@@ -2101,7 +2101,7 @@ async function handleUpdateStudent(db, request, studentId) {
   });
 }
 
-async function applyFeedToStudents(db, classId, userId, studentIds) {
+async function applyFeedToStudents(db, classId, userId, studentIds, selectedRule = null) {
   if (studentIds.length === 0) {
     return [];
   }
@@ -2122,25 +2122,50 @@ async function applyFeedToStudents(db, classId, userId, studentIds) {
   const feedAt = nowIso();
   const statements = [];
   const pendingLogs = [];
+  const interactionRule = {
+    name: String(selectedRule?.name || '批量互动'),
+    exp: Number(selectedRule?.exp ?? 1),
+    coins: Number(selectedRule?.coins || 0),
+    type: selectedRule?.type === 'negative' ? 'negative' : 'positive',
+  };
 
   for (const row of rows) {
     if (row.pet_status === 'egg') {
-      throw new Error(`${row.name} 还没有唤醒宠物，暂时无法喂养`);
+      throw new Error(`${row.name} 还没有唤醒宠物，暂时无法参与批量互动`);
     }
 
     const beforeCondition = derivePetCondition(row);
-    const nextTotalExp = Math.max(0, Number(row.total_exp || 0) + 1);
-    const nextPetPoints = Math.max(0, Number(row.pet_points || 0) + 1);
+    const nextTotalExp = Math.max(0, Number(row.total_exp || 0) + interactionRule.exp);
+    const nextPetPoints = Math.max(0, Number(row.pet_points || 0) + interactionRule.exp);
+    const nextCoins = Math.max(0, Number(row.coins || 0) + interactionRule.coins);
+    const nextTotalCoins = Math.max(0, Number(row.total_coins || 0) + interactionRule.coins);
+    const nextRewardCount = Math.max(
+      0,
+      Number(row.reward_count || 0) + (interactionRule.type === 'positive' ? 1 : 0),
+    );
     const nextLevel = resolvePetLevel(nextTotalExp, thresholds);
+    const nextLastFedAt = interactionRule.type === 'positive' ? feedAt : row.last_fed_at || null;
+    const nextLastDecayAt = interactionRule.type === 'positive'
+      ? feedAt
+      : row.last_decay_at ?? row.last_fed_at ?? null;
+    const nextCondition = interactionRule.type === 'positive'
+      ? 'healthy'
+      : row.pet_condition || beforeCondition || 'healthy';
+    const nextLockedAt = interactionRule.type === 'positive'
+      ? null
+      : row.pet_condition_locked_at || null;
     const nextStudent = {
       ...row,
+      coins: nextCoins,
       total_exp: nextTotalExp,
+      total_coins: nextTotalCoins,
       pet_points: nextPetPoints,
+      reward_count: nextRewardCount,
       pet_level: nextLevel,
-      last_fed_at: feedAt,
-      last_decay_at: feedAt,
-      pet_condition: 'healthy',
-      pet_condition_locked_at: null,
+      last_fed_at: nextLastFedAt,
+      last_decay_at: nextLastDecayAt,
+      pet_condition: nextCondition,
+      pet_condition_locked_at: nextLockedAt,
     };
     const nextCollection = syncStudentCollectionProgress(nextStudent);
 
@@ -2148,20 +2173,37 @@ async function applyFeedToStudents(db, classId, userId, studentIds) {
       db
         .prepare(
           `UPDATE students
-           SET pet_condition = 'healthy',
+           SET pet_condition = ?,
                last_fed_at = ?,
                last_decay_at = ?,
-               pet_condition_locked_at = NULL,
+               pet_condition_locked_at = ?,
                pet_level = ?,
                pet_points = ?,
+               coins = ?,
                total_exp = ?,
+               total_coins = ?,
+               reward_count = ?,
                pet_collection = ?
            WHERE id = ? AND class_id = ?`,
         )
-        .bind(feedAt, feedAt, nextLevel, nextPetPoints, nextTotalExp, JSON.stringify(nextCollection), row.id, classId),
+        .bind(
+          nextCondition,
+          nextLastFedAt,
+          nextLastDecayAt,
+          nextLockedAt,
+          nextLevel,
+          nextPetPoints,
+          nextCoins,
+          nextTotalExp,
+          nextTotalCoins,
+          nextRewardCount,
+          JSON.stringify(nextCollection),
+          row.id,
+          classId,
+        ),
     );
 
-    if (beforeCondition === 'sleeping') {
+    if (interactionRule.type === 'positive' && beforeCondition === 'sleeping') {
       pendingLogs.push({
         classId,
         userId,
@@ -2173,8 +2215,8 @@ async function applyFeedToStudents(db, classId, userId, studentIds) {
     pendingLogs.push({
       classId,
       userId,
-      actionType: '宠物喂养',
-      detail: `老师为 ${row.name} 的宠物喂养了一次，成长值 +1`,
+      actionType: '课堂互动',
+      detail: `老师为 ${row.name} 的宠物应用了批量互动规则「${interactionRule.name}」(EXP: ${interactionRule.exp >= 0 ? `+${interactionRule.exp}` : interactionRule.exp}, 金币: ${interactionRule.coins >= 0 ? `+${interactionRule.coins}` : interactionRule.coins})`,
     });
   }
 
@@ -2221,6 +2263,7 @@ async function handleFeedStudentsBatch(db, request, classId) {
   const studentIds = Array.isArray(body.studentIds)
     ? Array.from(new Set(body.studentIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)))
     : [];
+  const rule = body.rule && typeof body.rule === 'object' ? body.rule : null;
 
   if (!userId) {
     return error('缺少有效的教师身份');
@@ -2232,7 +2275,7 @@ async function handleFeedStudentsBatch(db, request, classId) {
 
   await assertClassOwnership(db, userId, classId);
 
-  const students = await applyFeedToStudents(db, classId, userId, studentIds);
+  const students = await applyFeedToStudents(db, classId, userId, studentIds, rule);
 
   return json({
     students,
@@ -2690,6 +2733,91 @@ async function handleMoveRule(db, request, ruleId) {
     userId,
     actionType: '规则修改',
     detail: `调整规则顺序：${currentRule.name}${direction === 'up' ? ' 上移' : ' 下移'}`,
+  });
+
+  return json({
+    rules: await getRulesByClassId(db, classId),
+    logs: await getLogsByClassId(db, classId),
+  });
+}
+
+async function handleImportRules(db, request, classId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const sourceClassId = parseId(body.sourceClassId);
+  const mode = body.mode === 'replace' ? 'replace' : 'append';
+
+  if (!userId || !sourceClassId || !classId) {
+    return error('缺少有效的规则导入上下文');
+  }
+
+  if (sourceClassId === classId) {
+    return error('不能从当前班级导入自身规则');
+  }
+
+  await assertClassOwnership(db, userId, classId);
+  const sourceClass = await assertClassOwnership(db, userId, sourceClassId);
+
+  const sourceRulesResult = await db
+    .prepare(
+      `SELECT id, name, icon, exp, coins, type, sort_order
+       FROM rules
+       WHERE class_id = ?
+       ORDER BY type ASC, sort_order ASC, id ASC`,
+    )
+    .bind(sourceClassId)
+    .all();
+
+  const sourceRules = sourceRulesResult.results || [];
+
+  if (sourceRules.length === 0) {
+    return error('来源班级还没有可导入的自定义规则');
+  }
+
+  const statements = [];
+
+  if (mode === 'replace') {
+    statements.push(
+      db.prepare('DELETE FROM rules WHERE class_id = ?').bind(classId),
+    );
+  }
+
+  const targetRulesResult = await db
+    .prepare(
+      `SELECT type, COALESCE(MAX(sort_order), 0) AS max_order
+       FROM rules
+       WHERE class_id = ?
+       GROUP BY type`,
+    )
+    .bind(classId)
+    .all();
+
+  const orderMap = Object.fromEntries(
+    (targetRulesResult.results || []).map((row) => [row.type || 'positive', Number(row.max_order || 0)]),
+  );
+
+  if (mode === 'replace') {
+    orderMap.positive = 0;
+    orderMap.negative = 0;
+  }
+
+  sourceRules.forEach((rule) => {
+    const type = rule.type === 'negative' ? 'negative' : 'positive';
+    orderMap[type] = Number(orderMap[type] || 0) + 1;
+    statements.push(
+      db
+        .prepare('INSERT INTO rules (class_id, sort_order, name, icon, exp, coins, type) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .bind(classId, orderMap[type], rule.name, rule.icon || '⭐', Number(rule.exp || 0), Number(rule.coins || 0), type),
+    );
+  });
+
+  await db.batch(statements);
+
+  await appendLog(db, {
+    classId,
+    userId,
+    actionType: '规则修改',
+    detail: `${mode === 'replace' ? '覆盖导入' : '追加导入'}了班级 ${sourceClass.name} 的 ${sourceRules.length} 条规则`,
   });
 
   return json({
@@ -4061,6 +4189,11 @@ export default {
       const rulesMatch = path.match(/^\/api\/classes\/(\d+)\/rules$/);
       if (rulesMatch && request.method === 'POST') {
         return await handleCreateRule(db, request, Number(rulesMatch[1]));
+      }
+
+      const importRulesMatch = path.match(/^\/api\/classes\/(\d+)\/rules\/import$/);
+      if (importRulesMatch && request.method === 'POST') {
+        return await handleImportRules(db, request, Number(importRulesMatch[1]));
       }
 
       const ruleMatch = path.match(/^\/api\/rules\/(\d+)$/);

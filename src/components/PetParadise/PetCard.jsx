@@ -42,6 +42,7 @@ const PetCard = ({
 }) => {
   const isEgg = student.pet_status === 'egg';
   const petTypeLabel = isEgg ? '神秘蛋' : student.pet_type_name || getPetNameById(student.pet_type_id);
+  const petDisplayName = isEgg ? '神秘蛋' : student.pet_name || petTypeLabel;
   const nextLevelInfo = getNextLevelInfo(student, levelThresholds);
   const conditionLabel = getPetConditionLabel(student.pet_condition);
   const visualCondition = student.pet_condition || 'healthy';
@@ -69,7 +70,6 @@ const PetCard = ({
       }`}
     >
       <div className="pet-lv-badge">Lv.{student.pet_level || 0}</div>
-      {!isEgg && <div className={`pet-condition-badge ${student.pet_condition || 'healthy'}`}>{conditionLabel}</div>}
 
       {isSelectable && (
         <button
@@ -138,8 +138,11 @@ const PetCard = ({
       <div className="student-info">
         <div className="student-info-main">
           <div>
-            <span className="pet-type-label">{petTypeLabel}</span>
-            <h3 className="student-name">{student.name}</h3>
+            <div className="pet-title-row">
+              <h3 className="student-name">{petDisplayName}</h3>
+              {!isEgg && <span className={`pet-condition-inline ${visualCondition}`}>{conditionLabel}</span>}
+            </div>
+            <span className="pet-type-label">{isEgg ? petTypeLabel : `${student.name}的${petTypeLabel}`}</span>
             {!isEgg && <span className={`pet-condition-accent ${visualCondition}`}>{conditionDecoration.accent}</span>}
           </div>
           <div className="reward-count">

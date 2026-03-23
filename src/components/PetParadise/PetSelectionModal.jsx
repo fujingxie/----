@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Egg, X } from 'lucide-react';
 import Modal from '../Common/Modal';
-import { PET_LIBRARY, PET_IMAGE_FALLBACK } from '../../api/petLibrary';
+import { ADOPTABLE_PET_LIBRARY, PET_IMAGE_FALLBACK } from '../../api/petLibrary';
 import { activateStudentPet } from '../../lib/petCollection';
 import './PetSelectionModal.css';
 
@@ -37,7 +37,7 @@ const PetSelectionModal = ({ isOpen, onClose, student, onConfirm }) => {
         </div>
 
         <div className="pet-grid">
-          {PET_LIBRARY.map((pet) => (
+          {ADOPTABLE_PET_LIBRARY.map((pet) => (
             <button
               key={pet.id}
               className={`pet-option ${selectedPet?.id === pet.id ? 'active' : ''}`}

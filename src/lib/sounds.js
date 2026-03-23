@@ -56,6 +56,24 @@ const patterns = {
     { frequency: 783.99, offset: 0.1, duration: 0.14, gain: 0.05, type: 'triangle' },
     { frequency: 1046.5, offset: 0.22, duration: 0.24, gain: 0.06, type: 'triangle' },
   ],
+  boat_start: [
+    { frequency: 392, offset: 0, duration: 0.12, gain: 0.038, type: 'triangle' },
+    { frequency: 523.25, offset: 0.08, duration: 0.14, gain: 0.04, type: 'triangle' },
+    { frequency: 659.25, offset: 0.16, duration: 0.2, gain: 0.045, type: 'triangle' },
+  ],
+  boat_bail: [
+    { frequency: 440, offset: 0, duration: 0.08, gain: 0.028, type: 'square' },
+    { frequency: 554.37, offset: 0.06, duration: 0.09, gain: 0.024, type: 'square' },
+  ],
+  boat_warning: [
+    { frequency: 466.16, offset: 0, duration: 0.12, gain: 0.03, type: 'sawtooth' },
+    { frequency: 415.3, offset: 0.11, duration: 0.12, gain: 0.026, type: 'sawtooth' },
+  ],
+  boat_sink: [
+    { frequency: 329.63, offset: 0, duration: 0.14, gain: 0.03, type: 'triangle' },
+    { frequency: 246.94, offset: 0.12, duration: 0.2, gain: 0.032, type: 'triangle' },
+    { frequency: 174.61, offset: 0.28, duration: 0.28, gain: 0.036, type: 'sawtooth' },
+  ],
 };
 
 export const playActionSound = async (kind) => {

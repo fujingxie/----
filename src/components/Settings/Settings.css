@@ -1144,6 +1144,23 @@
   box-shadow: 0 18px 28px rgba(52, 120, 239, 0.22);
 }
 
+.rules-import-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 180px;
+  min-height: 68px;
+  border: none;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #14b8a6, #0f766e);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 18px 28px rgba(20, 184, 166, 0.22);
+}
+
 .rules-create-panel {
   margin-top: 20px;
   padding: 26px 28px;
@@ -1151,11 +1168,159 @@
   background: rgba(248, 250, 252, 0.86);
 }
 
-.rules-create-grid {
+.rules-import-panel {
+  margin-top: 20px;
+  padding: 26px 28px;
+  border-radius: 28px;
+  background: rgba(240, 253, 250, 0.88);
+}
+
+.rules-import-grid {
   display: grid;
-  grid-template-columns: 1.4fr 0.7fr 0.7fr 0.7fr 1fr auto;
+  grid-template-columns: 1.3fr 0.9fr auto;
   gap: 12px;
   align-items: center;
+}
+
+.rules-create-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.rule-form-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.rule-form-preview {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.88);
+}
+
+.rule-form-preview-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+}
+
+.rule-form-preview-icon.positive {
+  background: linear-gradient(180deg, rgba(187, 247, 208, 0.5), rgba(204, 251, 241, 0.92));
+  color: #0f9488;
+}
+
+.rule-form-preview-icon.negative {
+  background: linear-gradient(180deg, rgba(254, 226, 226, 0.9), rgba(255, 228, 230, 0.98));
+  color: #e11d48;
+}
+
+.rule-form-preview-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rule-form-preview-copy strong {
+  font-size: 20px;
+  color: #0f172a;
+}
+
+.rule-form-preview-copy span {
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.rule-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.rule-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rule-form-field.wide {
+  grid-column: span 3;
+}
+
+.rule-form-field > span {
+  font-size: 13px;
+  font-weight: 800;
+  color: #334155;
+}
+
+.rule-form-field small {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.rule-icon-picker {
+  padding: 18px 20px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.88);
+}
+
+.rule-icon-picker-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.rule-icon-picker-head strong {
+  font-size: 15px;
+  color: #0f172a;
+}
+
+.rule-icon-picker-head span {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.rule-icon-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+  gap: 10px;
+}
+
+.rule-icon-option {
+  min-height: 50px;
+  border-radius: 16px;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  background: rgba(248, 250, 252, 0.96);
+  font-size: 24px;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.rule-icon-option:hover {
+  transform: translateY(-1px);
+}
+
+.rule-icon-option.active {
+  border-color: rgba(52, 120, 239, 0.8);
+  box-shadow: 0 10px 18px rgba(52, 120, 239, 0.14);
+  background: rgba(239, 246, 255, 0.98);
+}
+
+.rule-form-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .rules-group-block {
@@ -1243,6 +1408,12 @@
   line-height: 1.35;
   color: #0f172a;
   margin-bottom: 10px;
+}
+
+.rule-card-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .rule-reward-row {
