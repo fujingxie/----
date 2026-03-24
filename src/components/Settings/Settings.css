@@ -1292,6 +1292,19 @@
   color: #64748b;
 }
 
+.rule-icon-custom-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.rule-icon-custom-field span {
+  font-size: 13px;
+  font-weight: 800;
+  color: #334155;
+}
+
 .rule-icon-options {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
@@ -1380,6 +1393,26 @@
 .rule-card.editing {
   align-items: stretch;
   text-align: left;
+}
+
+.rule-edit-modal {
+  width: min(92vw, 860px);
+  max-width: 860px;
+}
+
+.rule-edit-modal-body {
+  min-width: 0;
+}
+
+.rule-edit-modal-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rule-edit-modal-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .rule-icon-badge {

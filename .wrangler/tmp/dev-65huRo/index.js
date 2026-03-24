@@ -1,7 +1,7 @@
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
-// .wrangler/tmp/bundle-wKgNlh/checked-fetch.js
+// .wrangler/tmp/bundle-aCdnJ0/checked-fetch.js
 var urls = /* @__PURE__ */ new Set();
 function checkURL(request, init) {
   const url = request instanceof URL ? request : new URL(
@@ -628,17 +628,20 @@ function validatePassword(value) {
   return typeof value === "string" && value.length >= 6;
 }
 __name(validatePassword, "validatePassword");
-async function ensureSystemRules(db) {
-  const countRow = await db.prepare("SELECT COUNT(*) AS count FROM rules WHERE class_id IS NULL").first();
+async function ensureUserRuleTemplates(db, userId) {
+  if (!userId) {
+    return;
+  }
+  const countRow = await db.prepare("SELECT COUNT(*) AS count FROM rules WHERE class_id IS NULL AND owner_user_id = ?").bind(userId).first();
   if (Number(countRow?.count || 0) > 0) {
     return;
   }
   const statements = SYSTEM_RULES.map(
-    (rule, index) => db.prepare("INSERT INTO rules (class_id, sort_order, name, icon, exp, coins, type) VALUES (NULL, ?, ?, ?, ?, ?, ?)").bind(index + 1, rule.name, rule.icon, rule.exp, rule.coins, rule.type)
+    (rule, index) => db.prepare("INSERT INTO rules (class_id, owner_user_id, sort_order, name, icon, exp, coins, type) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)").bind(userId, index + 1, rule.name, rule.icon, rule.exp, rule.coins, rule.type)
   );
   await db.batch(statements);
 }
-__name(ensureSystemRules, "ensureSystemRules");
+__name(ensureUserRuleTemplates, "ensureUserRuleTemplates");
 async function ensureActivationCodes(db) {
   const statements = ACTIVATION_CODE_SEEDS.map(
     (seed) => db.prepare("INSERT OR IGNORE INTO activation_codes (code, level, expires_in_days) VALUES (?, ?, ?)").bind(seed.code, seed.level, seed.expiresInDays)
@@ -1077,13 +1080,14 @@ async function getShopItemsByClassId(db, classId) {
   return (result.results || []).map(normalizeShopItem);
 }
 __name(getShopItemsByClassId, "getShopItemsByClassId");
-async function getRulesByClassId(db, classId) {
+async function getRulesByClassId(db, classId, userId) {
   const result = await db.prepare(
-    `SELECT id, class_id, sort_order, name, icon, exp, coins, type
+    `SELECT id, class_id, owner_user_id, sort_order, name, icon, exp, coins, type
        FROM rules
-       WHERE class_id IS NULL OR class_id = ?
+       WHERE ((class_id = ? AND (owner_user_id = ? OR owner_user_id IS NULL))
+          OR (class_id IS NULL AND owner_user_id = ?))
        ORDER BY type ASC, sort_order ASC, id ASC`
-  ).bind(classId).all();
+  ).bind(classId, userId, userId).all();
   return (result.results || []).map(normalizeRule);
 }
 __name(getRulesByClassId, "getRulesByClassId");
@@ -1175,9 +1179,9 @@ async function getLatestUndoableLog(db, classId) {
 }
 __name(getLatestUndoableLog, "getLatestUndoableLog");
 async function getBootstrapPayload(db, userId, requestedClassId) {
-  await ensureSystemRules(db);
   await ensureActivationCodes(db);
   await ensureSystemFlags(db);
+  await ensureUserRuleTemplates(db, userId);
   const user = normalizeUser(await getUserById(db, userId));
   const classes = await getClassesByUserId(db, userId);
   const resolvedClassId = classes.find((item) => item.id === requestedClassId)?.id || classes[0]?.id || null;
@@ -1201,7 +1205,7 @@ async function getBootstrapPayload(db, userId, requestedClassId) {
     currentClassId: resolvedClassId,
     students: await getStudentsByClassId(db, resolvedClassId, userId),
     shopItems: await getShopItemsByClassId(db, resolvedClassId),
-    rules: await getRulesByClassId(db, resolvedClassId),
+    rules: await getRulesByClassId(db, resolvedClassId, userId),
     logs: await getLogsByClassId(db, resolvedClassId),
     levelThresholds: await getThresholdsByClassId(db, resolvedClassId),
     petConditionConfig: await getPetConditionConfigByClassId(db, resolvedClassId),
@@ -1296,6 +1300,7 @@ async function handleLogin(db, request) {
         actionType: "\u8D26\u53F7\u7BA1\u7406",
         detail: `\u8D26\u53F7 ${createdUser2.username} \u901A\u8FC7\u6E20\u9053 ${registrationChannel.code} \u514D\u6FC0\u6D3B\u6CE8\u518C\u521B\u5EFA\uFF0C\u9ED8\u8BA4\u7B49\u7EA7 ${createdUser2.level}\uFF0C\u6CE8\u518CIP ${registerIp}`
       });
+      await ensureUserRuleTemplates(db, createdUser2.id);
       return json({
         user: normalizeUser(createdUser2),
         currentClassId: null
@@ -1330,6 +1335,7 @@ async function handleLogin(db, request) {
         actionType: "\u8D26\u53F7\u7BA1\u7406",
         detail: `\u8D26\u53F7 ${createdUser2.username} \u901A\u8FC7\u514D\u6FC0\u6D3B\u6CE8\u518C\u521B\u5EFA\uFF0C\u9ED8\u8BA4\u7B49\u7EA7 ${createdUser2.level}\uFF0C\u6CE8\u518CIP ${registerIp}`
       });
+      await ensureUserRuleTemplates(db, createdUser2.id);
       return json({
         user: normalizeUser(createdUser2),
         currentClassId: null
@@ -1390,6 +1396,7 @@ async function handleLogin(db, request) {
              END
          WHERE id = ?`
     ).bind(createdUser.id, activationCode.id).run();
+    await ensureUserRuleTemplates(db, createdUser.id);
     return json({
       user: normalizeUser(createdUser),
       currentClassId: null
@@ -1402,6 +1409,7 @@ async function handleLogin(db, request) {
   if (user.password_hash === password) {
     await db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(await hashPassword(password), user.id).run();
   }
+  await ensureUserRuleTemplates(db, user.id);
   const classes = await getClassesByUserId(db, user.id);
   return json({
     user: normalizeUser(user),
@@ -2043,9 +2051,15 @@ async function handleCreateRule(db, request, classId) {
     return error("\u8BF7\u8F93\u5165\u89C4\u5219\u540D\u79F0");
   }
   await assertClassOwnership(db, userId, classId);
-  const maxOrderRow = await db.prepare("SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM rules WHERE type = ? AND (class_id = ? OR class_id IS NULL)").bind(type, classId).first();
+  const maxOrderRow = await db.prepare(
+    `SELECT COALESCE(MAX(sort_order), 0) AS max_order
+       FROM rules
+       WHERE type = ?
+         AND ((class_id = ? AND (owner_user_id = ? OR owner_user_id IS NULL))
+           OR (class_id IS NULL AND owner_user_id = ?))`
+  ).bind(type, classId, userId, userId).first();
   const nextSortOrder = Number(maxOrderRow?.max_order || 0) + 1;
-  await db.prepare("INSERT INTO rules (class_id, sort_order, name, icon, exp, coins, type) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(classId, nextSortOrder, name, icon, exp, coins, type).run();
+  await db.prepare("INSERT INTO rules (class_id, owner_user_id, sort_order, name, icon, exp, coins, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(classId, userId, nextSortOrder, name, icon, exp, coins, type).run();
   await appendLog(db, {
     classId,
     userId,
@@ -2053,7 +2067,7 @@ async function handleCreateRule(db, request, classId) {
     detail: `\u65B0\u589E\u89C4\u5219 ${name}`
   });
   return json({
-    rules: await getRulesByClassId(db, classId),
+    rules: await getRulesByClassId(db, classId, userId),
     logs: await getLogsByClassId(db, classId)
   });
 }
@@ -2072,7 +2086,13 @@ async function handleUpdateRule(db, request, ruleId) {
     return error("\u8BF7\u8F93\u5165\u89C4\u5219\u540D\u79F0");
   }
   await assertClassOwnership(db, userId, classId);
-  const existing = await db.prepare("SELECT id, class_id, name FROM rules WHERE id = ? AND (class_id = ? OR class_id IS NULL)").bind(ruleId, classId).first();
+  const existing = await db.prepare(
+    `SELECT id, class_id, owner_user_id, name
+       FROM rules
+       WHERE id = ?
+         AND ((class_id = ? AND (owner_user_id = ? OR owner_user_id IS NULL))
+           OR (class_id IS NULL AND owner_user_id = ?))`
+  ).bind(ruleId, classId, userId, userId).first();
   if (!existing) {
     return error("\u76EE\u6807\u89C4\u5219\u4E0D\u5B58\u5728");
   }
@@ -2084,7 +2104,7 @@ async function handleUpdateRule(db, request, ruleId) {
     detail: `\u66F4\u65B0\u89C4\u5219 ${name}`
   });
   return json({
-    rules: await getRulesByClassId(db, classId),
+    rules: await getRulesByClassId(db, classId, userId),
     logs: await getLogsByClassId(db, classId)
   });
 }
@@ -2097,7 +2117,13 @@ async function handleDeleteRule(db, request, ruleId) {
     return error("\u7F3A\u5C11\u6709\u6548\u7684\u89C4\u5219\u4E0A\u4E0B\u6587");
   }
   await assertClassOwnership(db, userId, classId);
-  const rule = await db.prepare("SELECT id, class_id, name FROM rules WHERE id = ? AND (class_id = ? OR class_id IS NULL)").bind(ruleId, classId).first();
+  const rule = await db.prepare(
+    `SELECT id, class_id, owner_user_id, name
+       FROM rules
+       WHERE id = ?
+         AND ((class_id = ? AND (owner_user_id = ? OR owner_user_id IS NULL))
+           OR (class_id IS NULL AND owner_user_id = ?))`
+  ).bind(ruleId, classId, userId, userId).first();
   if (!rule) {
     return error("\u76EE\u6807\u89C4\u5219\u4E0D\u5B58\u5728");
   }
@@ -2109,7 +2135,7 @@ async function handleDeleteRule(db, request, ruleId) {
     detail: `\u5220\u9664\u89C4\u5219 ${rule.name}`
   });
   return json({
-    rules: await getRulesByClassId(db, classId),
+    rules: await getRulesByClassId(db, classId, userId),
     logs: await getLogsByClassId(db, classId)
   });
 }
@@ -2123,7 +2149,13 @@ async function handleMoveRule(db, request, ruleId) {
     return error("\u7F3A\u5C11\u6709\u6548\u7684\u89C4\u5219\u4E0A\u4E0B\u6587");
   }
   await assertClassOwnership(db, userId, classId);
-  const currentRule = await db.prepare("SELECT id, class_id, sort_order, name, type FROM rules WHERE id = ? AND (class_id = ? OR class_id IS NULL)").bind(ruleId, classId).first();
+  const currentRule = await db.prepare(
+    `SELECT id, class_id, owner_user_id, sort_order, name, type
+       FROM rules
+       WHERE id = ?
+         AND ((class_id = ? AND (owner_user_id = ? OR owner_user_id IS NULL))
+           OR (class_id IS NULL AND owner_user_id = ?))`
+  ).bind(ruleId, classId, userId, userId).first();
   if (!currentRule) {
     return error("\u76EE\u6807\u89C4\u5219\u4E0D\u5B58\u5728");
   }
@@ -2131,14 +2163,16 @@ async function handleMoveRule(db, request, ruleId) {
   const neighbor = await db.prepare(
     `SELECT id, sort_order, name
        FROM rules
-       WHERE type = ? AND id != ? AND (class_id = ? OR class_id IS NULL)
+       WHERE type = ? AND id != ?
+         AND ((class_id = ? AND (owner_user_id = ? OR owner_user_id IS NULL))
+           OR (class_id IS NULL AND owner_user_id = ?))
          AND sort_order ${direction === "up" ? "<" : ">"} ?
        ORDER BY sort_order ${direction === "up" ? "DESC" : "ASC"}, id ${direction === "up" ? "DESC" : "ASC"}
        LIMIT 1`
-  ).bind(currentRule.type, ruleId, classId, currentSortOrder).first();
+  ).bind(currentRule.type, ruleId, classId, userId, userId, currentSortOrder).first();
   if (!neighbor) {
     return json({
-      rules: await getRulesByClassId(db, classId),
+      rules: await getRulesByClassId(db, classId, userId),
       logs: await getLogsByClassId(db, classId)
     });
   }
@@ -2153,7 +2187,7 @@ async function handleMoveRule(db, request, ruleId) {
     detail: `\u8C03\u6574\u89C4\u5219\u987A\u5E8F\uFF1A${currentRule.name}${direction === "up" ? " \u4E0A\u79FB" : " \u4E0B\u79FB"}`
   });
   return json({
-    rules: await getRulesByClassId(db, classId),
+    rules: await getRulesByClassId(db, classId, userId),
     logs: await getLogsByClassId(db, classId)
   });
 }
@@ -2175,8 +2209,9 @@ async function handleImportRules(db, request, classId) {
     `SELECT id, name, icon, exp, coins, type, sort_order
        FROM rules
        WHERE class_id = ?
+         AND (owner_user_id = ? OR owner_user_id IS NULL)
        ORDER BY type ASC, sort_order ASC, id ASC`
-  ).bind(sourceClassId).all();
+  ).bind(sourceClassId, userId).all();
   const sourceRules = sourceRulesResult.results || [];
   if (sourceRules.length === 0) {
     return error("\u6765\u6E90\u73ED\u7EA7\u8FD8\u6CA1\u6709\u53EF\u5BFC\u5165\u7684\u81EA\u5B9A\u4E49\u89C4\u5219");
@@ -2184,15 +2219,16 @@ async function handleImportRules(db, request, classId) {
   const statements = [];
   if (mode === "replace") {
     statements.push(
-      db.prepare("DELETE FROM rules WHERE class_id = ?").bind(classId)
+      db.prepare("DELETE FROM rules WHERE class_id = ? AND (owner_user_id = ? OR owner_user_id IS NULL)").bind(classId, userId)
     );
   }
   const targetRulesResult = await db.prepare(
     `SELECT type, COALESCE(MAX(sort_order), 0) AS max_order
        FROM rules
        WHERE class_id = ?
+         AND (owner_user_id = ? OR owner_user_id IS NULL)
        GROUP BY type`
-  ).bind(classId).all();
+  ).bind(classId, userId).all();
   const orderMap = Object.fromEntries(
     (targetRulesResult.results || []).map((row) => [row.type || "positive", Number(row.max_order || 0)])
   );
@@ -2204,7 +2240,7 @@ async function handleImportRules(db, request, classId) {
     const type = rule.type === "negative" ? "negative" : "positive";
     orderMap[type] = Number(orderMap[type] || 0) + 1;
     statements.push(
-      db.prepare("INSERT INTO rules (class_id, sort_order, name, icon, exp, coins, type) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(classId, orderMap[type], rule.name, rule.icon || "\u2B50", Number(rule.exp || 0), Number(rule.coins || 0), type)
+      db.prepare("INSERT INTO rules (class_id, owner_user_id, sort_order, name, icon, exp, coins, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(classId, userId, orderMap[type], rule.name, rule.icon || "\u2B50", Number(rule.exp || 0), Number(rule.coins || 0), type)
     );
   });
   await db.batch(statements);
@@ -2215,7 +2251,7 @@ async function handleImportRules(db, request, classId) {
     detail: `${mode === "replace" ? "\u8986\u76D6\u5BFC\u5165" : "\u8FFD\u52A0\u5BFC\u5165"}\u4E86\u73ED\u7EA7 ${sourceClass.name} \u7684 ${sourceRules.length} \u6761\u89C4\u5219`
   });
   return json({
-    rules: await getRulesByClassId(db, classId),
+    rules: await getRulesByClassId(db, classId, userId),
     logs: await getLogsByClassId(db, classId)
   });
 }
@@ -3312,7 +3348,7 @@ var jsonError = /* @__PURE__ */ __name(async (request, env, _ctx, middlewareCtx)
 }, "jsonError");
 var middleware_miniflare3_json_error_default = jsonError;
 
-// .wrangler/tmp/bundle-wKgNlh/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-aCdnJ0/middleware-insertion-facade.js
 var __INTERNAL_WRANGLER_MIDDLEWARE__ = [
   middleware_ensure_req_body_drained_default,
   middleware_miniflare3_json_error_default
@@ -3344,7 +3380,7 @@ function __facade_invoke__(request, env, ctx, dispatch, finalMiddleware) {
 }
 __name(__facade_invoke__, "__facade_invoke__");
 
-// .wrangler/tmp/bundle-wKgNlh/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-aCdnJ0/middleware-loader.entry.ts
 var __Facade_ScheduledController__ = class ___Facade_ScheduledController__ {
   constructor(scheduledTime, cron, noRetry) {
     this.scheduledTime = scheduledTime;

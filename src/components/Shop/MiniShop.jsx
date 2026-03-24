@@ -5,7 +5,7 @@ import Modal from '../Common/Modal';
 import EmptyState from '../Common/EmptyState';
 import { notify } from '../../lib/notify';
 
-const EMPTY_ITEM = { name: '', price: '', stock: '', icon: '🎁', item_type: 'gift', exp_value: '' };
+const EMPTY_ITEM = { name: '', price: '50', stock: '99', icon: '🎁', item_type: 'gift', exp_value: '' };
 const SHOP_ICON_OPTIONS = ['🎁', '🍬', '🍪', '🧃', '📚', '✏️', '🏅', '🎨', '🧩', '🪁', '🎯', '⭐'];
 
 const toSafeNonNegativeInteger = (value) => {
@@ -159,7 +159,14 @@ const MiniShop = ({
             <span className="subtitle">补货、维护商品并为学生发货</span>
           </div>
         </div>
-        <button className="add-item-btn" onClick={() => setIsAddingItem(true)} type="button">
+        <button
+          className="add-item-btn"
+          onClick={() => {
+            setNewItem(EMPTY_ITEM);
+            setIsAddingItem(true);
+          }}
+          type="button"
+        >
           <Plus size={18} />
           <span>补货上架</span>
         </button>
@@ -174,7 +181,14 @@ const MiniShop = ({
             title="货架还空着"
             description="先补几样课堂奖励上架吧，学生兑换后会自动扣减金币和库存。"
             action={
-              <button className="add-item-btn" onClick={() => setIsAddingItem(true)} type="button">
+              <button
+                className="add-item-btn"
+                onClick={() => {
+                  setNewItem(EMPTY_ITEM);
+                  setIsAddingItem(true);
+                }}
+                type="button"
+              >
                 <Plus size={18} />
                 <span>立即补货</span>
               </button>
@@ -305,7 +319,6 @@ const MiniShop = ({
                 type="number"
                 min="1"
                 step="1"
-                placeholder="50"
                 value={newItem.price}
                 onChange={(event) => setNewItem({ ...newItem, price: toSafeNonNegativeInteger(event.target.value) })}
               />
@@ -317,7 +330,6 @@ const MiniShop = ({
                 type="number"
                 min="0"
                 step="1"
-                placeholder="99"
                 value={newItem.stock}
                 onChange={(event) => setNewItem({ ...newItem, stock: toSafeNonNegativeInteger(event.target.value) })}
               />
@@ -338,7 +350,16 @@ const MiniShop = ({
             </div>
           )}
           <div className="modal-footer">
-            <button className="cancel-btn" onClick={() => setIsAddingItem(false)} type="button">取消</button>
+            <button
+              className="cancel-btn"
+              onClick={() => {
+                setIsAddingItem(false);
+                setNewItem(EMPTY_ITEM);
+              }}
+              type="button"
+            >
+              取消
+            </button>
             <button className="confirm-btn" onClick={handleAddItem} type="button">确认上架</button>
           </div>
         </div>

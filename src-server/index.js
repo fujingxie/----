@@ -740,8 +740,15 @@ function validatePassword(value) {
   return typeof value === 'string' && value.length >= 6;
 }
 
-async function ensureSystemRules(db) {
-  const countRow = await db.prepare('SELECT COUNT(*) AS count FROM rules WHERE class_id IS NULL').first();
+async function ensureUserRuleTemplates(db, userId) {
+  if (!userId) {
+    return;
+  }
+
+  const countRow = await db
+    .prepare('SELECT COUNT(*) AS count FROM rules WHERE class_id IS NULL AND owner_user_id = ?')
+    .bind(userId)
+    .first();
 
   if (Number(countRow?.count || 0) > 0) {
     return;
@@ -749,8 +756,8 @@ async function ensureSystemRules(db) {
 
   const statements = SYSTEM_RULES.map((rule, index) =>
     db
-      .prepare('INSERT INTO rules (class_id, sort_order, name, icon, exp, coins, type) VALUES (NULL, ?, ?, ?, ?, ?, ?)')
-      .bind(index + 1, rule.name, rule.icon, rule.exp, rule.coins, rule.type),
+      .prepare('INSERT INTO rules (class_id, owner_user_id, sort_order, name, icon, exp, coins, type) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(userId, index + 1, rule.name, rule.icon, rule.exp, rule.coins, rule.type),
   );
 
   await db.batch(statements);
@@ -1309,15 +1316,16 @@ async function getShopItemsByClassId(db, classId) {
   return (result.results || []).map(normalizeShopItem);
 }
 
-async function getRulesByClassId(db, classId) {
+async function getRulesByClassId(db, classId, userId) {
   const result = await db
     .prepare(
-      `SELECT id, class_id, sort_order, name, icon, exp, coins, type
+      `SELECT id, class_id, owner_user_id, sort_order, name, icon, exp, coins, type
        FROM rules
-       WHERE class_id IS NULL OR class_id = ?
+       WHERE ((class_id = ? AND (owner_user_id = ? OR owner_user_id IS NULL))
+          OR (class_id IS NULL AND owner_user_id = ?))
        ORDER BY type ASC, sort_order ASC, id ASC`,
     )
-    .bind(classId)
+    .bind(classId, userId, userId)
     .all();
 
   return (result.results || []).map(normalizeRule);
@@ -1453,9 +1461,9 @@ async function getLatestUndoableLog(db, classId) {
 }
 
 async function getBootstrapPayload(db, userId, requestedClassId) {
-  await ensureSystemRules(db);
   await ensureActivationCodes(db);
   await ensureSystemFlags(db);
+  await ensureUserRuleTemplates(db, userId);
 
   const user = normalizeUser(await getUserById(db, userId));
   const classes = await getClassesByUserId(db, userId);
@@ -1483,7 +1491,7 @@ async function getBootstrapPayload(db, userId, requestedClassId) {
     currentClassId: resolvedClassId,
     students: await getStudentsByClassId(db, resolvedClassId, userId),
     shopItems: await getShopItemsByClassId(db, resolvedClassId),
-    rules: await getRulesByClassId(db, resolvedClassId),
+    rules: await getRulesByClassId(db, resolvedClassId, userId),
     logs: await getLogsByClassId(db, resolvedClassId),
     levelThresholds: await getThresholdsByClassId(db, resolvedClassId),
     petConditionConfig: await getPetConditionConfigByClassId(db, resolvedClassId),
@@ -1598,6 +1606,7 @@ async function handleLogin(db, request) {
         actionType: '账号管理',
         detail: `账号 ${createdUser.username} 通过渠道 ${registrationChannel.code} 免激活注册创建，默认等级 ${createdUser.level}，注册IP ${registerIp}`,
       });
+      await ensureUserRuleTemplates(db, createdUser.id);
 
       return json({
         user: normalizeUser(createdUser),
@@ -1639,6 +1648,7 @@ async function handleLogin(db, request) {
         actionType: '账号管理',
         detail: `账号 ${createdUser.username} 通过免激活注册创建，默认等级 ${createdUser.level}，注册IP ${registerIp}`,
       });
+      await ensureUserRuleTemplates(db, createdUser.id);
 
       return json({
         user: normalizeUser(createdUser),
@@ -1718,6 +1728,7 @@ async function handleLogin(db, request) {
       )
       .bind(createdUser.id, activationCode.id)
       .run();
+    await ensureUserRuleTemplates(db, createdUser.id);
 
     return json({
       user: normalizeUser(createdUser),
@@ -1738,6 +1749,8 @@ async function handleLogin(db, request) {
       .bind(await hashPassword(password), user.id)
       .run();
   }
+
+  await ensureUserRuleTemplates(db, user.id);
 
   const classes = await getClassesByUserId(db, user.id);
 
@@ -2581,14 +2594,20 @@ async function handleCreateRule(db, request, classId) {
   await assertClassOwnership(db, userId, classId);
 
   const maxOrderRow = await db
-    .prepare('SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM rules WHERE type = ? AND (class_id = ? OR class_id IS NULL)')
-    .bind(type, classId)
+    .prepare(
+      `SELECT COALESCE(MAX(sort_order), 0) AS max_order
+       FROM rules
+       WHERE type = ?
+         AND ((class_id = ? AND (owner_user_id = ? OR owner_user_id IS NULL))
+           OR (class_id IS NULL AND owner_user_id = ?))`,
+    )
+    .bind(type, classId, userId, userId)
     .first();
   const nextSortOrder = Number(maxOrderRow?.max_order || 0) + 1;
 
   await db
-    .prepare('INSERT INTO rules (class_id, sort_order, name, icon, exp, coins, type) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .bind(classId, nextSortOrder, name, icon, exp, coins, type)
+    .prepare('INSERT INTO rules (class_id, owner_user_id, sort_order, name, icon, exp, coins, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(classId, userId, nextSortOrder, name, icon, exp, coins, type)
     .run();
 
   await appendLog(db, {
@@ -2599,7 +2618,7 @@ async function handleCreateRule(db, request, classId) {
   });
 
   return json({
-    rules: await getRulesByClassId(db, classId),
+    rules: await getRulesByClassId(db, classId, userId),
     logs: await getLogsByClassId(db, classId),
   });
 }
@@ -2622,8 +2641,14 @@ async function handleUpdateRule(db, request, ruleId) {
   await assertClassOwnership(db, userId, classId);
 
   const existing = await db
-    .prepare('SELECT id, class_id, name FROM rules WHERE id = ? AND (class_id = ? OR class_id IS NULL)')
-    .bind(ruleId, classId)
+    .prepare(
+      `SELECT id, class_id, owner_user_id, name
+       FROM rules
+       WHERE id = ?
+         AND ((class_id = ? AND (owner_user_id = ? OR owner_user_id IS NULL))
+           OR (class_id IS NULL AND owner_user_id = ?))`,
+    )
+    .bind(ruleId, classId, userId, userId)
     .first();
 
   if (!existing) {
@@ -2643,7 +2668,7 @@ async function handleUpdateRule(db, request, ruleId) {
   });
 
   return json({
-    rules: await getRulesByClassId(db, classId),
+    rules: await getRulesByClassId(db, classId, userId),
     logs: await getLogsByClassId(db, classId),
   });
 }
@@ -2660,8 +2685,14 @@ async function handleDeleteRule(db, request, ruleId) {
   await assertClassOwnership(db, userId, classId);
 
   const rule = await db
-    .prepare('SELECT id, class_id, name FROM rules WHERE id = ? AND (class_id = ? OR class_id IS NULL)')
-    .bind(ruleId, classId)
+    .prepare(
+      `SELECT id, class_id, owner_user_id, name
+       FROM rules
+       WHERE id = ?
+         AND ((class_id = ? AND (owner_user_id = ? OR owner_user_id IS NULL))
+           OR (class_id IS NULL AND owner_user_id = ?))`,
+    )
+    .bind(ruleId, classId, userId, userId)
     .first();
 
   if (!rule) {
@@ -2677,7 +2708,7 @@ async function handleDeleteRule(db, request, ruleId) {
   });
 
   return json({
-    rules: await getRulesByClassId(db, classId),
+    rules: await getRulesByClassId(db, classId, userId),
     logs: await getLogsByClassId(db, classId),
   });
 }
@@ -2695,8 +2726,14 @@ async function handleMoveRule(db, request, ruleId) {
   await assertClassOwnership(db, userId, classId);
 
   const currentRule = await db
-    .prepare('SELECT id, class_id, sort_order, name, type FROM rules WHERE id = ? AND (class_id = ? OR class_id IS NULL)')
-    .bind(ruleId, classId)
+    .prepare(
+      `SELECT id, class_id, owner_user_id, sort_order, name, type
+       FROM rules
+       WHERE id = ?
+         AND ((class_id = ? AND (owner_user_id = ? OR owner_user_id IS NULL))
+           OR (class_id IS NULL AND owner_user_id = ?))`,
+    )
+    .bind(ruleId, classId, userId, userId)
     .first();
 
   if (!currentRule) {
@@ -2708,17 +2745,19 @@ async function handleMoveRule(db, request, ruleId) {
     .prepare(
       `SELECT id, sort_order, name
        FROM rules
-       WHERE type = ? AND id != ? AND (class_id = ? OR class_id IS NULL)
+       WHERE type = ? AND id != ?
+         AND ((class_id = ? AND (owner_user_id = ? OR owner_user_id IS NULL))
+           OR (class_id IS NULL AND owner_user_id = ?))
          AND sort_order ${direction === 'up' ? '<' : '>'} ?
        ORDER BY sort_order ${direction === 'up' ? 'DESC' : 'ASC'}, id ${direction === 'up' ? 'DESC' : 'ASC'}
        LIMIT 1`,
     )
-    .bind(currentRule.type, ruleId, classId, currentSortOrder)
+    .bind(currentRule.type, ruleId, classId, userId, userId, currentSortOrder)
     .first();
 
   if (!neighbor) {
     return json({
-      rules: await getRulesByClassId(db, classId),
+      rules: await getRulesByClassId(db, classId, userId),
       logs: await getLogsByClassId(db, classId),
     });
   }
@@ -2736,7 +2775,7 @@ async function handleMoveRule(db, request, ruleId) {
   });
 
   return json({
-    rules: await getRulesByClassId(db, classId),
+    rules: await getRulesByClassId(db, classId, userId),
     logs: await getLogsByClassId(db, classId),
   });
 }
@@ -2763,9 +2802,10 @@ async function handleImportRules(db, request, classId) {
       `SELECT id, name, icon, exp, coins, type, sort_order
        FROM rules
        WHERE class_id = ?
+         AND (owner_user_id = ? OR owner_user_id IS NULL)
        ORDER BY type ASC, sort_order ASC, id ASC`,
     )
-    .bind(sourceClassId)
+    .bind(sourceClassId, userId)
     .all();
 
   const sourceRules = sourceRulesResult.results || [];
@@ -2778,7 +2818,7 @@ async function handleImportRules(db, request, classId) {
 
   if (mode === 'replace') {
     statements.push(
-      db.prepare('DELETE FROM rules WHERE class_id = ?').bind(classId),
+      db.prepare('DELETE FROM rules WHERE class_id = ? AND (owner_user_id = ? OR owner_user_id IS NULL)').bind(classId, userId),
     );
   }
 
@@ -2787,9 +2827,10 @@ async function handleImportRules(db, request, classId) {
       `SELECT type, COALESCE(MAX(sort_order), 0) AS max_order
        FROM rules
        WHERE class_id = ?
+         AND (owner_user_id = ? OR owner_user_id IS NULL)
        GROUP BY type`,
     )
-    .bind(classId)
+    .bind(classId, userId)
     .all();
 
   const orderMap = Object.fromEntries(
@@ -2806,8 +2847,8 @@ async function handleImportRules(db, request, classId) {
     orderMap[type] = Number(orderMap[type] || 0) + 1;
     statements.push(
       db
-        .prepare('INSERT INTO rules (class_id, sort_order, name, icon, exp, coins, type) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .bind(classId, orderMap[type], rule.name, rule.icon || '⭐', Number(rule.exp || 0), Number(rule.coins || 0), type),
+        .prepare('INSERT INTO rules (class_id, owner_user_id, sort_order, name, icon, exp, coins, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(classId, userId, orderMap[type], rule.name, rule.icon || '⭐', Number(rule.exp || 0), Number(rule.coins || 0), type),
     );
   });
 
@@ -2821,7 +2862,7 @@ async function handleImportRules(db, request, classId) {
   });
 
   return json({
-    rules: await getRulesByClassId(db, classId),
+    rules: await getRulesByClassId(db, classId, userId),
     logs: await getLogsByClassId(db, classId),
   });
 }

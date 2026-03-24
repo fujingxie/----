@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import './Modal.css';
 
@@ -17,7 +18,7 @@ const Modal = ({ isOpen, onClose, title, children, showHeader = true, contentCla
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div className={`modal-content glass-card ${contentClassName}`.trim()} onClick={e => e.stopPropagation()}>
         {showHeader && (
@@ -32,7 +33,8 @@ const Modal = ({ isOpen, onClose, title, children, showHeader = true, contentCla
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 

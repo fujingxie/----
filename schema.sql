@@ -65,14 +65,16 @@ CREATE TABLE shop_items (
 -- 课堂规则库表
 CREATE TABLE rules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    class_id INTEGER, -- NULL 表示系统预设
+    class_id INTEGER, -- NULL 表示账号默认模板
+    owner_user_id INTEGER, -- 规则归属老师，默认模板与班级规则都归属于老师账号
     sort_order INTEGER NOT NULL DEFAULT 0,
     name TEXT NOT NULL,
     icon TEXT,
     exp INTEGER NOT NULL,
     coins INTEGER NOT NULL,
     type TEXT, -- positive, negative
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_user_id) REFERENCES users(id)
 );
 
 -- 班级设置表
@@ -152,6 +154,7 @@ CREATE INDEX idx_classes_user_id ON classes(user_id);
 CREATE INDEX idx_students_class_id ON students(class_id);
 CREATE INDEX idx_shop_items_class_id ON shop_items(class_id);
 CREATE INDEX idx_rules_class_id ON rules(class_id);
+CREATE INDEX idx_rules_owner_user_id ON rules(owner_user_id);
 CREATE INDEX idx_logs_class_id_created_at ON logs(class_id, created_at DESC);
 CREATE INDEX idx_activation_codes_code ON activation_codes(code);
 CREATE INDEX idx_activation_codes_used_by_user_id ON activation_codes(used_by_user_id);

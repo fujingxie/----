@@ -3,6 +3,7 @@ import PetCard from './PetCard';
 import PetSelectionModal from './PetSelectionModal';
 import InteractionModal from './InteractionModal';
 import PetCollectionModal from './PetCollectionModal';
+import Modal from '../Common/Modal';
 import './PetParadise.css';
 import { CheckCircle2, UserPlus } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -48,8 +49,9 @@ const PetParadise = ({
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [isBulkApplyingRule, setIsBulkApplyingRule] = useState(false);
   const [isBulkAdopting, setIsBulkAdopting] = useState(false);
-  const [isBulkRuleOpen, setIsBulkRuleOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [activeBulkRuleType, setActiveBulkRuleType] = useState('positive');
+  const [selectedBulkRuleId, setSelectedBulkRuleId] = useState(null);
   const activePetsCount = students.filter((student) => student.pet_status !== 'egg').length;
   const eggStudents = useMemo(() => students.filter((student) => student.pet_status === 'egg'), [students]);
   const totalAdoptions = students.reduce((sum, student) => sum + getAdoptionCount(student), 0);
@@ -121,8 +123,23 @@ const PetParadise = ({
   useEffect(() => {
     if (!isBulkMode) {
       setSelectedStudentIds([]);
+      setSelectedBulkRuleId(null);
+      setActiveBulkRuleType('positive');
     }
   }, [isBulkMode]);
+
+  useEffect(() => {
+    setSelectedBulkRuleId(null);
+  }, [activeBulkRuleType]);
+
+  const bulkRules = useMemo(
+    () => rules.filter((rule) => rule.type === activeBulkRuleType),
+    [activeBulkRuleType, rules],
+  );
+  const selectedBulkRule = useMemo(
+    () => rules.find((rule) => rule.id === selectedBulkRuleId) || null,
+    [rules, selectedBulkRuleId],
+  );
 
   const handlePetPrimaryAction = async (student) => {
     if (student.pet_status === 'egg') {
@@ -190,20 +207,14 @@ const PetParadise = ({
   };
 
   const handleBulkFeed = async () => {
-    if (selectedStudentIds.length === 0 || isBulkApplyingRule) {
+    if (isBulkApplyingRule || feedableStudents.length === 0) {
       return;
     }
 
-    const selectedStudents = feedableStudents.filter((student) => selectedStudentIds.includes(student.id));
-
-    if (selectedStudents.length === 0) {
-      return;
-    }
-
-    setIsBulkRuleOpen(true);
+    setIsBulkMode(true);
   };
 
-  const handleBulkFeedByRule = async (rule) => {
+  const handleBulkFeedByRule = async (rule = selectedBulkRule) => {
     if (selectedStudentIds.length === 0 || isBulkApplyingRule) {
       return;
     }
@@ -225,7 +236,6 @@ const PetParadise = ({
 
       setSelectedStudentIds([]);
       setIsBulkMode(false);
-      setIsBulkRuleOpen(false);
     } finally {
       setIsBulkApplyingRule(false);
     }
@@ -330,10 +340,10 @@ const PetParadise = ({
           {feedableStudents.length > 0 && (
             <button
               className={`bulk-mode-btn ${isBulkMode ? 'active' : ''}`}
-              onClick={() => setIsBulkMode((prev) => !prev)}
+              onClick={handleBulkFeed}
               type="button"
             >
-              {isBulkMode ? '退出批量' : '批量互动'}
+              批量互动
             </button>
           )}
           <button className="import-btn-large compact" onClick={() => setIsImporting(true)} type="button">
@@ -450,39 +460,13 @@ const PetParadise = ({
               effect={petEffects[student.id] || null}
               onOpenCollection={setCollectionStudent}
               onActivate={handlePetPrimaryAction}
-              isSelectable={isBulkMode && student.pet_status !== 'egg'}
+              isSelectable={false}
               isSelected={selectedStudentIds.includes(student.id)}
               onToggleSelect={toggleSelectStudent}
             />
           ))}
         </div>
       </section>
-
-      {isBulkMode && feedableStudents.length > 0 && (
-        <div className="bulk-feed-toolbar">
-          <div className="bulk-feed-summary">
-            <span className="bulk-feed-dot" />
-            <span>已选</span>
-            <strong>{selectedStudentIds.length}</strong>
-            <span>人</span>
-          </div>
-          <button className="bulk-feed-select-all" onClick={handleSelectAllFeedable} type="button">
-            <CheckCircle2 size={18} />
-            <span>{selectedStudentIds.length === feedableStudents.length ? '取消全选' : '全选可用宠物'}</span>
-          </button>
-          <button className="bulk-feed-cancel" onClick={() => setIsBulkMode(false)} type="button">
-            取消
-          </button>
-          <button
-            className="bulk-feed-action"
-            onClick={handleBulkFeed}
-            disabled={selectedStudentIds.length === 0 || isBulkApplyingRule}
-            type="button"
-          >
-            {isBulkApplyingRule ? '应用中...' : '批量互动'}
-          </button>
-        </div>
-      )}
 
       {selectingStudent && (
         <PetSelectionModal 
@@ -504,15 +488,113 @@ const PetParadise = ({
         />
       )}
 
-      <InteractionModal
-        isOpen={isBulkRuleOpen}
-        onClose={() => setIsBulkRuleOpen(false)}
-        student={{ name: `${selectedStudentIds.length} 名学生` }}
-        rules={rules}
-        title="选择批量互动规则"
-        emptyHint="暂无可用于批量互动的规则，请先去系统设置添加"
-        onInteract={handleBulkFeedByRule}
-      />
+      <Modal
+        isOpen={isBulkMode && feedableStudents.length > 0}
+        onClose={() => setIsBulkMode(false)}
+        title="批量互动"
+        contentClassName="bulk-interaction-modal"
+        bodyClassName="bulk-interaction-modal-body"
+      >
+        <div className="bulk-interaction-shell">
+          <section className="bulk-interaction-panel rules">
+            <div className="bulk-interaction-panel-head">
+              <h4>选择规则</h4>
+              <p>先选一条规则，再从右侧勾选学生。</p>
+            </div>
+            <div className="bulk-interaction-tabs">
+              <button
+                className={activeBulkRuleType === 'positive' ? 'active' : ''}
+                onClick={() => setActiveBulkRuleType('positive')}
+                type="button"
+              >
+                表现活跃
+              </button>
+              <button
+                className={activeBulkRuleType === 'negative' ? 'active negative' : ''}
+                onClick={() => setActiveBulkRuleType('negative')}
+                type="button"
+              >
+                需要改进
+              </button>
+            </div>
+            <div className="bulk-rule-list">
+              {bulkRules.length === 0 ? (
+                <div className="bulk-empty-hint">当前没有这类规则，请先去系统设置添加。</div>
+              ) : (
+                bulkRules.map((rule) => (
+                  <button
+                    key={rule.id}
+                    className={`bulk-rule-card ${selectedBulkRuleId === rule.id ? 'active' : ''} ${rule.type}`}
+                    onClick={() => setSelectedBulkRuleId(rule.id)}
+                    type="button"
+                  >
+                    <div className="bulk-rule-icon">{rule.icon || '⭐'}</div>
+                    <div className="bulk-rule-copy">
+                      <strong>{rule.name}</strong>
+                      <span>{rule.exp > 0 ? '+' : ''}{rule.exp} EXP · {rule.coins > 0 ? '+' : ''}{rule.coins} 金币</span>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="bulk-interaction-panel students">
+            <div className="bulk-interaction-panel-head">
+              <h4>选择学生</h4>
+              <p>这里只显示已经拥有宠物的学生。</p>
+            </div>
+            <div className="bulk-student-list">
+              {feedableStudents.map((student) => {
+                const isSelected = selectedStudentIds.includes(student.id);
+                return (
+                  <button
+                    key={student.id}
+                    className={`bulk-student-row ${isSelected ? 'active' : ''}`}
+                    onClick={() => toggleSelectStudent(student)}
+                    type="button"
+                  >
+                    <div className="bulk-student-main">
+                      <strong>{student.name}</strong>
+                      <span>{student.pet_name || '未命名伙伴'} · Lv.{student.pet_level || 1}</span>
+                    </div>
+                    <div className="bulk-student-meta">
+                      <span className={`bulk-student-condition ${student.pet_condition || 'healthy'}`}>
+                        {student.pet_condition === 'sleeping' ? '休眠中' : student.pet_condition === 'weak' ? '虚弱中' : student.pet_condition === 'hungry' ? '即将饥饿' : '健康'}
+                      </span>
+                      <span className="bulk-student-check">{isSelected ? '已选' : '点击选择'}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+
+        <div className="bulk-feed-toolbar inline">
+          <div className="bulk-feed-summary">
+            <span className="bulk-feed-dot" />
+            <span>已选</span>
+            <strong>{selectedStudentIds.length}</strong>
+            <span>人</span>
+          </div>
+          <button className="bulk-feed-select-all" onClick={handleSelectAllFeedable} type="button">
+            <CheckCircle2 size={18} />
+            <span>{selectedStudentIds.length === feedableStudents.length ? '取消全选' : '全选可用宠物'}</span>
+          </button>
+          <button className="bulk-feed-cancel" onClick={() => setIsBulkMode(false)} type="button">
+            取消
+          </button>
+          <button
+            className="bulk-feed-action"
+            onClick={() => handleBulkFeedByRule()}
+            disabled={!selectedBulkRule || selectedStudentIds.length === 0 || isBulkApplyingRule}
+            type="button"
+          >
+            {isBulkApplyingRule ? '应用中...' : '批量互动'}
+          </button>
+        </div>
+      </Modal>
 
       {interactingStudent && (
         <InteractionModal 

@@ -19,6 +19,7 @@ import {
   Users,
 } from 'lucide-react';
 import { graduateToNewEgg } from '../../lib/petCollection';
+import Modal from '../Common/Modal';
 
 const DEFAULT_THRESHOLDS = [10, 20, 30, 50, 70, 100];
 const DEFAULT_PET_CONDITION_CONFIG = {
@@ -445,6 +446,7 @@ const RulesSettingsPanel = ({
     const normalizedRule = {
       ...rule,
       name: rule.name.trim(),
+      icon: (rule.icon || '⭐').trim() || '⭐',
       exp: Number(rule.exp),
       coins: Number(rule.coins),
     };
@@ -536,8 +538,17 @@ const RulesSettingsPanel = ({
       <div className="rule-icon-picker">
         <div className="rule-icon-picker-head">
           <strong>选择图标</strong>
-          <span>点一下就能选中，不需要手动输入 emoji</span>
+          <span>可以点选常用图标，也可以手动输入自定义 emoji</span>
         </div>
+        <label className="rule-icon-custom-field">
+          <span>自定义图标</span>
+          <input
+            className="glass-input"
+            value={draft.icon}
+            onChange={(event) => setDraft((prev) => ({ ...prev, icon: event.target.value }))}
+            placeholder="例如：🦖"
+          />
+        </label>
         <div className="rule-icon-options">
           {RULE_ICON_OPTIONS.map((icon) => (
             <button
@@ -561,8 +572,6 @@ const RulesSettingsPanel = ({
   );
 
   const renderRuleCard = (rule, theme = 'positive', groupRules = []) => {
-    const isEditing = editingRuleId === rule.id;
-    const currentRule = isEditing ? editingRule : rule;
     const ruleIndex = groupRules.findIndex((item) => item.id === rule.id);
     const canMoveUp = ruleIndex > 0;
     const canMoveDown = ruleIndex >= 0 && ruleIndex < groupRules.length - 1;
@@ -570,81 +579,58 @@ const RulesSettingsPanel = ({
     return (
       <article
         key={rule.id}
-        className={`rule-card glass-card ${theme === 'negative' ? 'negative' : 'positive'} ${isEditing ? 'editing' : ''}`}
+        className={`rule-card glass-card ${theme === 'negative' ? 'negative' : 'positive'}`}
       >
         <div className={`rule-icon-badge ${theme === 'negative' ? 'negative' : 'positive'}`}>
-          <span>{currentRule.icon || '⭐'}</span>
+          <span>{rule.icon || '⭐'}</span>
+        </div>
+        <div className="rule-card-body">
+          <h5>{rule.name}</h5>
+          {rule.isSystem && <span className="system-tag">系统预设</span>}
         </div>
 
-        {isEditing ? (
-          <div className="rule-card-edit">
-            {renderRuleForm(
-              editingRule,
-              setEditingRule,
-              () =>
-                submitRule(editingRule, async (normalizedRule) => {
-                  await onUpdateRule(normalizedRule);
-                  cancelEditingRule();
-                }),
-              '保存修改',
-            )}
-            <div className="rule-card-actions editing">
-              <button className="select-all-btn" onClick={cancelEditingRule} type="button">
-                取消
-              </button>
-            </div>
+        <div className="rule-reward-row">
+          <div className="rule-reward-pill exp">
+            <span>EXP</span>
+            <strong>{rule.exp > 0 ? '+' : ''}{rule.exp}</strong>
           </div>
-        ) : (
-          <>
-            <div className="rule-card-body">
-              <h5>{rule.name}</h5>
-              {rule.isSystem && <span className="system-tag">系统预设</span>}
-            </div>
+          <div className="rule-reward-pill coins">
+            <span>金币</span>
+            <strong>{rule.coins > 0 ? '+' : ''}{rule.coins}</strong>
+          </div>
+        </div>
 
-            <div className="rule-reward-row">
-              <div className="rule-reward-pill exp">
-                <span>EXP</span>
-                <strong>{rule.exp > 0 ? '+' : ''}{rule.exp}</strong>
-              </div>
-              <div className="rule-reward-pill coins">
-                <span>金币</span>
-                <strong>{rule.coins > 0 ? '+' : ''}{rule.coins}</strong>
-              </div>
-            </div>
-
-            <div className="rule-card-actions">
-              <button
-                className="icon-btn soft"
-                onClick={() => onMoveRule(rule.id, 'up')}
-                type="button"
-                title="上移规则"
-                disabled={!canMoveUp}
-              >
-                <ArrowUp size={16} />
-              </button>
-              <button
-                className="icon-btn soft"
-                onClick={() => onMoveRule(rule.id, 'down')}
-                type="button"
-                title="下移规则"
-                disabled={!canMoveDown}
-              >
-                <ArrowDown size={16} />
-              </button>
-              <button className="icon-btn blue soft" onClick={() => startEditingRule(rule)} type="button" title="编辑规则">
-                <PenSquare size={16} />
-              </button>
-              <button
-                className="icon-btn red soft"
-                onClick={() => onDeleteRule(rule.id)}
-                type="button"
-                title="删除规则"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </>
-        )}
+        <div className="rule-card-actions">
+          <button
+            className="icon-btn soft"
+            onClick={() => onMoveRule(rule.id, 'up')}
+            type="button"
+            title="上移规则"
+            disabled={!canMoveUp}
+          >
+            <ArrowUp size={16} />
+          </button>
+          <button
+            className="icon-btn soft"
+            onClick={() => onMoveRule(rule.id, 'down')}
+            type="button"
+            title="下移规则"
+            disabled={!canMoveDown}
+          >
+            <ArrowDown size={16} />
+          </button>
+          <button className="icon-btn blue soft" onClick={() => startEditingRule(rule)} type="button" title="编辑规则">
+            <PenSquare size={16} />
+          </button>
+          <button
+            className="icon-btn red soft"
+            onClick={() => onDeleteRule(rule.id)}
+            type="button"
+            title="删除规则"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       </article>
     );
   };
@@ -735,6 +721,32 @@ const RulesSettingsPanel = ({
             }))}
         </section>
       )}
+
+      <Modal
+        isOpen={Boolean(editingRuleId)}
+        onClose={cancelEditingRule}
+        title={`编辑规则：${editingRule.name || '未命名规则'}`}
+        contentClassName="rule-edit-modal"
+        bodyClassName="rule-edit-modal-body"
+      >
+        <div className="rule-edit-modal-shell">
+          {renderRuleForm(
+            editingRule,
+            setEditingRule,
+            () =>
+              submitRule(editingRule, async (normalizedRule) => {
+                await onUpdateRule(normalizedRule);
+                cancelEditingRule();
+              }),
+            '保存修改',
+          )}
+          <div className="rule-edit-modal-actions">
+            <button className="select-all-btn" onClick={cancelEditingRule} type="button">
+              取消
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <section className="rules-group-block">
         <div className="rules-group-heading positive">

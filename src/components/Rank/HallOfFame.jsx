@@ -16,7 +16,18 @@ const HallOfFame = ({ students }) => {
   const coinRanking = [...students].sort((a, b) => (b.coins || 0) - (a.coins || 0));
 
   const currentRanking = activeRank === 'pet' ? petRanking : coinRanking;
-  const champion = currentRanking[0];
+  const podiumRanking = currentRanking.slice(0, 3);
+  const remainingRanking = currentRanking.slice(3, 10);
+  const podiumOrder = [
+    { student: podiumRanking[1] || null, place: 2 },
+    { student: podiumRanking[0] || null, place: 1 },
+    { student: podiumRanking[2] || null, place: 3 },
+  ];
+
+  const renderRankMeta = (student) =>
+    activeRank === 'pet'
+      ? `LV.${student.pet_level || 0} ${student.pet_type_name || getPetNameById(student.pet_type_id)}`
+      : '班级首富';
 
   return (
     <div className="hof-container">
@@ -37,51 +48,62 @@ const HallOfFame = ({ students }) => {
         </div>
       </div>
 
-      {champion ? (
+      {podiumRanking[0] ? (
         <div className="hof-content">
-          {/* 冠军大卡片 */}
-          <div className="champion-card-wrapper">
-             <div className="champion-card glass-card">
-                <div className="crown-box">
-                  <Crown size={48} className="crown-icon" />
+          <div className="podium-wrapper">
+            <div className="podium-stage glass-card">
+              <div className="podium-stage-head">
+                <div>
+                  <span className="podium-kicker">荣耀领奖台</span>
+                  <h2>前三名高光时刻</h2>
                 </div>
-                <div className="champion-visual">
-                  {activeRank === 'pet' ? (
-                    <img
-                      src={getPetImagePath(champion.pet_type_id, champion.pet_level)}
-                      alt="champion"
-                      onError={handleImageError}
-                    />
-                  ) : (
-                    <div className="coin-champion-avatar">💰</div>
-                  )}
+                <div className="podium-crown-badge">
+                  <Crown size={30} className="crown-icon" />
                 </div>
-                <div className="champion-info">
-                  <h2 className="title-gradient">{champion.name}</h2>
-                  <p className="champion-honor">
-                    {activeRank === 'pet'
-                      ? `LV.${champion.pet_level || 0} ${champion.pet_type_name || getPetNameById(champion.pet_type_id)}`
-                      : '班级首富'}
-                  </p>
-                  <div className="champion-stats">
-                    <div className="stat">
-                      <span className="label">{activeRank === 'pet' ? '总经验' : '总资产'}</span>
-                      <span className="value">{activeRank === 'pet' ? champion.total_exp || 0 : champion.coins || 0}</span>
-                    </div>
-                    <div className="stat">
-                      <span className="label">{activeRank === 'pet' ? '当前等级' : '当前余额'}</span>
-                      <span className="value">{activeRank === 'pet' ? `Lv.${champion.pet_level || 0}` : champion.coins || 0}</span>
-                    </div>
+              </div>
+
+              <div className="podium-grid">
+                {podiumOrder.map(({ student, place }) => (
+                  <div
+                    key={`podium-${place}-${student?.id || 'empty'}`}
+                    className={`podium-slot place-${place} ${student ? 'filled' : 'empty'}`}
+                  >
+                    <div className="podium-rank-badge">#{place}</div>
+                    {student ? (
+                      <>
+                        <div className="podium-visual">
+                          <img
+                            src={getPetImagePath(student.pet_type_id, student.pet_level)}
+                            alt={student.name}
+                            onError={handleImageError}
+                          />
+                        </div>
+                        <div className="podium-info">
+                          <strong className="podium-name">{student.name}</strong>
+                          <span className="podium-meta">{renderRankMeta(student)}</span>
+                          <span className="podium-score">
+                            {activeRank === 'pet' ? `${student.total_exp || 0} EXP` : `💰${student.coins || 0}`}
+                          </span>
+                        </div>
+                        <div className="podium-base">
+                          <span className="podium-base-label">{place === 1 ? '冠军' : place === 2 ? '亚军' : '季军'}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="podium-empty-state">
+                        <span>等待上榜</span>
+                      </div>
+                    )}
                   </div>
-                </div>
-             </div>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* 排名列表 */}
           <div className="ranking-list glass-card">
-            {currentRanking.slice(1, 10).map((student, index) => (
+            {remainingRanking.map((student, index) => (
               <div key={student.id} className="rank-item">
-                <div className="rank-num">#{index + 2}</div>
+                <div className="rank-num">#{index + 4}</div>
                 <div className="rank-info">
                   <span className="rank-name">{student.name}</span>
                   <span className="rank-pet">

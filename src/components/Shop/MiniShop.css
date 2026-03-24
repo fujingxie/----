@@ -75,7 +75,7 @@
 
 .shop-items-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 22px;
   min-width: 0;
 }
@@ -160,25 +160,28 @@
 .shop-item-card {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 22px;
+  gap: 16px;
+  padding: 20px;
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.88);
   box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+  min-height: 380px;
 }
 
 .item-card-top {
   display: flex;
-  align-items: center;
-  gap: 16px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
 }
 
 .item-icon {
+  align-self: center;
   flex-shrink: 0;
-  font-size: 34px;
-  width: 76px;
-  height: 76px;
-  border-radius: 24px;
+  font-size: 46px;
+  width: 104px;
+  height: 104px;
+  border-radius: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -188,6 +191,10 @@
 
 .item-head-copy {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 .item-badge {
@@ -209,15 +216,20 @@
 }
 
 .item-head-copy h3 {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 900;
   color: #0f172a;
   line-height: 1.2;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .item-meta {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   flex-wrap: wrap;
   margin-top: 10px;
@@ -306,14 +318,20 @@
 
 .item-details p {
   color: #64748b;
-  font-size: 14px;
-  line-height: 1.65;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .shop-card-actions {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-top: auto;
 }
 
 .icon-btn {
@@ -359,6 +377,12 @@
   cursor: pointer;
   box-shadow: 0 14px 22px rgba(239, 71, 111, 0.18);
   transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.shop-card-actions .redeem-trigger-btn {
+  flex: 1;
+  min-width: 0;
+  margin-left: 0;
 }
 
 .redeem-trigger-btn:hover:not(:disabled) {
@@ -602,6 +626,28 @@
 }
 
 @media (max-width: 960px) {
+  .shop-items-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .shop-items-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+
+  .shop-item-card {
+    min-height: 340px;
+  }
+
+  .item-icon {
+    width: 92px;
+    height: 92px;
+    font-size: 40px;
+  }
+}
+
+@media (max-width: 640px) {
   .shop-content-grid {
     grid-template-columns: 1fr;
   }
@@ -638,6 +684,10 @@
 
   .shop-items-grid {
     grid-template-columns: 1fr;
+  }
+
+  .shop-item-card {
+    min-height: 0;
   }
 
   .item-card-top,
