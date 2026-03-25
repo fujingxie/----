@@ -35,6 +35,7 @@ const DEFAULT_TOOLBOX_ACCESS = {
   smart_seating: 'vip2',
   read_forest: 'vip2',
   mic_power: 'vip2',
+  reading_challenge: 'vip2',
   quiet_study: 'vip2',
 };
 

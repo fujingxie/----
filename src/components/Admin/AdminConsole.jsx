@@ -87,6 +87,7 @@ const TOOLBOX_TOOL_OPTIONS = [
   { id: 'smart_seating', label: '智能排座' },
   { id: 'read_forest', label: '安静养鱼' },
   { id: 'mic_power', label: '大声读' },
+  { id: 'reading_challenge', label: '朗读挑战' },
   { id: 'quiet_study', label: '静心自习' },
 ];
 
@@ -96,6 +97,7 @@ const DEFAULT_TOOLBOX_ACCESS = {
   smart_seating: 'vip2',
   read_forest: 'vip2',
   mic_power: 'vip2',
+  reading_challenge: 'vip2',
   quiet_study: 'vip2',
 };
 
@@ -158,6 +160,7 @@ const formatAdminLogDetail = (detail) => {
     .replace(/quiet_study/g, '静心自习')
     .replace(/read_forest/g, '安静养鱼')
     .replace(/mic_power/g, '大声读')
+    .replace(/reading_challenge/g, '朗读挑战')
     .replace(/random/g, '随机点名')
     .replace(/timer/g, '倒计时')
     .replace(/temporary/g, '临时体验')
