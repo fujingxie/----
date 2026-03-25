@@ -379,11 +379,13 @@
 }
 
 .pet-type-label {
-  font-size: 12px;
-  color: #94a3b8;
+  font-size: 13px;
+  color: #64748b;
   display: block;
+  margin-top: 4px;
   margin-bottom: 2px;
-  font-weight: 700;
+  font-weight: 800;
+  line-height: 1.35;
 }
 
 .student-name {
@@ -562,7 +564,7 @@
 }
 
 :root[data-theme='night'] .pet-type-label {
-  color: #8fa4c4;
+  color: #b7c7df;
 }
 
 :root[data-theme='night'] .student-name {

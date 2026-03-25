@@ -43,6 +43,7 @@ const PetCard = ({
   const isEgg = student.pet_status === 'egg';
   const petTypeLabel = isEgg ? '神秘蛋' : student.pet_type_name || getPetNameById(student.pet_type_id);
   const petDisplayName = isEgg ? '神秘蛋' : student.pet_name || petTypeLabel;
+  const petOwnerLabel = `${student.name}的${petDisplayName}`;
   const nextLevelInfo = getNextLevelInfo(student, levelThresholds);
   const conditionLabel = getPetConditionLabel(student.pet_condition);
   const visualCondition = student.pet_condition || 'healthy';
@@ -139,10 +140,10 @@ const PetCard = ({
         <div className="student-info-main">
           <div>
             <div className="pet-title-row">
-              <h3 className="student-name">{petDisplayName}</h3>
+              <h3 className="student-name">{student.name}</h3>
               {!isEgg && <span className={`pet-condition-inline ${visualCondition}`}>{conditionLabel}</span>}
             </div>
-            <span className="pet-type-label">{isEgg ? petTypeLabel : `${student.name}的${petTypeLabel}`}</span>
+            <span className="pet-type-label">{petOwnerLabel}</span>
             {!isEgg && <span className={`pet-condition-accent ${visualCondition}`}>{conditionDecoration.accent}</span>}
           </div>
           <div className="reward-count">
