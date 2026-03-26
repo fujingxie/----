@@ -1,7 +1,7 @@
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
-// .wrangler/tmp/bundle-gbEmOf/checked-fetch.js
+// .wrangler/tmp/bundle-0TygXF/checked-fetch.js
 var urls = /* @__PURE__ */ new Set();
 function checkURL(request, init) {
   const url = request instanceof URL ? request : new URL(
@@ -1182,7 +1182,6 @@ __name(getLatestUndoableLog, "getLatestUndoableLog");
 async function getBootstrapPayload(db, userId, requestedClassId) {
   await ensureActivationCodes(db);
   await ensureSystemFlags(db);
-  await ensureUserRuleTemplates(db, userId);
   const user = normalizeUser(await getUserById(db, userId));
   const classes = await getClassesByUserId(db, userId);
   const resolvedClassId = classes.find((item) => item.id === requestedClassId)?.id || classes[0]?.id || null;
@@ -1410,7 +1409,6 @@ async function handleLogin(db, request) {
   if (user.password_hash === password) {
     await db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(await hashPassword(password), user.id).run();
   }
-  await ensureUserRuleTemplates(db, user.id);
   const classes = await getClassesByUserId(db, user.id);
   return json({
     user: normalizeUser(user),
@@ -3349,7 +3347,7 @@ var jsonError = /* @__PURE__ */ __name(async (request, env, _ctx, middlewareCtx)
 }, "jsonError");
 var middleware_miniflare3_json_error_default = jsonError;
 
-// .wrangler/tmp/bundle-gbEmOf/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-0TygXF/middleware-insertion-facade.js
 var __INTERNAL_WRANGLER_MIDDLEWARE__ = [
   middleware_ensure_req_body_drained_default,
   middleware_miniflare3_json_error_default
@@ -3381,7 +3379,7 @@ function __facade_invoke__(request, env, ctx, dispatch, finalMiddleware) {
 }
 __name(__facade_invoke__, "__facade_invoke__");
 
-// .wrangler/tmp/bundle-gbEmOf/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-0TygXF/middleware-loader.entry.ts
 var __Facade_ScheduledController__ = class ___Facade_ScheduledController__ {
   constructor(scheduledTime, cron, noRetry) {
     this.scheduledTime = scheduledTime;

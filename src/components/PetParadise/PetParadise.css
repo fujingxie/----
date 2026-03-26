@@ -518,13 +518,17 @@
 }
 
 .bulk-rule-card.active.positive {
-  border-color: rgba(20, 184, 166, 0.48);
-  box-shadow: 0 14px 24px rgba(20, 184, 166, 0.12);
+  border-color: rgba(244, 63, 94, 0.82);
+  box-shadow:
+    0 0 0 2px rgba(251, 113, 133, 0.18),
+    0 14px 24px rgba(244, 63, 94, 0.16);
 }
 
 .bulk-rule-card.active.negative {
-  border-color: rgba(244, 63, 94, 0.42);
-  box-shadow: 0 14px 24px rgba(244, 63, 94, 0.1);
+  border-color: rgba(244, 63, 94, 0.82);
+  box-shadow:
+    0 0 0 2px rgba(251, 113, 133, 0.18),
+    0 14px 24px rgba(244, 63, 94, 0.16);
 }
 
 .bulk-rule-icon {
@@ -562,8 +566,10 @@
 }
 
 .bulk-student-row.active {
-  border-color: rgba(99, 102, 241, 0.42);
-  box-shadow: 0 12px 24px rgba(99, 102, 241, 0.08);
+  border-color: rgba(244, 63, 94, 0.82);
+  box-shadow:
+    0 0 0 2px rgba(251, 113, 133, 0.18),
+    0 12px 24px rgba(244, 63, 94, 0.14);
 }
 
 .bulk-student-main,

@@ -244,6 +244,7 @@ function AdminConsole({
   const [userLevelFilter, setUserLevelFilter] = useState('all');
   const [userRoleFilter, setUserRoleFilter] = useState('all');
   const [userSourceFilter, setUserSourceFilter] = useState('all');
+  const [userExpireFilter, setUserExpireFilter] = useState('all');
   const [userPage, setUserPage] = useState(1);
   const [codePage, setCodePage] = useState(1);
   const [logPage, setLogPage] = useState(1);
@@ -283,6 +284,15 @@ function AdminConsole({
     );
   };
 
+  const isUserExpired = (user) => {
+    if (!user?.expire_at) {
+      return false;
+    }
+
+    const timestamp = new Date(user.expire_at).getTime();
+    return Number.isFinite(timestamp) && timestamp < Date.now();
+  };
+
   const filteredUsers = useMemo(() => {
     const keyword = query.trim().toLowerCase();
 
@@ -311,11 +321,19 @@ function AdminConsole({
         return false;
       }
 
+      if (userExpireFilter === 'expired' && !isUserExpired(user)) {
+        return false;
+      }
+
+      if (userExpireFilter === 'valid' && isUserExpired(user)) {
+        return false;
+      }
+
       return true;
     });
 
     return sortBy(filterList, userSort);
-  }, [query, users, userSort, userStatusFilter, userLevelFilter, userRoleFilter, userSourceFilter]);
+  }, [query, users, userSort, userStatusFilter, userLevelFilter, userRoleFilter, userSourceFilter, userExpireFilter]);
 
   React.useEffect(() => {
     setFreeRegisterDraft({
@@ -1278,6 +1296,18 @@ function AdminConsole({
                       {option.label}
                     </option>
                   ))}
+                </select>
+              </label>
+              <label className="admin-filter-field">
+                <span>是否过期</span>
+                <select
+                  className="glass-input compact"
+                  value={userExpireFilter}
+                  onChange={(event) => setUserExpireFilter(event.target.value)}
+                >
+                  <option value="all">全部账号</option>
+                  <option value="valid">未过期 / 长期有效</option>
+                  <option value="expired">仅看已过期</option>
                 </select>
               </label>
               <button className="select-all-btn" onClick={handleExportUsersCsv} type="button">

@@ -1464,7 +1464,6 @@ async function getLatestUndoableLog(db, classId) {
 async function getBootstrapPayload(db, userId, requestedClassId) {
   await ensureActivationCodes(db);
   await ensureSystemFlags(db);
-  await ensureUserRuleTemplates(db, userId);
 
   const user = normalizeUser(await getUserById(db, userId));
   const classes = await getClassesByUserId(db, userId);
@@ -1750,8 +1749,6 @@ async function handleLogin(db, request) {
       .bind(await hashPassword(password), user.id)
       .run();
   }
-
-  await ensureUserRuleTemplates(db, user.id);
 
   const classes = await getClassesByUserId(db, user.id);
 

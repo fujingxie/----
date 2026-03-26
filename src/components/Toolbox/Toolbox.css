@@ -2491,8 +2491,8 @@
 }
 
 .reading-challenge-live-hero-wrap {
-  right: 120px;
-  top: 100px;
+  right: 112px;
+  top: 146px;
   width: 240px;
   height: 260px;
 }
@@ -2509,14 +2509,16 @@
 }
 
 .reading-challenge-live-hero.failed {
-  animation: reading-challenge-fail-spin 1s ease forwards;
+  animation: none;
+  opacity: 0.96;
 }
 
 .reading-challenge-live-copy {
   left: 70px;
-  top: 230px;
-  max-width: 360px;
+  top: 248px;
+  max-width: 420px;
   color: #ffffff;
+  text-shadow: 0 8px 24px rgba(15, 23, 42, 0.22);
 }
 
 .reading-challenge-live-copy h3 {
@@ -2533,9 +2535,9 @@
 }
 
 .reading-challenge-live-footer {
-  left: 40px;
-  right: 40px;
-  bottom: 24px;
+  left: 48px;
+  right: 48px;
+  bottom: 28px;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 14px;
@@ -2547,10 +2549,13 @@
 
 .reading-challenge-progress-track,
 .reading-challenge-buffer-track {
-  height: 12px;
+  height: 14px;
   border-radius: 999px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.52);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 10px 24px rgba(255, 255, 255, 0.12);
 }
 
 .reading-challenge-progress-fill,
@@ -2558,6 +2563,7 @@
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #fb7185, #fbbf24);
+  box-shadow: 0 0 18px rgba(251, 146, 60, 0.34);
 }
 
 .reading-challenge-reward-card {
