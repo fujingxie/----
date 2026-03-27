@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import './AdminConsole.css';
 import { ArrowDownUp, CheckSquare, ChevronDown, Copy, Download, History, KeyRound, Shield, Square, Ticket, Users, X } from 'lucide-react';
 
@@ -87,6 +87,7 @@ const TOOLBOX_TOOL_OPTIONS = [
   { id: 'smart_seating', label: '智能排座' },
   { id: 'read_forest', label: '安静养鱼' },
   { id: 'mic_power', label: '大声读' },
+  { id: 'angry_tiger', label: '生气的老虎' },
   { id: 'reading_challenge', label: '朗读挑战' },
   { id: 'quiet_study', label: '静心自习' },
 ];
@@ -97,6 +98,7 @@ const DEFAULT_TOOLBOX_ACCESS = {
   smart_seating: 'vip2',
   read_forest: 'vip2',
   mic_power: 'vip2',
+  angry_tiger: 'vip2',
   reading_challenge: 'vip2',
   quiet_study: 'vip2',
 };
@@ -160,6 +162,7 @@ const formatAdminLogDetail = (detail) => {
     .replace(/quiet_study/g, '静心自习')
     .replace(/read_forest/g, '安静养鱼')
     .replace(/mic_power/g, '大声读')
+    .replace(/angry_tiger/g, '生气的老虎')
     .replace(/reading_challenge/g, '朗读挑战')
     .replace(/random/g, '随机点名')
     .replace(/timer/g, '倒计时')
@@ -245,6 +248,7 @@ function AdminConsole({
   const [userRoleFilter, setUserRoleFilter] = useState('all');
   const [userSourceFilter, setUserSourceFilter] = useState('all');
   const [userExpireFilter, setUserExpireFilter] = useState('all');
+  const [nowTimestamp] = useState(() => Date.now());
   const [userPage, setUserPage] = useState(1);
   const [codePage, setCodePage] = useState(1);
   const [logPage, setLogPage] = useState(1);
@@ -284,14 +288,14 @@ function AdminConsole({
     );
   };
 
-  const isUserExpired = (user) => {
+  const isUserExpired = useCallback((user) => {
     if (!user?.expire_at) {
       return false;
     }
 
     const timestamp = new Date(user.expire_at).getTime();
-    return Number.isFinite(timestamp) && timestamp < Date.now();
-  };
+    return Number.isFinite(timestamp) && timestamp < nowTimestamp;
+  }, [nowTimestamp]);
 
   const filteredUsers = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -333,7 +337,7 @@ function AdminConsole({
     });
 
     return sortBy(filterList, userSort);
-  }, [query, users, userSort, userStatusFilter, userLevelFilter, userRoleFilter, userSourceFilter, userExpireFilter]);
+  }, [query, users, userSort, userStatusFilter, userLevelFilter, userRoleFilter, userSourceFilter, userExpireFilter, isUserExpired]);
 
   React.useEffect(() => {
     setFreeRegisterDraft({

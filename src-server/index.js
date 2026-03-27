@@ -35,6 +35,7 @@ const DEFAULT_TOOLBOX_ACCESS = {
   smart_seating: 'vip2',
   read_forest: 'vip2',
   mic_power: 'vip2',
+  angry_tiger: 'vip2',
   reading_challenge: 'vip2',
   quiet_study: 'vip2',
 };
@@ -205,19 +206,6 @@ const resolvePetLevel = (totalExp, thresholds = DEFAULT_LEVEL_THRESHOLDS) => {
   });
 
   return nextLevel;
-};
-
-const getDaysSinceLastFed = (lastFedAt) => {
-  if (!lastFedAt) {
-    return Number.POSITIVE_INFINITY;
-  }
-
-  const timestamp = new Date(lastFedAt).getTime();
-  if (Number.isNaN(timestamp)) {
-    return Number.POSITIVE_INFINITY;
-  }
-
-  return Math.floor((Date.now() - timestamp) / DAY_IN_MS);
 };
 
 const isDayPaused = (dayIndex, config) => {
