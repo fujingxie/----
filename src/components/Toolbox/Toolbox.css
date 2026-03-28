@@ -2895,7 +2895,7 @@
 .atv2-tiger-wrap {
   position: relative;
   width: 100%;
-  max-width: 42rem;
+  max-width: 26rem;
 }
 
 .atv2-tiger-img {
@@ -3331,33 +3331,96 @@
   transition: width 0.12s linear;
 }
 
-/* Settings panel (smooth transition) */
-.atv2-settings-panel {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr) auto;
-  gap: 12px;
-  padding: 0;
-  align-items: end;
-  max-height: 0;
-  overflow: hidden;
+/* ========== Right sidebar settings panel ========== */
+
+/* Overlay backdrop */
+.atv2-settings-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 40;
   opacity: 0;
-  transition: max-height 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease, padding 0.3s ease;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.atv2-settings-overlay.atv2-settings-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Sidebar panel */
+.atv2-settings-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 300px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px 20px;
+  overflow-y: auto;
+  background: linear-gradient(160deg, rgba(240,253,244,0.97), rgba(220,252,231,0.97));
+  border-left: 1px solid rgba(134,239,172,0.4);
+  box-shadow: -12px 0 40px rgba(0,60,20,0.14);
+  border-radius: 0 0 0 0;
+  transform: translateX(100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
 }
 
 .atv2-settings-panel.atv2-settings-open {
-  max-height: 200px;
+  transform: translateX(0);
   opacity: 1;
-  padding: 12px 0 0;
-  border-top: 1px solid rgba(162,177,160,0.15);
+  pointer-events: auto;
+}
+
+/* Sidebar header */
+.atv2-settings-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.atv2-settings-sidebar-title {
+  font-size: 15px;
+  font-weight: 900;
+  color: #14532d;
+  letter-spacing: 0.01em;
+}
+
+.atv2-settings-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0,107,27,0.1);
+  color: #14532d;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.atv2-settings-close-btn:hover {
+  background: rgba(0,107,27,0.2);
 }
 
 .atv2-setting-row {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: rgba(240,253,244,0.78);
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.75);
+  border: 1px solid rgba(134,239,172,0.3);
   cursor: default;
 }
 
@@ -3382,6 +3445,8 @@
   font-size: 12px;
   font-weight: 900;
   color: #14532d;
+  min-width: 36px;
+  text-align: right;
 }
 
 .atv2-save-btn {
@@ -3389,25 +3454,43 @@
   padding: 0 20px;
   border: none;
   border-radius: 9999px;
-  background: linear-gradient(135deg, #006b1b, #91f78e);
+  background: linear-gradient(135deg, #006b1b, #4ade80);
   color: #d1ffc8;
   font-size: 14px;
   font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 12px 24px rgba(0,107,27,0.15);
+  box-shadow: 0 12px 24px rgba(0,107,27,0.18);
   transition: transform 0.15s;
-  white-space: nowrap;
+  width: 100%;
+  margin-top: 4px;
 }
 
 .atv2-save-btn:hover { transform: scale(1.03); }
 .atv2-save-btn:active { transform: scale(0.97); }
 
 /* ---------- Animations ---------- */
-@keyframes atv2-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-20px); }
+
+/* 熟睡：慢速上下浮动 */
+@keyframes atv2-tiger-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-14px); }
+}
+.atv2-tiger-float {
+  animation: atv2-tiger-float 3s ease-in-out infinite;
 }
 
+/* 惊醒：轻微快速抖动 */
+@keyframes atv2-tiger-alert-shake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  15%, 55% { transform: translate3d(-2px, 0, 0); }
+  30%, 70% { transform: translate3d(2px, 0, 0); }
+  45%, 85% { transform: translate3d(-1px, 0, 0); }
+}
+.atv2-tiger-alert-shake {
+  animation: atv2-tiger-alert-shake 0.55s ease-in-out infinite;
+}
+
+/* 发怒：剧烈抖动（保持原有） */
 @keyframes atv2-shake {
   10%, 90% { transform: translate3d(-1px, 0, 0); }
   20%, 80% { transform: translate3d(2px, 0, 0); }

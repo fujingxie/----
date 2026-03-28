@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Expand, Pause, Play, Square, X } from 'lucide-react';
 import { notify } from '../../lib/notify';
-import { playActionSound } from '../../lib/sounds';
+import { playActionSound, startTigerAmbient, stopTigerAmbient } from '../../lib/sounds';
 
 const ANGRY_TIGER_SETTINGS_STORAGE_KEY = 'class-pets:angry-tiger-settings';
 
@@ -56,6 +56,11 @@ const AngryTigerTool = ({ onClose }) => {
   const rageSecondsRef = useRef(0);
   const quietSecondsRef = useRef(0);
   const previousVisualStateRef = useRef('idle');
+  // 防抖：候选状态 + 持续时间
+  const pendingVisualStateRef = useRef('idle');
+  const stateHoldTimeRef = useRef(0);
+  // 挑战失败锁定
+  const isFailedRef = useRef(false);
   const [settings, setSettings] = useState(() => readStoredAngryTigerSettings());
   const [isListening, setIsListening] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -73,6 +78,7 @@ const AngryTigerTool = ({ onClose }) => {
   };
 
   const stopAudio = () => {
+    stopTigerAmbient();
     if (frameRef.current) {
       window.cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
@@ -96,6 +102,9 @@ const AngryTigerTool = ({ onClose }) => {
     quietSecondsRef.current = 0;
     dbLevelRef.current = 32;
     previousVisualStateRef.current = keepListening ? 'sleep' : 'idle';
+    pendingVisualStateRef.current = keepListening ? 'sleep' : 'idle';
+    stateHoldTimeRef.current = 0;
+    isFailedRef.current = false;
     setDbLevel(32);
     setRageSeconds(0);
     setQuietSeconds(0);
@@ -162,6 +171,7 @@ const AngryTigerTool = ({ onClose }) => {
       setIsListening(true);
       setIsPaused(false);
       playActionSound('boat_start');
+      startTigerAmbient('sleep'); // start snoring loop
     } catch {
       setMicError('没有拿到麦克风权限，请先允许浏览器访问麦克风。');
       notify('无法获取麦克风权限', 'warning');
@@ -208,7 +218,20 @@ const AngryTigerTool = ({ onClose }) => {
         }
       }
 
-      const visualState = !isListening
+      // 若已触发失败锁定，直接固定为 failed，跳过所有状态计算
+      if (isFailedRef.current) {
+        if (timestamp - uiUpdateRef.current >= 120) {
+          uiUpdateRef.current = timestamp;
+          setDbLevel(Math.round(nextDbLevel));
+          setRageSeconds(rageSecondsRef.current);
+          setQuietSeconds(quietSecondsRef.current);
+        }
+        frameRef.current = window.requestAnimationFrame(render);
+        return;
+      }
+
+      // 计算当前原始候选状态（未防抖）
+      const rawState = !isListening
         ? 'idle'
         : isPaused
           ? 'paused'
@@ -218,13 +241,82 @@ const AngryTigerTool = ({ onClose }) => {
               ? 'alert'
               : 'sleep';
 
+      // 进入 angry -> 触发挑战失败，锁定终局
+      if (rawState === 'angry') {
+        isFailedRef.current = true;
+        previousVisualStateRef.current = 'failed';
+        stopTigerAmbient();
+        startTigerAmbient('failed'); // roar
+        if (timestamp - uiUpdateRef.current >= 120) {
+          uiUpdateRef.current = timestamp;
+          setDbLevel(Math.round(nextDbLevel));
+          setRageSeconds(rageSecondsRef.current);
+          setQuietSeconds(quietSecondsRef.current);
+        }
+        frameRef.current = window.requestAnimationFrame(render);
+        return;
+      }
+
+      // ---- 优化2：quietSeconds 按状态逻辑处理 ----
+      // 上面 rageSeconds/quietSeconds 的粗计算先还原，再按实际 rawState 二次修正
+      if (!isPaused) {
+        if (rawState === 'angry') {
+          // 发怒：安静计时归零
+          quietSecondsRef.current = 0;
+        } else if (rawState === 'alert') {
+          // 惊醒：安静计时暂停（不累计、不减少）
+          // 什么都不做（保持当前值）
+        }
+        // sleep 状态已在上面的 if/else 块中正常累计，无需额外处理
+      }
+
+      // ---- 优化3：状态防抖 ----
+      // 阈值（秒）：不同方向的切换需持续满足条件才生效
+      const DEBOUNCE = {
+        'sleep->alert': 0.5,
+        'alert->sleep': 1.5,
+        'angry->alert': 2.0,
+        'angry->sleep': 2.0,
+      };
+
+      const prevState = previousVisualStateRef.current;
+      let visualState;
+
+      if (rawState === 'idle' || rawState === 'paused' || rawState === prevState) {
+        // 无需防抖直接采用
+        pendingVisualStateRef.current = rawState;
+        stateHoldTimeRef.current = 0;
+        visualState = rawState;
+      } else {
+        // rawState 与当前状态不同，看是否需要防抖
+        const debounceKey = `${prevState}->${rawState}`;
+        const threshold = DEBOUNCE[debounceKey] ?? 0; // 无对应规则则直接切换
+
+        if (rawState === pendingVisualStateRef.current) {
+          // 候选状态没变，累计时间
+          stateHoldTimeRef.current += delta;
+        } else {
+          // 候选状态换了，重新计时
+          pendingVisualStateRef.current = rawState;
+          stateHoldTimeRef.current = delta;
+        }
+
+        if (stateHoldTimeRef.current >= threshold) {
+          // 满足持续时间，正式切换
+          visualState = rawState;
+        } else {
+          // 未达阈值，维持当前状态
+          visualState = prevState;
+        }
+      }
+
       if (visualState !== previousVisualStateRef.current) {
         if (visualState === 'alert') {
-          playActionSound('boat_warning');
-        } else if (visualState === 'angry') {
-          playActionSound('negative');
+          stopTigerAmbient();
+          startTigerAmbient('alert'); // growl
         } else if (visualState === 'sleep' && previousVisualStateRef.current !== 'idle') {
           playActionSound('positive');
+          startTigerAmbient('sleep'); // restart snore loop
         }
         previousVisualStateRef.current = visualState;
       }
@@ -263,13 +355,15 @@ const AngryTigerTool = ({ onClose }) => {
 
   const visualState = !isListening
     ? 'idle'
-    : isPaused
-      ? 'paused'
-      : rageSeconds >= settings.bufferSeconds
-        ? 'angry'
-        : dbLevel >= settings.threshold
-          ? 'alert'
-          : 'sleep';
+    : isFailedRef.current
+      ? 'failed'
+      : isPaused
+        ? 'paused'
+        : rageSeconds >= settings.bufferSeconds
+          ? 'angry'
+          : dbLevel >= settings.threshold
+            ? 'alert'
+            : 'sleep';
 
   const stateMeta = {
     idle: {
@@ -347,6 +441,21 @@ const AngryTigerTool = ({ onClose }) => {
       dbLabel: '教室音量',
       dbDesc: '当前噪音峰值',
     },
+    failed: {
+      title: '挑战失败！老虎被吵醒了',
+      description: '课堂噪音超标，本次挑战已终结。点击重新开始再试一次。',
+      zone: '挑战失败',
+      zoneClass: 'danger',
+      mood: '暴怒',
+      moodDesc: '挑战终结，无法恢复',
+      icon: 'crisis_alert',
+      tigerImage: tigerImages.angry,
+      stateLabel: '失败终局',
+      quietLabel: '挑战结果',
+      quietDesc: '本次挑战失败',
+      dbLabel: '当前音量',
+      dbDesc: '监测仍在进行',
+    },
   }[visualState];
 
   const ragePercent = Math.max(0, Math.min(100, (rageSeconds / settings.bufferSeconds) * 100));
@@ -365,6 +474,7 @@ const AngryTigerTool = ({ onClose }) => {
     sleep: 'sentiment_satisfied',
     alert: 'sentiment_neutral',
     angry: 'sentiment_very_dissatisfied',
+    failed: 'sentiment_very_dissatisfied',
   };
 
   return (
@@ -393,6 +503,45 @@ const AngryTigerTool = ({ onClose }) => {
         </div>
       </header>
 
+      {/* === SETTINGS OVERLAY === */}
+      <div
+        className={`atv2-settings-overlay ${showSettings ? 'atv2-settings-open' : ''}`}
+        onClick={() => setShowSettings(false)}
+        aria-hidden="true"
+      />
+
+      {/* === SETTINGS SIDEBAR === */}
+      <div className={`atv2-settings-panel ${showSettings ? 'atv2-settings-open' : ''}`}>
+        <div className="atv2-settings-sidebar-head">
+          <span className="atv2-settings-sidebar-title">规则设置</span>
+          <button className="atv2-settings-close-btn" onClick={() => setShowSettings(false)} type="button" aria-label="关闭设置">
+            <X size={16} />
+          </button>
+        </div>
+        <label className="atv2-setting-row">
+          <span>怒吼缓冲</span>
+          <div className="atv2-setting-range">
+            <input type="range" min="2" max="10" step="0.5" value={settings.bufferSeconds} onChange={(e) => setSettings((prev) => ({ ...prev, bufferSeconds: Number(e.target.value) }))} />
+            <strong>{settings.bufferSeconds}s</strong>
+          </div>
+        </label>
+        <label className="atv2-setting-row">
+          <span>麦克风灵敏度</span>
+          <div className="atv2-setting-range">
+            <input type="range" min="0.6" max="2.5" step="0.1" value={settings.micGain} onChange={(e) => setSettings((prev) => ({ ...prev, micGain: Number(e.target.value) }))} />
+            <strong>{settings.micGain.toFixed(1)}x</strong>
+          </div>
+        </label>
+        <label className="atv2-setting-row">
+          <span>怒气恢复</span>
+          <div className="atv2-setting-range">
+            <input type="range" min="0.5" max="3" step="0.1" value={settings.recoverSpeed} onChange={(e) => setSettings((prev) => ({ ...prev, recoverSpeed: Number(e.target.value) }))} />
+            <strong>{settings.recoverSpeed.toFixed(1)}x</strong>
+          </div>
+        </label>
+        <button className="atv2-save-btn" onClick={saveSettings} type="button">保存规则</button>
+      </div>
+
       {/* === MAIN CANVAS === */}
       <main className="atv2-main">
         {/* Ambient blobs */}
@@ -420,7 +569,12 @@ const AngryTigerTool = ({ onClose }) => {
           <div className="atv2-tiger-wrap">
             <img
               alt={stateMeta.stateLabel}
-              className={`atv2-tiger-img ${visualState === 'angry' ? 'atv2-tiger-shake atv2-no-hover' : ''}`}
+              className={[
+                'atv2-tiger-img',
+                visualState === 'sleep'  ? 'atv2-tiger-float'        : '',
+                visualState === 'alert'  ? 'atv2-tiger-alert-shake atv2-no-hover' : '',
+                visualState === 'angry'  ? 'atv2-tiger-shake atv2-no-hover'       : '',
+              ].join(' ').trim()}
               src={stateMeta.tigerImage}
             />
             <div className="atv2-tiger-overlay" />
@@ -497,7 +651,16 @@ const AngryTigerTool = ({ onClose }) => {
 
             {/* Primary Action */}
             <div className="atv2-primary-action">
-              {!isListening ? (
+              {visualState === 'failed' ? (
+                <button
+                  className="atv2-stop-btn"
+                  onClick={() => { stopAudio(); resetTigerState(false); }}
+                  type="button"
+                  aria-label="重新开始"
+                >
+                  <Square size={22} fill="currentColor" />
+                </button>
+              ) : !isListening ? (
                 <button className="atv2-play-btn" onClick={startListening} type="button">
                   <Play size={28} fill="currentColor" />
                 </button>
@@ -512,8 +675,12 @@ const AngryTigerTool = ({ onClose }) => {
                 </>
               )}
               <div className="atv2-play-copy">
-                <p className="atv2-play-title">{!isListening ? '唤醒老虎' : isPaused ? '继续监听' : '正在监听'}</p>
-                <p className="atv2-play-desc">{!isListening ? '开启麦克风监听' : isPaused ? '继续判断情绪' : '点击暂停'}</p>
+                <p className="atv2-play-title">
+                  {visualState === 'failed' ? '挑战失败' : !isListening ? '唤醒老虎' : isPaused ? '继续监听' : '正在监听'}
+                </p>
+                <p className="atv2-play-desc">
+                  {visualState === 'failed' ? '点击重新开始' : !isListening ? '开启麦克风监听' : isPaused ? '继续判断情绪' : '点击暂停'}
+                </p>
               </div>
             </div>
 
@@ -529,31 +696,7 @@ const AngryTigerTool = ({ onClose }) => {
             </div>
           </div>
 
-          {/* Settings panel (collapsible with smooth transition) */}
-          <div className={`atv2-settings-panel ${showSettings ? 'atv2-settings-open' : ''}`}>
-            <label className="atv2-setting-row">
-              <span>怒吼缓冲</span>
-              <div className="atv2-setting-range">
-                <input type="range" min="2" max="10" step="0.5" value={settings.bufferSeconds} onChange={(e) => setSettings((prev) => ({ ...prev, bufferSeconds: Number(e.target.value) }))} />
-                <strong>{settings.bufferSeconds}s</strong>
-              </div>
-            </label>
-            <label className="atv2-setting-row">
-              <span>麦克风灵敏度</span>
-              <div className="atv2-setting-range">
-                <input type="range" min="0.6" max="2.5" step="0.1" value={settings.micGain} onChange={(e) => setSettings((prev) => ({ ...prev, micGain: Number(e.target.value) }))} />
-                <strong>{settings.micGain.toFixed(1)}x</strong>
-              </div>
-            </label>
-            <label className="atv2-setting-row">
-              <span>怒气恢复</span>
-              <div className="atv2-setting-range">
-                <input type="range" min="0.5" max="3" step="0.1" value={settings.recoverSpeed} onChange={(e) => setSettings((prev) => ({ ...prev, recoverSpeed: Number(e.target.value) }))} />
-                <strong>{settings.recoverSpeed.toFixed(1)}x</strong>
-              </div>
-            </label>
-            <button className="atv2-save-btn" onClick={saveSettings} type="button">保存规则</button>
-          </div>
+
         </div>
       </footer>
     </div>
