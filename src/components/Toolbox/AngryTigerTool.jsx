@@ -68,6 +68,7 @@ const AngryTigerTool = ({ onClose }) => {
   const [dbLevel, setDbLevel] = useState(32);
   const [rageSeconds, setRageSeconds] = useState(0);
   const [quietSeconds, setQuietSeconds] = useState(0);
+  const [isFailed, setIsFailed] = useState(false);
   const [micError, setMicError] = useState('');
   const [showSettings, setShowSettings] = useState(false);
 
@@ -108,6 +109,7 @@ const AngryTigerTool = ({ onClose }) => {
     setDbLevel(32);
     setRageSeconds(0);
     setQuietSeconds(0);
+    setIsFailed(false);
     setIsPaused(false);
     if (!keepListening) {
       setIsListening(false);
@@ -244,6 +246,7 @@ const AngryTigerTool = ({ onClose }) => {
       // 进入 angry -> 触发挑战失败，锁定终局
       if (rawState === 'angry') {
         isFailedRef.current = true;
+        setIsFailed(true);
         previousVisualStateRef.current = 'failed';
         stopTigerAmbient();
         startTigerAmbient('failed'); // roar
@@ -355,15 +358,15 @@ const AngryTigerTool = ({ onClose }) => {
 
   const visualState = !isListening
     ? 'idle'
-    : isFailedRef.current
+    : isFailed
       ? 'failed'
       : isPaused
         ? 'paused'
         : rageSeconds >= settings.bufferSeconds
-          ? 'angry'
-          : dbLevel >= settings.threshold
-            ? 'alert'
-            : 'sleep';
+            ? 'angry'
+            : dbLevel >= settings.threshold
+              ? 'alert'
+              : 'sleep';
 
   const stateMeta = {
     idle: {
