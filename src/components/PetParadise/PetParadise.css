@@ -832,6 +832,7 @@
 .pet-levelup-card {
   position: relative;
   width: min(92vw, 540px);
+  max-height: min(88vh, 760px);
   padding: 30px 28px 24px;
   border-radius: 28px;
   text-align: center;
@@ -841,6 +842,8 @@
   border: 1px solid rgba(250, 204, 21, 0.35);
   box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .pet-levelup-card::before {
@@ -933,6 +936,9 @@
   gap: 10px;
   margin: 24px 0 18px;
   text-align: left;
+  max-height: min(40vh, 320px);
+  overflow-y: auto;
+  padding-right: 8px;
 }
 
 .pet-levelup-overview-item {
@@ -993,6 +999,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  margin-top: auto;
   color: #92400e;
   font-size: 12px;
   font-weight: 700;
