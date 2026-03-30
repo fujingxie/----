@@ -1117,10 +1117,12 @@ const AccountPanel = ({
   densityOptions,
   soundEnabled,
   soundVolume,
+  voiceEnabled,
   onThemeChange,
   onDensityChange,
   onSoundEnabledChange,
   onSoundVolumeChange,
+  onVoiceEnabledChange,
   onUpdatePassword,
 }) => {
   const [passwordForm, setPasswordForm] = useState({
@@ -1337,6 +1339,27 @@ const AccountPanel = ({
             </div>
             <p>{soundEnabled ? '奖励、惩罚、领养等课堂动作会播放提示音。' : '已关闭所有动作提示音。'}</p>
           </section>
+
+          <section className="account-side-card glass-card">
+            <span className="account-side-label">语音播报</span>
+            <div className="density-toggle-row">
+              <button
+                className={`density-chip ${voiceEnabled ? 'active' : ''}`}
+                onClick={() => onVoiceEnabledChange(true)}
+                type="button"
+              >
+                开启
+              </button>
+              <button
+                className={`density-chip ${!voiceEnabled ? 'active' : ''}`}
+                onClick={() => onVoiceEnabledChange(false)}
+                type="button"
+              >
+                关闭
+              </button>
+            </div>
+            <p>{voiceEnabled ? '宠物升级和课堂互动会自动播放中文语音播报。' : '已关闭升级与互动的语音播报。'}</p>
+          </section>
         </aside>
       </div>
     </div>
@@ -1479,6 +1502,7 @@ const Settings = ({
   densityOptions,
   soundEnabled,
   soundVolume,
+  voiceEnabled,
   currentClass,
   students,
   rules,
@@ -1505,6 +1529,7 @@ const Settings = ({
   onDensityChange,
   onSoundEnabledChange,
   onSoundVolumeChange,
+  onVoiceEnabledChange,
   onRequestConfirm,
   isMutating,
 }) => {
@@ -1574,10 +1599,12 @@ const Settings = ({
             densityOptions={densityOptions}
             soundEnabled={soundEnabled}
             soundVolume={soundVolume}
+            voiceEnabled={voiceEnabled}
             onThemeChange={onThemeChange}
             onDensityChange={onDensityChange}
             onSoundEnabledChange={onSoundEnabledChange}
             onSoundVolumeChange={onSoundVolumeChange}
+            onVoiceEnabledChange={onVoiceEnabledChange}
             onUpdatePassword={onUpdatePassword}
           />
         )}

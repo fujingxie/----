@@ -21,6 +21,7 @@ import Settings from './components/Settings/Settings';
 import AdminConsole from './components/Admin/AdminConsole';
 import { notify } from './lib/notify';
 import { setSoundPreferences } from './lib/sounds';
+import { setVoiceEnabled } from './lib/voice';
 import {
   createAdminCodesBatch,
   createAdminRegisterChannel,
@@ -85,6 +86,7 @@ const STORAGE_KEYS = {
   density: 'classPets.density',
   soundEnabled: 'classPets.soundEnabled',
   soundVolume: 'classPets.soundVolume',
+  voiceEnabled: 'classPets.voiceEnabled',
 };
 
 const THEME_OPTIONS = [
@@ -169,6 +171,15 @@ const readStoredSoundVolume = () => {
   }
 };
 
+const readStoredVoiceEnabled = () => {
+  try {
+    const rawValue = window.localStorage.getItem(STORAGE_KEYS.voiceEnabled);
+    return rawValue === null ? false : rawValue === 'true';
+  } catch {
+    return false;
+  }
+};
+
 const tabs = [
   { id: 'pet', label: '宠物乐园', icon: <Gamepad2 size={20} /> },
   { id: 'shop', label: '小卖部', icon: <ShoppingBag size={20} /> },
@@ -204,6 +215,7 @@ function App() {
   const [density, setDensity] = useState(() => readStoredDensity());
   const [soundEnabled, setSoundEnabled] = useState(() => readStoredSoundEnabled());
   const [soundVolume, setSoundVolume] = useState(() => readStoredSoundVolume());
+  const [voiceEnabled, setVoiceEnabledState] = useState(() => readStoredVoiceEnabled());
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminCodes, setAdminCodes] = useState([]);
   const [adminLogs, setAdminLogs] = useState([]);
@@ -424,6 +436,11 @@ function App() {
     window.localStorage.setItem(STORAGE_KEYS.soundVolume, String(soundVolume));
     setSoundPreferences({ enabled: soundEnabled, volume: soundVolume });
   }, [soundEnabled, soundVolume]);
+
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEYS.voiceEnabled, String(voiceEnabled));
+    setVoiceEnabled(voiceEnabled);
+  }, [voiceEnabled]);
 
   const requestConfirm = useCallback((options) => new Promise((resolve) => {
     setConfirmState({
@@ -1703,6 +1720,7 @@ function App() {
               logs={currentLogs}
               levelThresholds={currentThresholds}
               petConditionConfig={currentPetConditionConfig}
+              voiceEnabled={voiceEnabled}
               onImportStudents={handleImportStudents}
               onActivatePet={handleActivatePet}
               onGraduatePet={handleGraduatePet}
@@ -1750,6 +1768,7 @@ function App() {
               densityOptions={DENSITY_OPTIONS}
               soundEnabled={soundEnabled}
               soundVolume={soundVolume}
+              voiceEnabled={voiceEnabled}
               currentClass={currentClass}
               students={currentStudents}
               rules={currentRules}
@@ -1778,6 +1797,7 @@ function App() {
               onDensityChange={setDensity}
               onSoundEnabledChange={setSoundEnabled}
               onSoundVolumeChange={setSoundVolume}
+              onVoiceEnabledChange={setVoiceEnabledState}
               onRequestConfirm={requestConfirm}
               isMutating={isMutating}
             />

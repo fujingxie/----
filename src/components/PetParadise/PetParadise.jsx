@@ -10,6 +10,7 @@ import confetti from 'canvas-confetti';
 import { ADOPTABLE_PET_LIBRARY, getPetImagePath, getPetNameById } from '../../api/petLibrary';
 import { activateStudentPet, getAdoptionCount, graduateToNewEgg, isStudentAtMaxLevel, syncStudentCollectionProgress } from '../../lib/petCollection';
 import { playActionSound } from '../../lib/sounds';
+import { speakText, stopVoicePlayback } from '../../lib/voice';
 
 const POSITIVE_EFFECT_ICONS = ['✨', '💖', '🌟', '🍗', '🎉'];
 const NEGATIVE_EFFECT_ICONS = ['💩', '😵', '⚠️', '🌧️', '🥀'];
@@ -68,15 +69,66 @@ const resolvePetLevel = (totalExp, thresholds) => {
   return nextLevel;
 };
 
-const buildLevelUpHighlightEntry = (student, previousLevel) => ({
-  id: `${student.id}-${previousLevel}-${student.pet_level}-${Date.now()}`,
+const buildLevelUpHighlightEntry = (student, previousLevel, options = {}) => ({
+  id: `${student.id}-${previousLevel}-${student.pet_level}-${options.queueId || Date.now()}`,
   studentId: student.id,
   studentName: student.name,
   petName: student.pet_name || getPetNameById(student.pet_type_id) || '课堂伙伴',
   petTypeId: student.pet_type_id,
   previousLevel,
   nextLevel: Number(student.pet_level || previousLevel),
+  queueId: options.queueId || `levelup-${student.id}-${Date.now()}`,
+  announceMode: options.announceMode || 'single',
 });
+
+const getPositiveValue = (value) => Math.abs(Number(value || 0));
+
+const willStudentLevelUpByRule = (student, rule, thresholds) => {
+  if (!student || !rule) {
+    return false;
+  }
+
+  const nextTotalExp = Math.max(0, Number(student.total_exp || 0) + Number(rule.exp || 0));
+  const currentLevel = Number(student.pet_level || 0);
+  return resolvePetLevel(nextTotalExp, thresholds) > currentLevel;
+};
+
+const buildSingleLevelUpSpeech = (highlight) =>
+  `恭喜${highlight.studentName}同学的${highlight.petName}升到${highlight.nextLevel}级`;
+
+const buildBatchLevelUpSpeech = () => '恭喜以下同学宠物升级啦';
+
+const buildSingleInteractionSpeech = (student, rule) => {
+  if (!student || !rule) {
+    return '';
+  }
+
+  const expValue = getPositiveValue(rule.exp);
+  const coinValue = getPositiveValue(rule.coins);
+  if (rule.type === 'negative') {
+    return `${student.name}同学因为违反${rule.name}规则，扣除经验${expValue}，金币${coinValue}，要加油哦`;
+  }
+
+  return `恭喜${student.name}同学因为遵守${rule.name}规则，获得经验${expValue}，金币${coinValue}`;
+};
+
+const buildBatchInteractionSpeech = (rule, options = {}) => {
+  if (!rule) {
+    return '';
+  }
+
+  const expValue = getPositiveValue(rule.exp);
+  const coinValue = getPositiveValue(rule.coins);
+  if (options.mode === 'feed') {
+    return `恭喜这些同学完成批量喂养，获得经验${expValue}，金币${coinValue}`;
+  }
+
+  if (rule.type === 'negative') {
+    return `这些同学因为违反${rule.name}规则，扣除经验${expValue}，金币${coinValue}，要加油哦`;
+  }
+
+  return `恭喜这些同学因为遵守${rule.name}规则，获得经验${expValue}，金币${coinValue}`;
+};
 
 const PetParadise = ({
   currentClass,
@@ -91,6 +143,7 @@ const PetParadise = ({
   rules,
   levelThresholds,
   petConditionConfig,
+  voiceEnabled = false,
 }) => {
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
@@ -110,6 +163,13 @@ const PetParadise = ({
   const [levelUpHighlights, setLevelUpHighlights] = useState([]);
   const [activeLevelUpIndex, setActiveLevelUpIndex] = useState(0);
   const pendingBatchLevelUpRef = useRef(null);
+  const spokenLevelUpQueueIdsRef = useRef(new Set());
+  const hasBatchLevelUpOverview = levelUpHighlights.length > 1;
+  const totalLevelUpSlides = hasBatchLevelUpOverview ? levelUpHighlights.length + 1 : levelUpHighlights.length;
+  const isBatchLevelUpOverview = hasBatchLevelUpOverview && activeLevelUpIndex === 0;
+  const activeLevelUpHighlight = hasBatchLevelUpOverview
+    ? levelUpHighlights[Math.max(0, activeLevelUpIndex - 1)] || null
+    : levelUpHighlights[activeLevelUpIndex] || null;
   const activePetsCount = students.filter((student) => student.pet_status !== 'egg').length;
   const eggStudents = useMemo(() => students.filter((student) => student.pet_status === 'egg'), [students]);
   const totalAdoptions = students.reduce((sum, student) => sum + getAdoptionCount(student), 0);
@@ -216,7 +276,8 @@ const PetParadise = ({
       return;
     }
 
-    const upgrades = pendingBatch.studentIds
+    const queueId = `levelup-batch-${Date.now()}`;
+    let upgrades = pendingBatch.studentIds
       .map((studentId) => {
         const currentStudent = currentStudentsById.get(studentId);
         const beforeStudent = pendingBatch.beforeById[studentId];
@@ -225,13 +286,19 @@ const PetParadise = ({
         }
 
         return Number(currentStudent.pet_level || 0) > beforeStudent.level
-          ? buildLevelUpHighlightEntry(currentStudent, beforeStudent.level)
+          ? buildLevelUpHighlightEntry(currentStudent, beforeStudent.level, {
+              queueId,
+              announceMode: 'batch',
+            })
           : null;
       })
       .filter(Boolean);
 
     pendingBatchLevelUpRef.current = null;
     if (upgrades.length > 0) {
+      if (upgrades.length === 1) {
+        upgrades = upgrades.map((item) => ({ ...item, announceMode: 'single' }));
+      }
       setLevelUpHighlights((prev) => [...prev, ...upgrades]);
     }
   }, [students]);
@@ -239,10 +306,11 @@ const PetParadise = ({
   useEffect(() => {
     if (levelUpHighlights.length === 0) {
       setActiveLevelUpIndex(0);
+      spokenLevelUpQueueIdsRef.current.clear();
       return undefined;
     }
 
-    const activeHighlight = levelUpHighlights[activeLevelUpIndex];
+    const activeHighlight = activeLevelUpHighlight;
     if (!activeHighlight) {
       return undefined;
     }
@@ -255,13 +323,24 @@ const PetParadise = ({
       colors: ['#f59e0b', '#f97316', '#facc15', '#fde68a'],
     });
 
-    if (levelUpHighlights.length === 1) {
+    if (voiceEnabled) {
+      if (isBatchLevelUpOverview && activeHighlight.announceMode === 'batch') {
+        if (!spokenLevelUpQueueIdsRef.current.has(activeHighlight.queueId)) {
+          spokenLevelUpQueueIdsRef.current.add(activeHighlight.queueId);
+          speakText(buildBatchLevelUpSpeech());
+        }
+      } else if (activeHighlight.announceMode === 'single') {
+        speakText(buildSingleLevelUpSpeech(activeHighlight));
+      }
+    }
+
+    if (totalLevelUpSlides === 1) {
       return undefined;
     }
 
     const timer = window.setTimeout(() => {
       setActiveLevelUpIndex((prev) => {
-        if (prev >= levelUpHighlights.length - 1) {
+        if (prev >= totalLevelUpSlides - 1) {
           setLevelUpHighlights([]);
           return 0;
         }
@@ -271,7 +350,11 @@ const PetParadise = ({
     }, LEVELUP_HIGHLIGHT_DURATION_MS);
 
     return () => window.clearTimeout(timer);
-  }, [activeLevelUpIndex, levelUpHighlights]);
+  }, [activeLevelUpHighlight, activeLevelUpIndex, isBatchLevelUpOverview, levelUpHighlights, totalLevelUpSlides, voiceEnabled]);
+
+  useEffect(() => () => {
+    stopVoicePlayback();
+  }, []);
 
   const todayKey = getTodayKey();
   const hasUsedDailyBulkFeed = Boolean(currentClass?.id) && bulkFeedUsageByClass[String(currentClass.id)] === todayKey;
@@ -378,6 +461,9 @@ const PetParadise = ({
     setIsDailyBulkFeeding(true);
 
     try {
+      const willTriggerLevelUp = feedableStudents.some((student) =>
+        willStudentLevelUpByRule(student, BULK_FEED_RULE, levelThresholds),
+      );
       pendingBatchLevelUpRef.current = {
         studentIds: feedableStudents.map((student) => student.id),
         beforeById: Object.fromEntries(
@@ -395,11 +481,16 @@ const PetParadise = ({
       feedableStudents.forEach((student) => {
         triggerPetEffect(student.id, 'positive', BULK_FEED_RULE);
       });
-      playActionSound('positive');
+      if (!willTriggerLevelUp) {
+        playActionSound('positive');
+      }
       await onFeedStudentsBatch(
         feedableStudents.map((student) => student.id),
         BULK_FEED_RULE,
       );
+      if (voiceEnabled && !willTriggerLevelUp) {
+        speakText(buildBatchInteractionSpeech(BULK_FEED_RULE, { mode: 'feed' }));
+      }
 
       setBulkFeedUsageByClass((prev) => {
         const next = {
@@ -431,6 +522,9 @@ const PetParadise = ({
     setIsBulkApplyingRule(true);
 
     try {
+      const willTriggerLevelUp = selectedStudents.some((student) =>
+        willStudentLevelUpByRule(student, rule, levelThresholds),
+      );
       pendingBatchLevelUpRef.current = {
         studentIds: selectedStudentIds,
         beforeById: Object.fromEntries(
@@ -448,8 +542,13 @@ const PetParadise = ({
       selectedStudents.forEach((student) => {
         triggerPetEffect(student.id, rule.type, rule);
       });
-      playActionSound(rule.type === 'negative' ? 'negative' : 'positive');
+      if (!willTriggerLevelUp) {
+        playActionSound(rule.type === 'negative' ? 'negative' : 'positive');
+      }
       await onFeedStudentsBatch(selectedStudentIds, rule);
+      if (voiceEnabled && !willTriggerLevelUp) {
+        speakText(buildBatchInteractionSpeech(rule));
+      }
 
       setSelectedStudentIds([]);
       setIsBulkMode(false);
@@ -834,6 +933,7 @@ const PetParadise = ({
           student={interactingStudent}
           rules={rules}
           onInteract={async (rule) => {
+            const willTriggerLevelUp = willStudentLevelUpByRule(interactingStudent, rule, levelThresholds);
             const nextPetPoints = Math.max(0, (interactingStudent.pet_points || 0) + rule.exp);
             const nextCoins = Math.max(0, (interactingStudent.coins || 0) + rule.coins);
             const nextTotalExp = Math.max(0, (interactingStudent.total_exp || 0) + rule.exp);
@@ -859,12 +959,20 @@ const PetParadise = ({
             updated.pet_collection = syncStudentCollectionProgress(updated);
 
             triggerPetEffect(interactingStudent.id, rule.type, rule);
-            playActionSound(rule.type === 'negative' ? 'negative' : 'positive');
+            if (!willTriggerLevelUp) {
+              playActionSound(rule.type === 'negative' ? 'negative' : 'positive');
+            }
             await onInteractStudent(interactingStudent, rule, updated);
+            if (voiceEnabled && !willTriggerLevelUp) {
+              speakText(buildSingleInteractionSpeech(interactingStudent, rule));
+            }
             if (Number(updated.pet_level || 0) > Number(interactingStudent.pet_level || 0)) {
               setLevelUpHighlights((prev) => [
                 ...prev,
-                buildLevelUpHighlightEntry(updated, Number(interactingStudent.pet_level || 0)),
+                buildLevelUpHighlightEntry(updated, Number(interactingStudent.pet_level || 0), {
+                  queueId: `levelup-single-${updated.id}-${Date.now()}`,
+                  announceMode: 'single',
+                }),
               ]);
             }
             setInteractingStudent(null);
@@ -872,46 +980,64 @@ const PetParadise = ({
         />
       )}
 
-      {levelUpHighlights.length > 0 && levelUpHighlights[activeLevelUpIndex] && (
+      {levelUpHighlights.length > 0 && activeLevelUpHighlight && (
         <div className="pet-levelup-overlay" role="dialog" aria-modal="true">
           <div className="pet-levelup-backdrop" />
           <div className="pet-levelup-spotlight" />
           <div className="pet-levelup-card glass-card">
             <span className="pet-levelup-kicker">LEVEL UP</span>
-            <h3>{levelUpHighlights[activeLevelUpIndex].studentName} 的宠物升级啦！</h3>
-            <p>
-              {levelUpHighlights[activeLevelUpIndex].petName}
-              {' '}从 Lv.{levelUpHighlights[activeLevelUpIndex].previousLevel}
-              {' '}升到 Lv.{levelUpHighlights[activeLevelUpIndex].nextLevel}
-            </p>
-            <div className="pet-levelup-hero">
-              <div className="pet-levelup-ring ring-one" />
-              <div className="pet-levelup-ring ring-two" />
-              <img
-                src={getPetImagePath(
-                  levelUpHighlights[activeLevelUpIndex].petTypeId,
-                  levelUpHighlights[activeLevelUpIndex].nextLevel,
-                )}
-                alt={levelUpHighlights[activeLevelUpIndex].petName}
-                className="pet-levelup-image"
-              />
-            </div>
-            <div className="pet-levelup-badge-row">
-              <span className="pet-levelup-badge old">Lv.{levelUpHighlights[activeLevelUpIndex].previousLevel}</span>
-              <span className="pet-levelup-arrow">→</span>
-              <span className="pet-levelup-badge new">Lv.{levelUpHighlights[activeLevelUpIndex].nextLevel}</span>
-            </div>
+            {isBatchLevelUpOverview ? (
+              <>
+                <h3>恭喜以下同学宠物升级啦！</h3>
+                <p>这一轮一共有 {levelUpHighlights.length} 只宠物完成升级，马上进入逐个展示。</p>
+                <div className="pet-levelup-overview-list">
+                  {levelUpHighlights.map((highlight) => (
+                    <div key={highlight.id} className="pet-levelup-overview-item">
+                      <strong>{highlight.studentName}同学</strong>
+                      <span>{highlight.petName} · Lv.{highlight.nextLevel}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <h3>{activeLevelUpHighlight.studentName} 的宠物升级啦！</h3>
+                <p>
+                  {activeLevelUpHighlight.petName}
+                  {' '}从 Lv.{activeLevelUpHighlight.previousLevel}
+                  {' '}升到 Lv.{activeLevelUpHighlight.nextLevel}
+                </p>
+                <div className="pet-levelup-hero">
+                  <div className="pet-levelup-ring ring-one" />
+                  <div className="pet-levelup-ring ring-two" />
+                  <img
+                    src={getPetImagePath(
+                      activeLevelUpHighlight.petTypeId,
+                      activeLevelUpHighlight.nextLevel,
+                    )}
+                    alt={activeLevelUpHighlight.petName}
+                    className="pet-levelup-image"
+                  />
+                </div>
+                <div className="pet-levelup-badge-row">
+                  <span className="pet-levelup-badge old">Lv.{activeLevelUpHighlight.previousLevel}</span>
+                  <span className="pet-levelup-arrow">→</span>
+                  <span className="pet-levelup-badge new">Lv.{activeLevelUpHighlight.nextLevel}</span>
+                </div>
+              </>
+            )}
             <div className="pet-levelup-footer">
-              <span>{activeLevelUpIndex + 1} / {levelUpHighlights.length}</span>
+              <span>{activeLevelUpIndex + 1} / {totalLevelUpSlides}</span>
               <button
                 className="pet-levelup-skip"
                 onClick={() => {
+                  stopVoicePlayback();
                   setLevelUpHighlights([]);
                   setActiveLevelUpIndex(0);
                 }}
                 type="button"
               >
-                {levelUpHighlights.length === 1 ? '完成' : '跳过全部'}
+                {totalLevelUpSlides === 1 ? '完成' : '跳过全部'}
               </button>
             </div>
           </div>
