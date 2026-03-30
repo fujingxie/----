@@ -13,6 +13,48 @@ import { playActionSound } from '../../lib/sounds';
 
 const POSITIVE_EFFECT_ICONS = ['✨', '💖', '🌟', '🍗', '🎉'];
 const NEGATIVE_EFFECT_ICONS = ['💩', '😵', '⚠️', '🌧️', '🥀'];
+const BULK_FEED_DAILY_STORAGE_KEY = 'class-pets.bulk-feed.daily-usage';
+const BULK_FEED_RULE = {
+  name: '批量喂养',
+  icon: '🍗',
+  exp: 1,
+  coins: 0,
+  type: 'positive',
+};
+
+const getTodayKey = () =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+
+const readBulkFeedUsage = () => {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+
+  try {
+    const raw = window.localStorage.getItem(BULK_FEED_DAILY_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeBulkFeedUsage = (value) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(BULK_FEED_DAILY_STORAGE_KEY, JSON.stringify(value));
+  } catch {
+    // ignore local-only persistence failures
+  }
+};
+
 const resolvePetLevel = (totalExp, thresholds) => {
   let nextLevel = 1;
 
@@ -49,9 +91,11 @@ const PetParadise = ({
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [isBulkApplyingRule, setIsBulkApplyingRule] = useState(false);
   const [isBulkAdopting, setIsBulkAdopting] = useState(false);
+  const [isDailyBulkFeeding, setIsDailyBulkFeeding] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
   const [activeBulkRuleType, setActiveBulkRuleType] = useState('positive');
   const [selectedBulkRuleId, setSelectedBulkRuleId] = useState(null);
+  const [bulkFeedUsageByClass, setBulkFeedUsageByClass] = useState(() => readBulkFeedUsage());
   const activePetsCount = students.filter((student) => student.pet_status !== 'egg').length;
   const eggStudents = useMemo(() => students.filter((student) => student.pet_status === 'egg'), [students]);
   const totalAdoptions = students.reduce((sum, student) => sum + getAdoptionCount(student), 0);
@@ -131,6 +175,9 @@ const PetParadise = ({
   useEffect(() => {
     setSelectedBulkRuleId(null);
   }, [activeBulkRuleType]);
+
+  const todayKey = getTodayKey();
+  const hasUsedDailyBulkFeed = Boolean(currentClass?.id) && bulkFeedUsageByClass[String(currentClass.id)] === todayKey;
 
   const bulkRules = useMemo(
     () => rules.filter((rule) => rule.type === activeBulkRuleType),
@@ -212,6 +259,48 @@ const PetParadise = ({
     }
 
     setIsBulkMode(true);
+  };
+
+  const handleDailyBulkFeed = async () => {
+    if (!currentClass?.id || feedableStudents.length === 0 || isDailyBulkFeeding || hasUsedDailyBulkFeed) {
+      return;
+    }
+
+    const confirmed = await onRequestConfirm?.({
+      title: '批量喂养',
+      message: `将为 ${feedableStudents.length} 位已拥有宠物的学生统一执行一次批量喂养，每天只能使用一次。确认继续吗？`,
+      confirmLabel: '确认喂养',
+      cancelLabel: '取消',
+      tone: 'default',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsDailyBulkFeeding(true);
+
+    try {
+      feedableStudents.forEach((student) => {
+        triggerPetEffect(student.id, 'positive', BULK_FEED_RULE);
+      });
+      playActionSound('positive');
+      await onFeedStudentsBatch(
+        feedableStudents.map((student) => student.id),
+        BULK_FEED_RULE,
+      );
+
+      setBulkFeedUsageByClass((prev) => {
+        const next = {
+          ...prev,
+          [String(currentClass.id)]: todayKey,
+        };
+        writeBulkFeedUsage(next);
+        return next;
+      });
+    } finally {
+      setIsDailyBulkFeeding(false);
+    }
   };
 
   const handleBulkFeedByRule = async (rule = selectedBulkRule) => {
@@ -344,6 +433,16 @@ const PetParadise = ({
               type="button"
             >
               批量互动
+            </button>
+          )}
+          {feedableStudents.length > 0 && !hasUsedDailyBulkFeed && (
+            <button
+              className="bulk-adopt-btn"
+              onClick={handleDailyBulkFeed}
+              disabled={isDailyBulkFeeding}
+              type="button"
+            >
+              {isDailyBulkFeeding ? '喂养中...' : '批量喂养'}
             </button>
           )}
           <button className="import-btn-large compact" onClick={() => setIsImporting(true)} type="button">

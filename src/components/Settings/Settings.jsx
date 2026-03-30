@@ -964,12 +964,8 @@ const RulesSettingsPanel = ({
 };
 
 const formatLogDate = (value) => {
-  if (!value) {
-    return '';
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const date = parseLogDateValue(value);
+  if (!date) {
     return '';
   }
 
@@ -986,10 +982,12 @@ const parseLogDateValue = (value) => {
     return null;
   }
 
-  const normalizedValue = value.includes('T') ? value : value.replace(' ', 'T');
-  const parsedDate = new Date(normalizedValue);
+  const trimmedValue = String(value).trim();
+  const normalizedValue = trimmedValue.includes('T') ? trimmedValue : trimmedValue.replace(' ', 'T');
+  const hasExplicitTimezone = /(?:Z|[+-]\d{2}:\d{2})$/.test(normalizedValue);
+  const parsedUtcDate = new Date(hasExplicitTimezone ? normalizedValue : `${normalizedValue}Z`);
 
-  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+  return Number.isNaN(parsedUtcDate.getTime()) ? null : parsedUtcDate;
 };
 
 const LogsPanel = ({ logs, onUndoLog, isMutating }) => {
