@@ -800,3 +800,201 @@
     bottom: auto;
   }
 }
+
+.pet-levelup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.pet-levelup-backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top, rgba(250, 204, 21, 0.24), transparent 34%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.74), rgba(2, 6, 23, 0.9));
+  backdrop-filter: blur(10px);
+}
+
+.pet-levelup-spotlight {
+  position: absolute;
+  inset: 10% 18%;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 244, 145, 0.38), rgba(255, 244, 145, 0.02) 70%);
+  filter: blur(24px);
+  animation: pet-levelup-pulse 1.8s ease-in-out infinite;
+}
+
+.pet-levelup-card {
+  position: relative;
+  width: min(92vw, 540px);
+  padding: 30px 28px 24px;
+  border-radius: 28px;
+  text-align: center;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 235, 0.96), rgba(255, 255, 255, 0.92)),
+    rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(250, 204, 21, 0.35);
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+  overflow: hidden;
+}
+
+.pet-levelup-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.16), transparent 45%, rgba(249, 115, 22, 0.12));
+  pointer-events: none;
+}
+
+.pet-levelup-kicker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+}
+
+.pet-levelup-card h3 {
+  position: relative;
+  margin: 16px 0 8px;
+  font-size: 28px;
+  line-height: 1.1;
+  color: #7c2d12;
+}
+
+.pet-levelup-card p {
+  position: relative;
+  margin: 0 auto;
+  max-width: 360px;
+  color: #9a3412;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.pet-levelup-hero {
+  position: relative;
+  width: min(54vw, 280px);
+  height: min(54vw, 280px);
+  margin: 22px auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pet-levelup-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid rgba(250, 204, 21, 0.34);
+}
+
+.pet-levelup-ring.ring-one {
+  inset: 16px;
+  animation: pet-levelup-spin 8s linear infinite;
+}
+
+.pet-levelup-ring.ring-two {
+  inset: 38px;
+  border-style: dashed;
+  animation: pet-levelup-spin-reverse 12s linear infinite;
+}
+
+.pet-levelup-image {
+  position: relative;
+  width: 74%;
+  height: 74%;
+  object-fit: contain;
+  filter: drop-shadow(0 18px 28px rgba(249, 115, 22, 0.24));
+  animation: pet-levelup-float 1.8s ease-in-out infinite;
+}
+
+.pet-levelup-badge-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.pet-levelup-badge,
+.pet-levelup-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-weight: 900;
+}
+
+.pet-levelup-badge.old {
+  background: rgba(148, 163, 184, 0.12);
+  color: #475569;
+}
+
+.pet-levelup-badge.new {
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.2), rgba(249, 115, 22, 0.18));
+  color: #c2410c;
+  box-shadow: 0 14px 30px rgba(249, 115, 22, 0.14);
+}
+
+.pet-levelup-arrow {
+  min-width: 40px;
+  padding: 0;
+  color: #f59e0b;
+  font-size: 24px;
+}
+
+.pet-levelup-footer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pet-levelup-skip {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 18px;
+  background: #f59e0b;
+  color: white;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 14px 30px rgba(245, 158, 11, 0.26);
+}
+
+@keyframes pet-levelup-pulse {
+  0%, 100% { transform: scale(0.96); opacity: 0.8; }
+  50% { transform: scale(1.02); opacity: 1; }
+}
+
+@keyframes pet-levelup-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes pet-levelup-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pet-levelup-spin-reverse {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
