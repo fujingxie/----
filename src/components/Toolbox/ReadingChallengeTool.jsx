@@ -494,7 +494,7 @@ const ReadingChallengeTool = ({ currentClass, students = [], onClose, onFeedStud
           <div className="reading-challenge-countdown-rings" />
           <img className="reading-challenge-countdown-hero" src={READING_CHALLENGE_IMAGES.idle} alt="hero" />
           <div className="reading-challenge-countdown-copy">
-            <strong>{countdownLeft}</strong>
+            <strong key={countdownLeft}>{countdownLeft}</strong>
             <p>准备好了吗？大声朗读吧！</p>
           </div>
           <div className="reading-challenge-countdown-dots">
@@ -574,7 +574,7 @@ const ReadingChallengeTool = ({ currentClass, students = [], onClose, onFeedStud
                 {isFullscreen ? '退出全屏' : '全屏显示'}
               </button>
               <button className="reading-challenge-action" onClick={onClose} type="button">
-                退出
+                退出挑战
               </button>
             </div>
           </aside>
