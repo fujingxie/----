@@ -451,10 +451,10 @@ const MiniShop = ({
         <div className="redeem-container">
           <p className="redeem-hint">请选择要兑换的学生，余额不足会显示提示，但不再使用整块灰色禁用。</p>
           <div className="redeem-summary">
-            <span>库存剩余：{selectedItemForRedeem?.stock || 0}</span>
-            <span>可兑换人数：{affordableStudents}</span>
-            <span>已选择：{selectedCount}</span>
-            <span>还可选：{remainingSlots}</span>
+            <span data-label="商品库存">{selectedItemForRedeem?.stock || 0}</span>
+            <span data-label="可兑换人数">{affordableStudents}</span>
+            <span data-label="已选学生">{selectedCount}</span>
+            <span data-label="剩余名额">{remainingSlots}</span>
           </div>
           <div className="student-selection-grid">
             {students.map((student) => {
@@ -473,7 +473,11 @@ const MiniShop = ({
                   <span className="s-coins">💰{student.coins || 0}</span>
                   {!canAfford && <span className="s-status danger">金币不足</span>}
                   {canAfford && !canUseExpPack && <span className="s-status danger">宠物未唤醒</span>}
-                  {canAfford && canUseExpPack && soldOutForSelection && <span className="s-status warn">库存已满</span>}
+                  {canAfford && canUseExpPack && soldOutForSelection && (
+                    <span className={`s-status ${selectedItemForRedeem?.stock <= 0 ? 'danger' : 'warn'}`}>
+                      {selectedItemForRedeem?.stock <= 0 ? '已售罄' : '选取达上限'}
+                    </span>
+                  )}
                   {canAfford && canUseExpPack && !soldOutForSelection && !isSelected && <span className="s-status ok">可兑换</span>}
                   {isSelected && <div className="check-mark">✓</div>}
                 </div>

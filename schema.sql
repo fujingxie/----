@@ -83,6 +83,7 @@ CREATE TABLE class_settings (
     level_thresholds TEXT NOT NULL DEFAULT '[10,20,30,50,70,100]',
     pet_condition_config TEXT NOT NULL DEFAULT '{"enabled":true,"skip_weekends":true,"pause_start_date":null,"pause_end_date":null,"hungry_days":2,"weak_days":4,"sleeping_days":7,"hungry_decay":0,"weak_decay":1,"sleeping_decay":2}',
     smart_seating_config TEXT,
+    last_bulk_fed_at DATETIME,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (class_id) REFERENCES classes(id)
 );
@@ -150,12 +151,31 @@ CREATE TABLE registration_attempts (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE student_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    class_id INTEGER NOT NULL,
+    student_id INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    rule_name TEXT,
+    rule_icon TEXT,
+    exp_delta INTEGER DEFAULT 0,
+    coins_delta INTEGER DEFAULT 0,
+    exp_after INTEGER,
+    coins_after INTEGER,
+    level_after INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (class_id) REFERENCES classes(id),
+    FOREIGN KEY (student_id) REFERENCES students(id)
+);
+
 CREATE INDEX idx_classes_user_id ON classes(user_id);
 CREATE INDEX idx_students_class_id ON students(class_id);
 CREATE INDEX idx_shop_items_class_id ON shop_items(class_id);
 CREATE INDEX idx_rules_class_id ON rules(class_id);
 CREATE INDEX idx_rules_owner_user_id ON rules(owner_user_id);
 CREATE INDEX idx_logs_class_id_created_at ON logs(class_id, created_at DESC);
+CREATE INDEX idx_student_logs_student_id ON student_logs(student_id, created_at DESC);
+CREATE INDEX idx_student_logs_class_id ON student_logs(class_id, created_at DESC);
 CREATE INDEX idx_activation_codes_code ON activation_codes(code);
 CREATE INDEX idx_activation_codes_used_by_user_id ON activation_codes(used_by_user_id);
 CREATE INDEX idx_activation_codes_status ON activation_codes(status);

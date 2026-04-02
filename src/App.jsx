@@ -204,6 +204,7 @@ function App() {
   const [thresholdsByClassId, setThresholdsByClassId] = useState({});
   const [petConditionConfigsByClassId, setPetConditionConfigsByClassId] = useState({});
   const [seatingConfigsByClassId, setSeatingConfigsByClassId] = useState({});
+  const [lastBulkFedAtByClassId, setLastBulkFedAtByClassId] = useState({});
   const [authErrorMessage, setAuthErrorMessage] = useState('');
   const [appErrorMessage, setAppErrorMessage] = useState('');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
@@ -259,6 +260,7 @@ function App() {
     ? petConditionConfigsByClassId[currentClassId] || DEFAULT_PET_CONDITION_CONFIG
     : DEFAULT_PET_CONDITION_CONFIG;
   const currentSeatingConfig = currentClassId ? seatingConfigsByClassId[currentClassId] || null : null;
+  const currentLastBulkFedAt = currentClassId ? lastBulkFedAtByClassId[currentClassId] || null : null;
   const isSuperAdmin = user?.role === 'super_admin';
   const membershipLabel = user?.level ? MEMBERSHIP_LABELS[user.level] || user.level : '';
   const visibleTabs = useMemo(
@@ -300,6 +302,10 @@ function App() {
     setSeatingConfigsByClassId((prev) => ({
       ...prev,
       [classId]: bundle.smartSeatingConfig || null,
+    }));
+    setLastBulkFedAtByClassId((prev) => ({
+      ...prev,
+      [classId]: bundle.lastBulkFedAt || null,
     }));
   };
 
@@ -651,7 +657,7 @@ function App() {
     }
   };
 
-  const handleUpdateStudent = async ({ student, actionType, detail, undoMeta = null }) => {
+  const handleUpdateStudent = async ({ student, actionType, detail, undoMeta = null, studentLog = null }) => {
     if (!user || !currentClassId) {
       return;
     }
@@ -668,6 +674,7 @@ function App() {
         actionType,
         detail,
         undoMeta,
+        studentLog,
       });
 
       updateCurrentStudent(response.student);
@@ -765,6 +772,18 @@ function App() {
       student,
       actionType: '唤醒宠物',
       detail: `为 ${student.name} 唤醒了新宠物 ${student.pet_name}`,
+      studentLog: {
+        classId: currentClassId,
+        studentId: student.id,
+        action: 'system',
+        ruleName: `成功孵化：${student.pet_name}！`,
+        ruleIcon: '🥚',
+        expDelta: 0,
+        coinsDelta: 0,
+        expAfter: student.total_exp || 0,
+        coinsAfter: student.coins || 0,
+        levelAfter: student.pet_level || 1,
+      }
     });
   };
 
@@ -773,6 +792,18 @@ function App() {
       student: nextStudent,
       actionType: '宠物毕业',
       detail: `${originalStudent.name} 的宠物 ${originalStudent.pet_name} 已满级毕业，并获得了一颗新的神秘蛋`,
+      studentLog: {
+        classId: currentClassId,
+        studentId: nextStudent.id,
+        action: 'system',
+        ruleName: `恭喜毕业：${originalStudent.pet_name}已收录！`,
+        ruleIcon: '🎓',
+        expDelta: 0,
+        coinsDelta: 0,
+        expAfter: nextStudent.total_exp || 0,
+        coinsAfter: nextStudent.coins || 0,
+        levelAfter: nextStudent.pet_level || 0,
+      }
     });
   };
 
@@ -803,10 +834,22 @@ function App() {
           pet_collection: originalStudent.pet_collection || [],
         },
       },
+      studentLog: {
+        classId: currentClass.id,
+        studentId: originalStudent.id,
+        action: 'interact',
+        ruleName: rule.name,
+        ruleIcon: rule.icon,
+        expDelta: rule.exp,
+        coinsDelta: rule.coins,
+        expAfter: updatedStudent.total_exp,
+        coinsAfter: updatedStudent.coins,
+        levelAfter: updatedStudent.pet_level,
+      }
     });
   };
 
-  const handleFeedStudentsBatch = async (studentIds, rule = null) => {
+  const handleFeedStudentsBatch = async (studentIds, rule = null, options = {}) => {
     if (!user || !currentClassId || studentIds.length === 0) {
       return;
     }
@@ -820,6 +863,7 @@ function App() {
         classId: currentClassId,
         studentIds,
         rule,
+        dailyBulkFeed: Boolean(options.dailyBulkFeed),
       });
 
       setStudentsByClassId((prev) => ({
@@ -830,6 +874,12 @@ function App() {
         ...prev,
         [currentClassId]: response.logs || [],
       }));
+      if (response.lastBulkFedAt !== undefined) {
+        setLastBulkFedAtByClassId((prev) => ({
+          ...prev,
+          [currentClassId]: response.lastBulkFedAt || null,
+        }));
+      }
     } catch (error) {
       setAppErrorMessage(error.message);
       throw error;
@@ -1721,6 +1771,7 @@ function App() {
               levelThresholds={currentThresholds}
               petConditionConfig={currentPetConditionConfig}
               voiceEnabled={voiceEnabled}
+              lastBulkFedAt={currentLastBulkFedAt}
               onImportStudents={handleImportStudents}
               onActivatePet={handleActivatePet}
               onGraduatePet={handleGraduatePet}
@@ -1785,8 +1836,8 @@ function App() {
               onMoveRule={handleMoveRule}
               onImportRules={handleImportRules}
               onSaveThresholds={handleSaveThresholds}
-              onUpdateStudent={(student, actionType, detail) =>
-                handleUpdateStudent({ student, actionType, detail })
+              onUpdateStudent={(student, actionType, detail, undoMeta, studentLog) =>
+                handleUpdateStudent({ student, actionType, detail, undoMeta, studentLog })
               }
               onUpdatePassword={handleUpdatePassword}
               onResetClassProgress={handleResetClassProgress}

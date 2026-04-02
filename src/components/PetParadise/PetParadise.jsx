@@ -3,6 +3,7 @@ import PetCard from './PetCard';
 import PetSelectionModal from './PetSelectionModal';
 import InteractionModal from './InteractionModal';
 import PetCollectionModal from './PetCollectionModal';
+import StudentLogModal from './StudentLogModal';
 import Modal from '../Common/Modal';
 import './PetParadise.css';
 import { CheckCircle2, UserPlus } from 'lucide-react';
@@ -15,46 +16,12 @@ import { speakText, stopVoicePlayback } from '../../lib/voice';
 const POSITIVE_EFFECT_ICONS = ['✨', '💖', '🌟', '🍗', '🎉'];
 const NEGATIVE_EFFECT_ICONS = ['💩', '😵', '⚠️', '🌧️', '🥀'];
 const LEVELUP_HIGHLIGHT_DURATION_MS = 1800;
-const BULK_FEED_DAILY_STORAGE_KEY = 'class-pets.bulk-feed.daily-usage';
 const BULK_FEED_RULE = {
   name: '批量喂养',
   icon: '🍗',
   exp: 1,
   coins: 0,
   type: 'positive',
-};
-
-const getTodayKey = () =>
-  new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-
-const readBulkFeedUsage = () => {
-  if (typeof window === 'undefined') {
-    return {};
-  }
-
-  try {
-    const raw = window.localStorage.getItem(BULK_FEED_DAILY_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-};
-
-const writeBulkFeedUsage = (value) => {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(BULK_FEED_DAILY_STORAGE_KEY, JSON.stringify(value));
-  } catch {
-    // ignore local-only persistence failures
-  }
 };
 
 const resolvePetLevel = (totalExp, thresholds) => {
@@ -143,6 +110,7 @@ const PetParadise = ({
   rules,
   levelThresholds,
   petConditionConfig,
+  lastBulkFedAt = null,
   voiceEnabled = false,
 }) => {
   const [importText, setImportText] = useState('');
@@ -150,6 +118,7 @@ const PetParadise = ({
   const [selectingStudent, setSelectingStudent] = useState(null);
   const [interactingStudent, setInteractingStudent] = useState(null);
   const [collectionStudent, setCollectionStudent] = useState(null);
+  const [logStudent, setLogStudent] = useState(null);
   const [petEffects, setPetEffects] = useState({});
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [isBulkMode, setIsBulkMode] = useState(false);
@@ -159,7 +128,6 @@ const PetParadise = ({
   const [activeFilter, setActiveFilter] = useState('all');
   const [activeBulkRuleType, setActiveBulkRuleType] = useState('positive');
   const [selectedBulkRuleId, setSelectedBulkRuleId] = useState(null);
-  const [bulkFeedUsageByClass, setBulkFeedUsageByClass] = useState(() => readBulkFeedUsage());
   const [levelUpHighlights, setLevelUpHighlights] = useState([]);
   const [activeLevelUpIndex, setActiveLevelUpIndex] = useState(0);
   const pendingBatchLevelUpRef = useRef(null);
@@ -356,8 +324,27 @@ const PetParadise = ({
     stopVoicePlayback();
   }, []);
 
-  const todayKey = getTodayKey();
-  const hasUsedDailyBulkFeed = Boolean(currentClass?.id) && bulkFeedUsageByClass[String(currentClass.id)] === todayKey;
+  const hasUsedDailyBulkFeed = useMemo(() => {
+    if (!currentClass?.id || !lastBulkFedAt) {
+      return false;
+    }
+
+    const todayKey = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+
+    const lastFedDateKey = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(lastBulkFedAt));
+
+    return lastFedDateKey === todayKey;
+  }, [currentClass?.id, lastBulkFedAt]);
 
   const bulkRules = useMemo(
     () => rules.filter((rule) => rule.type === activeBulkRuleType),
@@ -487,19 +474,11 @@ const PetParadise = ({
       await onFeedStudentsBatch(
         feedableStudents.map((student) => student.id),
         BULK_FEED_RULE,
+        { dailyBulkFeed: true },
       );
       if (voiceEnabled && !willTriggerLevelUp) {
         speakText(buildBatchInteractionSpeech(BULK_FEED_RULE, { mode: 'feed' }));
       }
-
-      setBulkFeedUsageByClass((prev) => {
-        const next = {
-          ...prev,
-          [String(currentClass.id)]: todayKey,
-        };
-        writeBulkFeedUsage(next);
-        return next;
-      });
     } catch (error) {
       pendingBatchLevelUpRef.current = null;
       throw error;
@@ -788,6 +767,7 @@ const PetParadise = ({
               petConditionConfig={petConditionConfig}
               effect={petEffects[student.id] || null}
               onOpenCollection={setCollectionStudent}
+              onOpenLog={setLogStudent}
               onActivate={handlePetPrimaryAction}
               isSelectable={false}
               isSelected={selectedStudentIds.includes(student.id)}
@@ -1056,6 +1036,19 @@ const PetParadise = ({
             playActionSound('adopt');
             await onGraduatePet(collectionStudent, graduatedStudent);
             setCollectionStudent(null);
+          }}
+        />
+      )}
+
+      {logStudent && (
+        <StudentLogModal
+          isOpen={!!logStudent}
+          onClose={() => setLogStudent(null)}
+          student={logStudent}
+          currentClass={currentClass}
+          onInteraction={(student) => {
+            setLogStudent(null);
+            setInteractingStudent(student);
           }}
         />
       )}

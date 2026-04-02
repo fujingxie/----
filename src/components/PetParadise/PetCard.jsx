@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Star } from 'lucide-react';
+import { BookOpen, Star, ClipboardList } from 'lucide-react';
 import './PetCard.css';
 import { getPetImagePath, getPetNameById, PET_IMAGE_FALLBACK } from '../../api/petLibrary';
 import { getPetConditionLabel, getPetSafetyHint, formatLastFedLabel } from '../../lib/petCondition';
@@ -34,6 +34,7 @@ const PetCard = ({
   effect = null,
   onActivate,
   onOpenCollection,
+  onOpenLog,
   adoptionCount = 0,
   isReadyForNewPet = false,
   isSelectable = false,
@@ -86,9 +87,21 @@ const PetCard = ({
           className={`pet-collection-trigger ${isSelectable ? 'with-selector' : ''}`}
           type="button"
           onClick={() => onOpenCollection(student)}
+          title="宠物图鉴"
         >
           <BookOpen size={16} />
           <span className="pet-collection-count">{adoptionCount}</span>
+        </button>
+      )}
+
+      {onOpenLog && (
+        <button
+          className={`pet-log-trigger ${isSelectable ? 'with-selector' : ''} ${!isSelectable && adoptionCount === 0 ? 'no-collection' : ''}`}
+          type="button"
+          onClick={() => onOpenLog(student)}
+          title="成长记录"
+        >
+          <ClipboardList size={16} />
         </button>
       )}
 

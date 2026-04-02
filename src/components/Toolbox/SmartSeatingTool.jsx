@@ -154,7 +154,7 @@ const getScoreTone = (score) => {
   return 'rose';
 };
 
-function SmartSeatCard({ seat, index, isLocked, isSelected, onSelect, onToggleLock }) {
+function SmartSeatCard({ seat, index, isLocked, isSelected, showScores, onSelect, onToggleLock }) {
   const scoreTone = seat ? getScoreTone(Number(seat.score) || 0) : 'slate';
 
   const handleDragStart = (event) => {
@@ -200,7 +200,7 @@ function SmartSeatCard({ seat, index, isLocked, isSelected, onSelect, onToggleLo
       </div>
       <div className="smart-seat-avatar">{seat.gender === '女' ? '👧' : '👦'}</div>
       <div className="smart-seat-name">{seat.name}</div>
-      <div className={`smart-seat-score ${scoreTone}`}>{seat.score}分</div>
+      {showScores && <div className={`smart-seat-score ${scoreTone}`}>{seat.score}分</div>}
     </button>
   );
 }
@@ -212,6 +212,7 @@ export default function SmartSeatingTool({ currentClass, students, savedConfig, 
   const [seatMap, setSeatMap] = useState([]);
   const [lockedIndices, setLockedIndices] = useState([]);
   const [viewMode, setViewMode] = useState('student');
+  const [showScores, setShowScores] = useState(false);
   const [selectedSeatIndex, setSelectedSeatIndex] = useState(null);
   const [toolMessage, setToolMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -367,6 +368,22 @@ export default function SmartSeatingTool({ currentClass, students, savedConfig, 
     setLockedIndices((prev) =>
       prev.includes(index) ? prev.filter((item) => item !== index) : [...prev, index],
     );
+  };
+
+  const handleLockAll = () => {
+    const indicesToLock = [];
+    seatMap.forEach((seat, index) => {
+      if (seat) {
+        indicesToLock.push(index);
+      }
+    });
+    setLockedIndices(indicesToLock);
+    setToolMessage(`已锁定 ${indicesToLock.length} 个非空座位`);
+  };
+
+  const handleUnlockAll = () => {
+    setLockedIndices([]);
+    setToolMessage('已全部解锁');
   };
 
   const reloadStudents = () => {
@@ -580,6 +597,10 @@ export default function SmartSeatingTool({ currentClass, students, savedConfig, 
         </div>
 
         <div className="smart-seating-section">
+          <div className="smart-seating-head small" style={{ marginBottom: '12px' }}>
+            <Eye size={16} />
+            <h4>视图与控制</h4>
+          </div>
           <div className="smart-toggle-row">
             <button
               className={`smart-toggle-btn ${viewMode === 'student' ? 'active' : ''}`}
@@ -596,6 +617,38 @@ export default function SmartSeatingTool({ currentClass, students, savedConfig, 
             >
               <Eye size={15} />
               老师视角
+            </button>
+          </div>
+          <div className="smart-toggle-row" style={{ marginTop: '12px' }}>
+            <button
+              className={`smart-toggle-btn ${!showScores ? 'active' : ''}`}
+              onClick={() => setShowScores(false)}
+              type="button"
+            >
+              隐藏成绩
+            </button>
+            <button
+              className={`smart-toggle-btn ${showScores ? 'active' : ''}`}
+              onClick={() => setShowScores(true)}
+              type="button"
+            >
+              显示成绩
+            </button>
+          </div>
+          <div className="smart-toggle-row" style={{ marginTop: '12px' }}>
+            <button
+              className="smart-toggle-btn"
+              onClick={handleLockAll}
+              type="button"
+            >
+              <Lock size={15} /> 一键锁座
+            </button>
+            <button
+              className="smart-toggle-btn"
+              onClick={handleUnlockAll}
+              type="button"
+            >
+              <LockOpen size={15} /> 解除全锁
             </button>
           </div>
         </div>
@@ -767,6 +820,7 @@ export default function SmartSeatingTool({ currentClass, students, savedConfig, 
                     index={index}
                     isLocked={lockedIndices.includes(index)}
                     isSelected={selectedSeatIndex === index}
+                    showScores={showScores}
                     onSelect={setSelectedSeatIndex}
                     onToggleLock={toggleLock}
                   />

@@ -77,10 +77,10 @@ export const deleteStudentsBatch = ({ userId, classId, studentIds }) =>
     body: JSON.stringify({ userId, studentIds }),
   });
 
-export const updateStudent = ({ userId, classId, studentId, updates, actionType, detail, undoMeta }) =>
+export const updateStudent = ({ userId, classId, studentId, updates, actionType, detail, undoMeta, studentLog }) =>
   request(`/students/${studentId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ userId, classId, updates, actionType, detail, undoMeta }),
+    body: JSON.stringify({ userId, classId, updates, actionType, detail, undoMeta, studentLog }),
   });
 
 export const feedStudent = ({ userId, classId, studentId }) =>
@@ -89,10 +89,15 @@ export const feedStudent = ({ userId, classId, studentId }) =>
     body: JSON.stringify({ userId, classId }),
   });
 
-export const feedStudentsBatch = ({ userId, classId, studentIds, rule = null }) =>
+export const feedStudentsBatch = ({ userId, classId, studentIds, rule = null, dailyBulkFeed = false }) =>
   request(`/classes/${classId}/students/feed`, {
     method: 'POST',
-    body: JSON.stringify({ userId, studentIds, rule }),
+    body: JSON.stringify({ userId, studentIds, rule, dailyBulkFeed }),
+  });
+
+export const fetchStudentLogs = ({ classId, studentId, limit = 30, offset = 0 }) =>
+  request(`/classes/${classId}/students/${studentId}/logs?limit=${limit}&offset=${offset}`, {
+    method: 'GET',
   });
 
 export const createShopItem = ({ userId, classId, item }) =>

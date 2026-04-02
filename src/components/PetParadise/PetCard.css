@@ -140,6 +140,37 @@
   justify-content: center;
 }
 
+.pet-log-trigger {
+  position: absolute;
+  top: 14px;
+  left: 14px; 
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
+  z-index: 3;
+}
+
+.pet-log-trigger.with-selector,
+.pet-log-trigger.no-collection {
+  top: 64px;
+}
+
+.pet-collection-trigger + .pet-log-trigger {
+  top: 64px;
+}
+
+.pet-collection-trigger.with-selector + .pet-log-trigger {
+  top: 114px;
+}
+
 .pet-visual {
   position: relative;
   width: 100%;
@@ -557,6 +588,7 @@
 }
 
 :root[data-theme='night'] .pet-collection-trigger,
+:root[data-theme='night'] .pet-log-trigger,
 :root[data-theme='night'] .pet-select-toggle {
   background: rgba(14, 28, 49, 0.96);
   color: #c6d8f2;

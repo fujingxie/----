@@ -112,6 +112,14 @@ const parsePetCollection = (value) => {
 
 const nowIso = () => new Date().toISOString();
 
+const getTodayKeyCN = () =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+
 const parseDateOnlyToUtcMs = (value, endOfDay = false) => {
   if (typeof value !== 'string' || !value.trim()) {
     return null;
@@ -596,6 +604,19 @@ const normalizeLog = (row) => {
     meta,
   };
 };
+
+const normalizeStudentLog = (row) => ({
+  id: Number(row.id),
+  action: row.action,
+  ruleName: row.rule_name,
+  ruleIcon: row.rule_icon,
+  expDelta: Number(row.exp_delta || 0),
+  coinsDelta: Number(row.coins_delta || 0),
+  expAfter: Number(row.exp_after || 0),
+  coinsAfter: Number(row.coins_after || 0),
+  levelAfter: Number(row.level_after || 0),
+  createdAt: row.created_at,
+});
 
 const normalizeUser = (row) => ({
   id: Number(row.id),
@@ -1392,11 +1413,56 @@ async function getSmartSeatingConfigByClassId(db, classId) {
   }
 }
 
+async function getLastBulkFedAt(db, classId) {
+  await ensureClassSettings(db, classId);
+
+  const settings = await db
+    .prepare('SELECT last_bulk_fed_at FROM class_settings WHERE class_id = ?')
+    .bind(classId)
+    .first();
+
+  return settings?.last_bulk_fed_at || null;
+}
+
 async function appendLog(db, { classId, userId, actionType, detail, meta = null }) {
   await db
     .prepare('INSERT INTO logs (class_id, user_id, action_type, detail, meta) VALUES (?, ?, ?, ?, ?)')
     .bind(classId, userId, actionType, detail, meta ? JSON.stringify(meta) : null)
     .run();
+}
+
+async function appendStudentLog(db, { classId, studentId, action, ruleName, ruleIcon, expDelta, coinsDelta, expAfter, coinsAfter, levelAfter }) {
+  await db
+    .prepare(
+      `INSERT INTO student_logs
+       (class_id, student_id, action, rule_name, rule_icon, exp_delta, coins_delta, exp_after, coins_after, level_after)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(classId, studentId, action, ruleName, ruleIcon, expDelta, coinsDelta, expAfter, coinsAfter, levelAfter)
+    .run();
+}
+
+async function getStudentLogsByStudentId(db, classId, studentId, limit = 50, offset = 0) {
+  const result = await db
+    .prepare(
+      `SELECT id, action, rule_name, rule_icon, exp_delta, coins_delta, exp_after, coins_after, level_after, created_at
+       FROM student_logs
+       WHERE class_id = ? AND student_id = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT ? OFFSET ?`
+    )
+    .bind(classId, studentId, limit, offset)
+    .all();
+
+  const countResult = await db
+    .prepare('SELECT COUNT(*) as total FROM student_logs WHERE class_id = ? AND student_id = ?')
+    .bind(classId, studentId)
+    .first();
+
+  return {
+    logs: (result.results || []).map(normalizeStudentLog),
+    total: Number(countResult?.total || 0)
+  };
 }
 
 async function appendAdminLog(db, { userId, actionType, detail }) {
@@ -1485,6 +1551,7 @@ async function getBootstrapPayload(db, userId, requestedClassId) {
     petConditionConfig: await getPetConditionConfigByClassId(db, resolvedClassId),
     smartSeatingConfig: await getSmartSeatingConfigByClassId(db, resolvedClassId),
     toolboxAccess: (await getToolboxAccessFlag(db)).value,
+    lastBulkFedAt: await getLastBulkFedAt(db, resolvedClassId),
   };
 }
 
@@ -2089,6 +2156,10 @@ async function handleUpdateStudent(db, request, studentId) {
     });
   }
 
+  if (body.studentLog) {
+    await appendStudentLog(db, body.studentLog);
+  }
+
   const refreshedStudent = await db
     .prepare(`SELECT ${STUDENT_SELECT_FIELDS} FROM students WHERE id = ?`)
     .bind(studentId)
@@ -2100,7 +2171,7 @@ async function handleUpdateStudent(db, request, studentId) {
   });
 }
 
-async function applyFeedToStudents(db, classId, userId, studentIds, selectedRule = null) {
+async function applyFeedToStudents(db, classId, userId, studentIds, selectedRule = null, options = { isDailyBulkFeed: false }) {
   if (studentIds.length === 0) {
     return [];
   }
@@ -2121,12 +2192,18 @@ async function applyFeedToStudents(db, classId, userId, studentIds, selectedRule
   const feedAt = nowIso();
   const statements = [];
   const pendingLogs = [];
+  const pendingStudentLogs = [];
+  
   const interactionRule = {
-    name: String(selectedRule?.name || '批量互动'),
+    name: String(selectedRule?.name || (options.isDailyBulkFeed ? '批量喂养' : '课堂互动')),
+    icon: String(selectedRule?.icon || (options.isDailyBulkFeed ? '🍗' : '✨')),
     exp: Number(selectedRule?.exp ?? 1),
     coins: Number(selectedRule?.coins || 0),
     type: selectedRule?.type === 'negative' ? 'negative' : 'positive',
   };
+
+  const logActionType = options.isDailyBulkFeed ? 'bulk_feed' 
+    : (studentIds.length > 1 ? 'bulk_interact' : 'interact');
 
   for (const row of rows) {
     if (row.pet_status === 'egg') {
@@ -2215,7 +2292,20 @@ async function applyFeedToStudents(db, classId, userId, studentIds, selectedRule
       classId,
       userId,
       actionType: '课堂互动',
-      detail: `老师为 ${row.name} 的宠物应用了批量互动规则「${interactionRule.name}」(EXP: ${interactionRule.exp >= 0 ? `+${interactionRule.exp}` : interactionRule.exp}, 金币: ${interactionRule.coins >= 0 ? `+${interactionRule.coins}` : interactionRule.coins})`,
+      detail: `老师为 ${row.name} 的宠物应用了${options.isDailyBulkFeed ? '批量喂养' : '批量互动规则'}「${interactionRule.name}」(EXP: ${interactionRule.exp >= 0 ? `+${interactionRule.exp}` : interactionRule.exp}, 金币: ${interactionRule.coins >= 0 ? `+${interactionRule.coins}` : interactionRule.coins})`,
+    });
+    
+    pendingStudentLogs.push({
+      classId,
+      studentId: row.id,
+      action: logActionType,
+      ruleName: interactionRule.name,
+      ruleIcon: interactionRule.icon,
+      expDelta: interactionRule.exp,
+      coinsDelta: interactionRule.coins,
+      expAfter: nextTotalExp,
+      coinsAfter: nextCoins,
+      levelAfter: nextLevel,
     });
   }
 
@@ -2224,8 +2314,26 @@ async function applyFeedToStudents(db, classId, userId, studentIds, selectedRule
   for (const entry of pendingLogs) {
     await appendLog(db, entry);
   }
+  
+  for (const entry of pendingStudentLogs) {
+    await appendStudentLog(db, entry);
+  }
 
   return getStudentsByClassId(db, classId, userId);
+}
+
+async function handleGetStudentLogs(db, request, classId, studentId) {
+  const url = new URL(request.url);
+  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit')) || 30));
+  const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
+
+  const { logs, total } = await getStudentLogsByStudentId(db, classId, studentId, limit, offset);
+
+  return json({
+    logs,
+    total,
+    hasMore: offset + logs.length < total
+  });
 }
 
 async function handleFeedStudent(db, request, studentId) {
@@ -2263,6 +2371,7 @@ async function handleFeedStudentsBatch(db, request, classId) {
     ? Array.from(new Set(body.studentIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)))
     : [];
   const rule = body.rule && typeof body.rule === 'object' ? body.rule : null;
+  const isDailyBulkFeed = Boolean(body.dailyBulkFeed);
 
   if (!userId) {
     return error('缺少有效的教师身份');
@@ -2274,11 +2383,40 @@ async function handleFeedStudentsBatch(db, request, classId) {
 
   await assertClassOwnership(db, userId, classId);
 
-  const students = await applyFeedToStudents(db, classId, userId, studentIds, rule);
+  if (isDailyBulkFeed) {
+    const todayKey = getTodayKeyCN();
+    const lastBulkFedAt = await getLastBulkFedAt(db, classId);
+
+    if (lastBulkFedAt) {
+      const lastFedDateKey = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Shanghai',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date(lastBulkFedAt));
+
+      if (lastFedDateKey === todayKey) {
+        return error('今天已经使用过批量喂养，每天只能使用一次');
+      }
+    }
+  }
+
+  const students = await applyFeedToStudents(db, classId, userId, studentIds, rule, { isDailyBulkFeed });
+
+  if (isDailyBulkFeed) {
+    await ensureClassSettings(db, classId);
+    await db
+      .prepare('UPDATE class_settings SET last_bulk_fed_at = ? WHERE class_id = ?')
+      .bind(nowIso(), classId)
+      .run();
+  }
+
+  const lastBulkFedAt = await getLastBulkFedAt(db, classId);
 
   return json({
     students,
     logs: await getLogsByClassId(db, classId),
+    lastBulkFedAt,
   });
 }
 
@@ -2516,6 +2654,29 @@ async function handleRedeemShopItem(db, request, itemId) {
   );
 
   await db.batch(statements);
+  
+  const pendingStudentLogs = students.map((student) => {
+    const nextTotalExp = item.item_type === 'exp_pack' ? (student.total_exp || 0) + rewardExp : (student.total_exp || 0);
+    const nextCoins = (student.coins || 0) - Number(item.price || 0);
+    const nextLevel = item.item_type === 'exp_pack' ? resolvePetLevel(nextTotalExp, thresholds) : (student.pet_level || 0);
+
+    return {
+      classId,
+      studentId: student.id,
+      action: 'redeem',
+      ruleName: `兑换「${item.name}」`,
+      ruleIcon: item.icon || '🎁',
+      expDelta: item.item_type === 'exp_pack' ? rewardExp : 0,
+      coinsDelta: -Number(item.price || 0),
+      expAfter: nextTotalExp,
+      coinsAfter: nextCoins,
+      levelAfter: nextLevel,
+    };
+  });
+
+  for (const entry of pendingStudentLogs) {
+    await appendStudentLog(db, entry);
+  }
   await appendLog(db, {
     classId,
     userId,
@@ -4245,6 +4406,11 @@ export default {
       const smartSeatingMatch = path.match(/^\/api\/classes\/(\d+)\/settings\/smart-seating$/);
       if (smartSeatingMatch && request.method === 'PUT') {
         return await handleUpdateSmartSeatingConfig(db, request, Number(smartSeatingMatch[1]));
+      }
+
+      const studentLogsMatch = path.match(/^\/api\/classes\/(\d+)\/students\/(\d+)\/logs$/);
+      if (studentLogsMatch && request.method === 'GET') {
+        return await handleGetStudentLogs(db, request, Number(studentLogsMatch[1]), Number(studentLogsMatch[2]));
       }
 
       const resetProgressMatch = path.match(/^\/api\/classes\/(\d+)\/reset-progress$/);

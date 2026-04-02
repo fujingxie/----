@@ -18,7 +18,8 @@ import {
   User,
   Users,
 } from 'lucide-react';
-import { graduateToNewEgg } from '../../lib/petCollection';
+import { graduateToNewEgg, syncStudentCollectionProgress } from '../../lib/petCollection';
+import { ADOPTABLE_PET_LIBRARY, getPetNameById } from '../../api/petLibrary';
 import Modal from '../Common/Modal';
 
 const DEFAULT_THRESHOLDS = [10, 20, 30, 50, 70, 100];
@@ -75,7 +76,7 @@ const ClassSettingsPanel = ({
   onImportStudents,
   onRemoveStudent,
   onBatchRemoveStudents,
-  onRenameStudent,
+  onUpdateStudentProfile,
   onResetStudentPet,
   onRequestConfirm,
 }) => {
@@ -83,6 +84,8 @@ const ClassSettingsPanel = ({
   const [bulkStudentText, setBulkStudentText] = useState('');
   const [editingStudentId, setEditingStudentId] = useState(null);
   const [editingStudentName, setEditingStudentName] = useState('');
+  const [editingPetName, setEditingPetName] = useState('');
+  const [editingPetTypeId, setEditingPetTypeId] = useState('');
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
 
   const handleBulkImport = async () => {
@@ -117,16 +120,31 @@ const ClassSettingsPanel = ({
   const startEditingStudent = (student) => {
     setEditingStudentId(student.id);
     setEditingStudentName(student.name);
+    setEditingPetName(student.pet_name || getPetNameById(student.pet_type_id) || '');
+    setEditingPetTypeId(student.pet_type_id || '');
   };
 
-  const handleRenameStudent = async (student) => {
+  const cancelEditingStudent = () => {
+    setEditingStudentId(null);
+    setEditingStudentName('');
+    setEditingPetName('');
+    setEditingPetTypeId('');
+  };
+
+  const handleSaveStudentRow = async (student) => {
     if (!editingStudentName.trim()) {
       return;
     }
 
-    await onRenameStudent(student, editingStudentName.trim());
-    setEditingStudentId(null);
-    setEditingStudentName('');
+    const isNewlyHatched = student.pet_status === 'egg' && editingPetTypeId;
+
+    await onUpdateStudentProfile(student, {
+      name: editingStudentName.trim(),
+      pet_name: editingPetName.trim(),
+      pet_type_id: editingPetTypeId || null,
+      ...(isNewlyHatched ? { pet_status: 'active' } : {}),
+    });
+    cancelEditingStudent();
   };
 
   const handleBatchDelete = async () => {
@@ -251,10 +269,8 @@ const ClassSettingsPanel = ({
                               className="glass-input compact"
                               value={editingStudentName}
                               onChange={(event) => setEditingStudentName(event.target.value)}
+                              placeholder="学生姓名"
                             />
-                            <button className="confirm-btn micro" onClick={() => handleRenameStudent(student)} type="button">
-                              保存
-                            </button>
                           </div>
                         ) : (
                           <div className="student-name-cell">
@@ -267,60 +283,96 @@ const ClassSettingsPanel = ({
                           {student.pet_status === 'egg' ? '待唤醒' : '已激活'}
                         </span>
                       </td>
-                      <td>{student.pet_status === 'egg' ? '神秘蛋' : student.pet_name || '未命名伙伴'}</td>
+                      <td>
+                        {isEditing ? (
+                          <div className="student-inline-editor" style={{ display: 'flex', gap: '6px' }}>
+                            <select
+                              className="glass-input compact"
+                              value={editingPetTypeId}
+                              onChange={(event) => setEditingPetTypeId(event.target.value)}
+                              style={{ width: '110px' }}
+                            >
+                              <option value="">(原神秘蛋)</option>
+                              {ADOPTABLE_PET_LIBRARY.map((pet) => (
+                                <option key={pet.id} value={pet.id}>
+                                  {pet.name}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              className="glass-input compact"
+                              value={editingPetName}
+                              onChange={(event) => setEditingPetName(event.target.value)}
+                              placeholder="宠物昵称"
+                              style={{ width: '100px' }}
+                            />
+                          </div>
+                        ) : (
+                          student.pet_status === 'egg' ? '神秘蛋' : student.pet_name || '未命名伙伴'
+                        )}
+                      </td>
                       <td>{student.pet_status === 'egg' ? '-' : `Lv.${student.pet_level || 0}`}</td>
                       <td>💰 {student.coins || 0}</td>
                       <td>⭐ {student.total_exp || 0}</td>
                       <td className="actions-col">
                         <div className="actions">
-                          {!isEditing && (
-                            <button
-                              className="icon-btn blue"
-                              onClick={() => startEditingStudent(student)}
-                              type="button"
-                              title="编辑学生姓名"
-                            >
-                              <PenSquare size={14} />
-                            </button>
+                          {isEditing ? (
+                            <>
+                              <button className="confirm-btn micro" onClick={() => handleSaveStudentRow(student)} type="button">
+                                保存
+                              </button>
+                              <button className="icon-btn" onClick={cancelEditingStudent} type="button" style={{ marginLeft: '4px' }}>
+                                取消
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                className="icon-btn blue"
+                                onClick={() => startEditingStudent(student)}
+                                type="button"
+                                title="编辑个人与宠物资料"
+                              >
+                                <PenSquare size={14} />
+                              </button>
+                              <button
+                                className="icon-btn amber"
+                                onClick={async () => {
+                                  const confirmed = await onRequestConfirm({
+                                    title: '重置宠物',
+                                    message: `确定要将 ${student.name} 的当前宠物重置为神秘蛋吗？当前宠物会回到待唤醒状态。`,
+                                    tone: 'danger',
+                                    confirmLabel: '确认重置',
+                                  });
+                                  if (confirmed) {
+                                    onResetStudentPet(student);
+                                  }
+                                }}
+                                type="button"
+                                title="重置宠物"
+                              >
+                                <RotateCcw size={14} />
+                              </button>
+                              <button
+                                className="icon-btn red"
+                                onClick={async () => {
+                                  const confirmed = await onRequestConfirm({
+                                    title: '删除学生',
+                                    message: `确定要移除学生 ${student.name} 吗？该学生会从当前班级列表中移除。`,
+                                    tone: 'danger',
+                                    confirmLabel: '确认移除',
+                                  });
+                                  if (confirmed) {
+                                    onRemoveStudent(student.id, student.name);
+                                  }
+                                }}
+                                type="button"
+                                title="删除学生"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </>
                           )}
-                          {!isEditing && (
-                            <button
-                              className="icon-btn amber"
-                              onClick={async () => {
-                                const confirmed = await onRequestConfirm({
-                                  title: '重置宠物',
-                                  message: `确定要将 ${student.name} 的当前宠物重置为神秘蛋吗？当前宠物会回到待唤醒状态。`,
-                                  tone: 'danger',
-                                  confirmLabel: '确认重置',
-                                });
-                                if (confirmed) {
-                                  onResetStudentPet(student);
-                                }
-                              }}
-                              type="button"
-                              title="重置宠物"
-                            >
-                              <RotateCcw size={14} />
-                            </button>
-                          )}
-                          <button
-                            className="icon-btn red"
-                            onClick={async () => {
-                              const confirmed = await onRequestConfirm({
-                                title: '删除学生',
-                                message: `确定要移除学生 ${student.name} 吗？该学生会从当前班级列表中移除。`,
-                                tone: 'danger',
-                                confirmLabel: '确认移除',
-                              });
-                              if (confirmed) {
-                                onRemoveStudent(student.id, student.name);
-                              }
-                            }}
-                            type="button"
-                            title="删除学生"
-                          >
-                            <Trash2 size={14} />
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1546,11 +1598,56 @@ const Settings = ({
 
   const hasClass = Boolean(currentClass);
 
-  const handleRenameStudent = async (student, newName) => {
-    await onUpdateStudent({
+  const handleSaveStudentChanges = async (student, updates) => {
+    let detailMsg = [];
+    if (updates.name && updates.name !== student.name) detailMsg.push(`将学生重命名为 ${updates.name}`);
+    if (updates.pet_type_id && updates.pet_type_id !== student.pet_type_id) {
+      if (student.pet_status === 'egg' && updates.pet_status === 'active') {
+        detailMsg.push(`强制分配宠物外观为 [${getPetNameById(updates.pet_type_id)}]`);
+      } else {
+        detailMsg.push(`切换宠物外观为 [${getPetNameById(updates.pet_type_id)}]`);
+      }
+    }
+    if (updates.pet_name !== undefined && updates.pet_name !== (student.pet_name || '')) {
+      if (updates.pet_name) {
+         detailMsg.push(`宠物改名为 ${updates.pet_name}`);
+      } else {
+         detailMsg.push(`清除了宠物名字`);
+      }
+    }
+
+    const logStr = detailMsg.join(', ') || '修改个人资料';
+
+    const studentLog = detailMsg.length > 0 ? {
+        classId: currentClass.id,
+        studentId: student.id,
+        action: 'system',
+        ruleName: `修改资料: ${logStr}`,
+        ruleIcon: '⚙️',
+        expDelta: 0,
+        coinsDelta: 0,
+        expAfter: student.total_exp || 0,
+        coinsAfter: student.coins || 0,
+        levelAfter: student.pet_level || 0,
+    } : null;
+
+    // Filter out undefined payload properties
+    const safeUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([, v]) => v !== undefined)
+    );
+
+    const updatedStudent = {
       ...student,
-      name: newName,
-    }, '学生管理', `将学生 ${student.name} 更名为 ${newName}`);
+      ...safeUpdates,
+    };
+
+    // Ensure our collection snapshot is also updated so PetCollectionModal reflects changes
+    const nextCollection = syncStudentCollectionProgress(updatedStudent);
+
+    await onUpdateStudent({
+      ...updatedStudent,
+      pet_collection: nextCollection,
+    }, '学生管理', logStr, null, studentLog);
   };
 
   const handleResetStudentPet = async (student) => {
@@ -1622,7 +1719,7 @@ const Settings = ({
                 onImportStudents={onImportStudents}
                 onRemoveStudent={onRemoveStudent}
                 onBatchRemoveStudents={onBatchRemoveStudents}
-                onRenameStudent={handleRenameStudent}
+                onUpdateStudentProfile={handleSaveStudentChanges}
                 onResetStudentPet={handleResetStudentPet}
                 onRequestConfirm={onRequestConfirm}
               />
