@@ -131,6 +131,7 @@ const parseDateOnlyToUtcMs = (value, endOfDay = false) => {
   }
 
   const [, year, month, day] = match;
+  const shanghaiOffsetMs = 8 * 60 * 60 * 1000;
   return Date.UTC(
     Number(year),
     Number(month) - 1,
@@ -139,7 +140,7 @@ const parseDateOnlyToUtcMs = (value, endOfDay = false) => {
     endOfDay ? 59 : 0,
     endOfDay ? 59 : 0,
     endOfDay ? 999 : 0,
-  );
+  ) - shanghaiOffsetMs;
 };
 
 const createCollectionId = (studentId) =>
@@ -1069,6 +1070,15 @@ function parseDbTimestamp(value) {
     : String(value).replace(' ', 'T');
   const timestamp = new Date(normalized.endsWith('Z') ? normalized : `${normalized}Z`);
   return timestamp.getTime();
+}
+
+function formatUtcMsToDbTimestamp(value) {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  const date = new Date(value);
+  return date.toISOString().slice(0, 19).replace('T', ' ');
 }
 
 function formatRetryHint(retryAfterSeconds) {
@@ -2333,6 +2343,56 @@ async function handleGetStudentLogs(db, request, classId, studentId) {
     logs,
     total,
     hasMore: offset + logs.length < total
+  });
+}
+
+async function handleGetProgressRanking(db, request, classId) {
+  const url = new URL(request.url);
+  const limit = Math.min(20, Math.max(1, Number(url.searchParams.get('limit')) || 10));
+  const start = url.searchParams.get('start') || '';
+  const end = url.searchParams.get('end') || '';
+
+  const startTimestamp = parseDateOnlyToUtcMs(start, false);
+  const endTimestamp = parseDateOnlyToUtcMs(end, true);
+
+  const statements = [
+    'SELECT student_id,',
+    '       SUM(exp_delta) AS total_exp_delta,',
+    '       SUM(CASE WHEN exp_delta > 0 THEN exp_delta ELSE 0 END) AS gained_exp,',
+    '       SUM(CASE WHEN exp_delta < 0 THEN -exp_delta ELSE 0 END) AS lost_exp,',
+    '       COUNT(*) AS event_count',
+    '  FROM student_logs',
+    ' WHERE class_id = ?',
+  ];
+  const bindings = [classId];
+
+  if (startTimestamp !== null) {
+    statements.push('   AND created_at >= ?');
+    bindings.push(formatUtcMsToDbTimestamp(startTimestamp));
+  }
+
+  if (endTimestamp !== null) {
+    statements.push('   AND created_at <= ?');
+    bindings.push(formatUtcMsToDbTimestamp(endTimestamp));
+  }
+
+  statements.push(
+    ' GROUP BY student_id',
+    ' ORDER BY total_exp_delta DESC, gained_exp DESC, event_count DESC, student_id ASC',
+    ' LIMIT ?',
+  );
+  bindings.push(limit);
+
+  const result = await db.prepare(statements.join('\n')).bind(...bindings).all();
+
+  return json({
+    rankings: (result.results || []).map((row) => ({
+      studentId: Number(row.student_id),
+      totalExpDelta: Number(row.total_exp_delta || 0),
+      gainedExp: Number(row.gained_exp || 0),
+      lostExp: Number(row.lost_exp || 0),
+      eventCount: Number(row.event_count || 0),
+    })),
   });
 }
 
@@ -4338,6 +4398,11 @@ export default {
       const batchDeleteStudentsMatch = path.match(/^\/api\/classes\/(\d+)\/students\/batch-delete$/);
       if (batchDeleteStudentsMatch && request.method === 'POST') {
         return await handleBatchDeleteStudents(db, request, Number(batchDeleteStudentsMatch[1]));
+      }
+
+      const progressRankingMatch = path.match(/^\/api\/classes\/(\d+)\/progress-ranking$/);
+      if (progressRankingMatch && request.method === 'GET') {
+        return await handleGetProgressRanking(db, request, Number(progressRankingMatch[1]));
       }
 
       const batchFeedStudentsMatch = path.match(/^\/api\/classes\/(\d+)\/students\/feed$/);

@@ -1794,7 +1794,7 @@ function App() {
             />
           )}
 
-          {activeTab === 'rank' && <HallOfFame students={currentStudents} />}
+          {activeTab === 'rank' && <HallOfFame students={currentStudents} currentClass={currentClass} />}
 
           {activeTab === 'toolbox' && (
             <Toolbox

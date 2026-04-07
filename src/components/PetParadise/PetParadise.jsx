@@ -863,16 +863,7 @@ const PetParadise = ({
                     onClick={() => toggleSelectStudent(student)}
                     type="button"
                   >
-                    <div className="bulk-student-main">
-                      <strong>{student.name}</strong>
-                      <span>{student.pet_name || '未命名伙伴'} · Lv.{student.pet_level || 1}</span>
-                    </div>
-                    <div className="bulk-student-meta">
-                      <span className={`bulk-student-condition ${student.pet_condition || 'healthy'}`}>
-                        {student.pet_condition === 'sleeping' ? '休眠中' : student.pet_condition === 'weak' ? '虚弱中' : student.pet_condition === 'hungry' ? '即将饥饿' : '健康'}
-                      </span>
-                      <span className="bulk-student-check">{isSelected ? '已选' : '点击选择'}</span>
-                    </div>
+                    <span className="bulk-student-name">{student.name}</span>
                   </button>
                 );
               })}

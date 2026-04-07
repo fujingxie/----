@@ -1,6 +1,7 @@
 name = "class-pets-api"
 main = "src-server/index.js"
 compatibility_date = "2024-03-01"
+pages_build_output_dir = "dist"
 routes = [
   { pattern = "www.banjiyangchong.tech/api/*", zone_name = "banjiyangchong.tech" },
 ]

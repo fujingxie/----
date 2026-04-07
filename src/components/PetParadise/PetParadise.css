@@ -485,12 +485,21 @@
 
 .bulk-rule-list,
 .bulk-student-list {
-  display: flex;
-  flex-direction: column;
   gap: 12px;
   max-height: 430px;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+.bulk-rule-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.bulk-student-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-content: start;
 }
 
 .bulk-rule-card,
@@ -511,10 +520,26 @@
   padding: 16px 18px;
 }
 
+.bulk-student-row {
+  min-height: 72px;
+  padding: 14px 12px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
 .bulk-rule-card:hover,
 .bulk-student-row:hover {
   transform: translateY(-1px);
   box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+}
+
+.bulk-student-row.active {
+  border-color: rgba(20, 184, 166, 0.82);
+  box-shadow:
+    0 0 0 2px rgba(45, 212, 191, 0.16),
+    0 14px 24px rgba(20, 184, 166, 0.16);
+  background: rgba(240, 253, 250, 0.96);
 }
 
 .bulk-rule-card.active.positive {
@@ -560,9 +585,12 @@
   font-weight: 700;
 }
 
-.bulk-student-row {
-  justify-content: space-between;
-  padding: 14px 16px;
+.bulk-student-name {
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.35;
+  word-break: break-all;
 }
 
 .bulk-student-row.active {
@@ -751,6 +779,10 @@
 
   .bulk-interaction-shell {
     grid-template-columns: 1fr;
+  }
+
+  .bulk-student-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .bulk-feed-summary,

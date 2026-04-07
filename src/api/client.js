@@ -100,6 +100,24 @@ export const fetchStudentLogs = ({ classId, studentId, limit = 30, offset = 0 })
     method: 'GET',
   });
 
+export const fetchProgressRanking = ({ classId, start, end, limit = 10 }) => {
+  const params = new URLSearchParams({
+    limit: String(limit),
+  });
+
+  if (start) {
+    params.set('start', start);
+  }
+
+  if (end) {
+    params.set('end', end);
+  }
+
+  return request(`/classes/${classId}/progress-ranking?${params.toString()}`, {
+    method: 'GET',
+  });
+};
+
 export const createShopItem = ({ userId, classId, item }) =>
   request(`/classes/${classId}/shop-items`, {
     method: 'POST',

@@ -161,7 +161,7 @@ const PetCard = ({
           </div>
           <div className="reward-count">
             <Star size={16} />
-            <strong>{student.reward_count || 0}</strong>
+            <strong>{student.total_exp || 0}</strong>
           </div>
         </div>
         {!isEgg && (
