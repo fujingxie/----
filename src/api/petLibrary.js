@@ -3,7 +3,6 @@
  * 1. 宠物图片统一放在 /assets/pets/
  * 2. 宠物成长阶段图片命名为 /assets/pets/[id][level].png
  * 3. 例如白猫 1-7 级分别为 /assets/pets/baimao1.png 到 /assets/pets/baimao7.png
- * 4. 恐龙系列同样遵循 1-7 形态命名，例如 /assets/pets/bawanglong1.png 到 /assets/pets/bawanglong7.png
  */
 
 const createPetEntry = (id, name, category = 'animal', options = {}) => ({
@@ -11,7 +10,7 @@ const createPetEntry = (id, name, category = 'animal', options = {}) => ({
   slug: id,
   name,
   category,
-  adoptable: options.adoptable ?? category !== 'dinosaur',
+  adoptable: options.adoptable ?? true,
   icon: `/assets/pets/${id}1.png`,
 });
 
@@ -47,35 +46,20 @@ const BASE_PET_LIBRARY = [
   createPetEntry('xiaoniu', '小牛'),
   createPetEntry('yangtuo', '羊驼'),
   createPetEntry('hashiqi', '哈士奇'),
-  createPetEntry('konglong', '经典恐龙', 'dinosaur'),
   createPetEntry('samoye', '萨摩耶'),
   createPetEntry('xiaohouzi', '小猴子'),
   createPetEntry('xiaoya', '小鸭子'),
   createPetEntry('yingwu', '鹦鹉'),
   createPetEntry('heimao', '黑猫'),
   createPetEntry('lang', '狼'),
+  createPetEntry('konglong', '恐龙'),
   createPetEntry('sanhuamao', '三花猫'),
   createPetEntry('xiaohuanxiong', '小浣熊'),
   createPetEntry('xiaoyang', '小羊'),
   createPetEntry('yinjianceng', '银渐层'),
 ];
 
-export const DINOSAUR_PET_LIBRARY = [
-  createPetEntry('bawanglong', '霸王龙', 'dinosaur'),
-  createPetEntry('sanjiaolong', '三角龙', 'dinosaur'),
-  createPetEntry('jianlong', '剑龙', 'dinosaur'),
-  createPetEntry('wanlong', '腕龙', 'dinosaur'),
-  createPetEntry('jialong', '甲龙', 'dinosaur'),
-  createPetEntry('jilong', '棘龙', 'dinosaur'),
-  createPetEntry('xunmenglong', '迅猛龙', 'dinosaur'),
-  createPetEntry('fuzhilong', '副栉龙', 'dinosaur'),
-  createPetEntry('leilong', '雷龙', 'dinosaur'),
-  createPetEntry('yilong', '翼龙', 'dinosaur'),
-  createPetEntry('yongchuanlong', '永川龙', 'dinosaur'),
-  createPetEntry('liandaolong', '镰刀龙', 'dinosaur'),
-];
-
-export const PET_LIBRARY = [...BASE_PET_LIBRARY, ...DINOSAUR_PET_LIBRARY];
+export const PET_LIBRARY = [...BASE_PET_LIBRARY];
 
 export const ADOPTABLE_PET_LIBRARY = PET_LIBRARY.filter((pet) => pet.adoptable);
 
@@ -86,8 +70,6 @@ export const getPetMeta = (id) => PET_LIBRARY.find((pet) => pet.id === id) || nu
 export const getPetNameById = (id) => getPetMeta(id)?.name || '探索者';
 
 export const getPetsByCategory = (category) => PET_LIBRARY.filter((pet) => pet.category === category);
-
-export const getDinosaurPets = () => getPetsByCategory('dinosaur');
 
 /**
  * 根据宠物 ID 和等级获取动态图片路径
