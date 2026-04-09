@@ -166,19 +166,26 @@ const ClassSettingsPanel = ({
     setSupplementExp(100);
   };
 
+  const [supplementSuccess, setSupplementSuccess] = useState(false);
+
   const handleSubmitSupplement = async () => {
     if (!supplementStudent || !supplementPetTypeId) return;
     const exp = Math.max(0, Number(supplementExp) || 0);
     const updatedStudent = addGraduatedEntry(supplementStudent, {
       petTypeId: supplementPetTypeId,
       petName: supplementPetName,
+      petDefaultName: getPetNameById(supplementPetTypeId),
       exp,
     });
     await onUpdateStudentProfile(supplementStudent, {
       lifetime_exp: updatedStudent.lifetime_exp,
       pet_collection: updatedStudent.pet_collection,
     });
-    closeSupplementModal();
+    setSupplementSuccess(true);
+    setTimeout(() => {
+      closeSupplementModal();
+      setSupplementSuccess(false);
+    }, 1500);
   };
 
   const handleBatchDelete = async () => {
@@ -468,8 +475,13 @@ const ClassSettingsPanel = ({
                 style={{ width: '100%' }}
               />
             </div>
+            {supplementSuccess && (
+              <div style={{ textAlign: 'center', color: 'var(--color-success, #4caf50)', fontWeight: 600, fontSize: '15px' }}>
+                ✅ 补录成功！
+              </div>
+            )}
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <button className="icon-btn" onClick={closeSupplementModal} type="button">取消</button>
+              <button className="confirm-btn" style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'inherit' }} onClick={closeSupplementModal} type="button">取消</button>
               <button className="confirm-btn" onClick={handleSubmitSupplement} type="button">确认补录</button>
             </div>
           </div>
