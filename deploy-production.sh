@@ -130,7 +130,7 @@ else
 fi
 
 if [[ $SKIP_PAGES -eq 0 ]]; then
-  run npx wrangler pages deploy dist --project-name "$PAGES_PROJECT_NAME" --commit-dirty=true
+  run npx wrangler pages deploy dist --project-name "$PAGES_PROJECT_NAME" --branch main --commit-dirty=true
 else
   log "跳过 Pages 前端发布"
 fi

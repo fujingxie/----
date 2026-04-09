@@ -287,7 +287,8 @@ const ClassSettingsPanel = ({
                   <th>宠物名称</th>
                   <th>等级</th>
                   <th>金币</th>
-                  <th>经验</th>
+                  <th>本宠经验</th>
+                  <th>总经验</th>
                   <th className="actions-col">操作</th>
                 </tr>
               </thead>
@@ -355,6 +356,7 @@ const ClassSettingsPanel = ({
                       <td>{student.pet_status === 'egg' ? '-' : `Lv.${student.pet_level || 0}`}</td>
                       <td>💰 {student.coins || 0}</td>
                       <td>⭐ {student.total_exp || 0}</td>
+                      <td>🏆 {student.lifetime_exp || 0}</td>
                       <td className="actions-col">
                         <div className="actions">
                           {isEditing ? (
