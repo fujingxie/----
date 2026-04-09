@@ -12,7 +12,7 @@ const DEFAULT_PET_CONDITION_CONFIG = {
   sleeping_decay: 2,
 };
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
-const STUDENT_SELECT_FIELDS = `id, class_id, name, pet_status, pet_condition, last_fed_at, last_decay_at, pet_condition_locked_at, pet_name, pet_type_id, pet_level, pet_points, coins, total_exp, total_coins, reward_count, pet_collection, created_at`;
+const STUDENT_SELECT_FIELDS = `id, class_id, name, pet_status, pet_condition, last_fed_at, last_decay_at, pet_condition_locked_at, pet_name, pet_type_id, pet_level, pet_points, coins, total_exp, lifetime_exp, total_coins, reward_count, pet_collection, created_at`;
 const FREE_REGISTER_LEVEL_EXPIRES_IN_DAYS = {
   temporary: null,
   vip1: null,
@@ -476,6 +476,7 @@ const normalizeStudent = (row) => ({
   pet_points: Number(row.pet_points || 0),
   coins: Number(row.coins || 0),
   total_exp: Number(row.total_exp || 0),
+  lifetime_exp: Number(row.lifetime_exp || 0),
   total_coins: Number(row.total_coins || 0),
   reward_count: Number(row.reward_count || 0),
   pet_collection: parsePetCollection(row.pet_collection),
@@ -1239,6 +1240,7 @@ async function reconcileStudentConditions(db, classId, userId = null) {
               students.pet_points AS pet_points,
               students.coins AS coins,
               students.total_exp AS total_exp,
+              students.lifetime_exp AS lifetime_exp,
               students.total_coins AS total_coins,
               students.reward_count AS reward_count,
               students.pet_collection AS pet_collection,
@@ -2222,6 +2224,7 @@ async function applyFeedToStudents(db, classId, userId, studentIds, selectedRule
 
     const beforeCondition = derivePetCondition(row);
     const nextTotalExp = Math.max(0, Number(row.total_exp || 0) + interactionRule.exp);
+    const nextLifetimeExp = Number(row.lifetime_exp || 0) + Math.max(0, interactionRule.exp);
     const nextPetPoints = Math.max(0, Number(row.pet_points || 0) + interactionRule.exp);
     const nextCoins = Math.max(0, Number(row.coins || 0) + interactionRule.coins);
     const nextTotalCoins = Math.max(0, Number(row.total_coins || 0) + interactionRule.coins);
@@ -2244,6 +2247,7 @@ async function applyFeedToStudents(db, classId, userId, studentIds, selectedRule
       ...row,
       coins: nextCoins,
       total_exp: nextTotalExp,
+      lifetime_exp: nextLifetimeExp,
       total_coins: nextTotalCoins,
       pet_points: nextPetPoints,
       reward_count: nextRewardCount,
@@ -2267,6 +2271,7 @@ async function applyFeedToStudents(db, classId, userId, studentIds, selectedRule
                pet_points = ?,
                coins = ?,
                total_exp = ?,
+               lifetime_exp = ?,
                total_coins = ?,
                reward_count = ?,
                pet_collection = ?
@@ -2281,6 +2286,7 @@ async function applyFeedToStudents(db, classId, userId, studentIds, selectedRule
           nextPetPoints,
           nextCoins,
           nextTotalExp,
+          nextLifetimeExp,
           nextTotalCoins,
           nextRewardCount,
           JSON.stringify(nextCollection),
@@ -2669,12 +2675,14 @@ async function handleRedeemShopItem(db, request, itemId) {
   const statements = students.map((student) => {
     if (item.item_type === 'exp_pack') {
       const nextTotalExp = Math.max(0, Number(student.total_exp || 0) + rewardExp);
+      const nextLifetimeExp = Number(student.lifetime_exp || 0) + rewardExp;
       const nextPetPoints = Math.max(0, Number(student.pet_points || 0) + rewardExp);
       const nextLevel = resolvePetLevel(nextTotalExp, thresholds);
       const updatedStudent = {
         ...student,
         coins: (student.coins || 0) - Number(item.price || 0),
         total_exp: nextTotalExp,
+        lifetime_exp: nextLifetimeExp,
         pet_points: nextPetPoints,
         pet_level: nextLevel,
         last_fed_at: now,
@@ -2687,12 +2695,13 @@ async function handleRedeemShopItem(db, request, itemId) {
       return db
         .prepare(
           `UPDATE students
-           SET coins = ?, total_exp = ?, pet_points = ?, pet_level = ?, last_fed_at = ?, last_decay_at = ?, pet_condition = 'healthy', pet_condition_locked_at = NULL, pet_collection = ?
+           SET coins = ?, total_exp = ?, lifetime_exp = ?, pet_points = ?, pet_level = ?, last_fed_at = ?, last_decay_at = ?, pet_condition = 'healthy', pet_condition_locked_at = NULL, pet_collection = ?
            WHERE id = ?`,
         )
         .bind(
           updatedStudent.coins,
           nextTotalExp,
+          nextLifetimeExp,
           nextPetPoints,
           nextLevel,
           now,

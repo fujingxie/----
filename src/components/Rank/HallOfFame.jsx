@@ -34,7 +34,7 @@ const HallOfFame = ({ students, currentClass }) => {
     event.currentTarget.src = PET_IMAGE_FALLBACK;
   };
 
-  const petRanking = [...students].sort((a, b) => (b.total_exp || 0) - (a.total_exp || 0));
+  const petRanking = [...students].sort((a, b) => (b.lifetime_exp || 0) - (a.lifetime_exp || 0));
   const coinRanking = [...students].sort((a, b) => (b.coins || 0) - (a.coins || 0));
   const progressRankingResolved = useMemo(
     () =>
@@ -227,7 +227,7 @@ const HallOfFame = ({ students, currentClass }) => {
                           <span className="podium-meta">{renderRankMeta(student)}</span>
                           <span className="podium-score">
                             {activeRank === 'pet'
-                              ? `${student.total_exp || 0} EXP`
+                              ? `${student.lifetime_exp || 0} EXP`
                               : activeRank === 'coin'
                                 ? `💰${student.coins || 0}`
                                 : `${student.totalExpDelta || 0} EXP`}
@@ -264,7 +264,7 @@ const HallOfFame = ({ students, currentClass }) => {
                 </div>
                 <div className="rank-score">
                   {activeRank === 'pet'
-                    ? `${student.total_exp || 0} EXP`
+                    ? `${student.lifetime_exp || 0} EXP`
                     : activeRank === 'coin'
                       ? `💰${student.coins || 0}`
                       : `${student.totalExpDelta || 0} EXP`}
