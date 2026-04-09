@@ -19,7 +19,7 @@ import {
   User,
   Users,
 } from 'lucide-react';
-import { graduateToNewEgg, syncStudentCollectionProgress, addGraduatedEntry } from '../../lib/petCollection';
+import { graduateToNewEgg, syncStudentCollectionProgress, addGraduatedEntry, parsePetCollection } from '../../lib/petCollection';
 import { ADOPTABLE_PET_LIBRARY, getPetNameById } from '../../api/petLibrary';
 import Modal from '../Common/Modal';
 
@@ -289,6 +289,7 @@ const ClassSettingsPanel = ({
                   <th>金币</th>
                   <th>本宠经验</th>
                   <th>总经验</th>
+                  <th>毕业数</th>
                   <th className="actions-col">操作</th>
                 </tr>
               </thead>
@@ -357,6 +358,7 @@ const ClassSettingsPanel = ({
                       <td>💰 {student.coins || 0}</td>
                       <td>⭐ {student.total_exp || 0}</td>
                       <td>🏆 {student.lifetime_exp || 0}</td>
+                      <td>🎓 {parsePetCollection(student.pet_collection, student).filter((e) => e.status === 'graduated').length}</td>
                       <td className="actions-col">
                         <div className="actions">
                           {isEditing ? (
