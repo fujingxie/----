@@ -3,6 +3,7 @@ import './Settings.css';
 import {
   ArrowDown,
   ArrowUp,
+  BookPlus,
   CheckSquare,
   ClipboardList,
   Download,
@@ -18,7 +19,7 @@ import {
   User,
   Users,
 } from 'lucide-react';
-import { graduateToNewEgg, syncStudentCollectionProgress } from '../../lib/petCollection';
+import { graduateToNewEgg, syncStudentCollectionProgress, addGraduatedEntry } from '../../lib/petCollection';
 import { ADOPTABLE_PET_LIBRARY, getPetNameById } from '../../api/petLibrary';
 import Modal from '../Common/Modal';
 
@@ -87,6 +88,10 @@ const ClassSettingsPanel = ({
   const [editingPetName, setEditingPetName] = useState('');
   const [editingPetTypeId, setEditingPetTypeId] = useState('');
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
+  const [supplementStudent, setSupplementStudent] = useState(null);
+  const [supplementPetTypeId, setSupplementPetTypeId] = useState('');
+  const [supplementPetName, setSupplementPetName] = useState('');
+  const [supplementExp, setSupplementExp] = useState(100);
 
   const handleBulkImport = async () => {
     const names = bulkStudentText
@@ -145,6 +150,35 @@ const ClassSettingsPanel = ({
       ...(isNewlyHatched ? { pet_status: 'active' } : {}),
     });
     cancelEditingStudent();
+  };
+
+  const openSupplementModal = (student) => {
+    setSupplementStudent(student);
+    setSupplementPetTypeId(ADOPTABLE_PET_LIBRARY[0]?.id || '');
+    setSupplementPetName('');
+    setSupplementExp(100);
+  };
+
+  const closeSupplementModal = () => {
+    setSupplementStudent(null);
+    setSupplementPetTypeId('');
+    setSupplementPetName('');
+    setSupplementExp(100);
+  };
+
+  const handleSubmitSupplement = async () => {
+    if (!supplementStudent || !supplementPetTypeId) return;
+    const exp = Math.max(0, Number(supplementExp) || 0);
+    const updatedStudent = addGraduatedEntry(supplementStudent, {
+      petTypeId: supplementPetTypeId,
+      petName: supplementPetName,
+      exp,
+    });
+    await onUpdateStudentProfile(supplementStudent, {
+      lifetime_exp: updatedStudent.lifetime_exp,
+      pet_collection: updatedStudent.pet_collection,
+    });
+    closeSupplementModal();
   };
 
   const handleBatchDelete = async () => {
@@ -354,6 +388,14 @@ const ClassSettingsPanel = ({
                                 <RotateCcw size={14} />
                               </button>
                               <button
+                                className="icon-btn green"
+                                onClick={() => openSupplementModal(student)}
+                                type="button"
+                                title="补录毕业宠物"
+                              >
+                                <BookPlus size={14} />
+                              </button>
+                              <button
                                 className="icon-btn red"
                                 onClick={async () => {
                                   const confirmed = await onRequestConfirm({
@@ -383,6 +425,56 @@ const ClassSettingsPanel = ({
           </div>
         )}
       </div>
+
+      {supplementStudent && (
+        <Modal
+          isOpen
+          onClose={closeSupplementModal}
+          title={`补录毕业宠物 — ${supplementStudent.name}`}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '4px 0' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', opacity: 0.7 }}>宠物品种</label>
+              <select
+                className="glass-input"
+                value={supplementPetTypeId}
+                onChange={(e) => setSupplementPetTypeId(e.target.value)}
+                style={{ width: '100%' }}
+              >
+                {ADOPTABLE_PET_LIBRARY.map((pet) => (
+                  <option key={pet.id} value={pet.id}>{pet.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', opacity: 0.7 }}>宠物名字（选填，默认用品种名）</label>
+              <input
+                className="glass-input"
+                type="text"
+                placeholder={getPetNameById(supplementPetTypeId) || '宠物名字'}
+                value={supplementPetName}
+                onChange={(e) => setSupplementPetName(e.target.value)}
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', opacity: 0.7 }}>补录经验值（累加到历史总经验）</label>
+              <input
+                className="glass-input"
+                type="number"
+                min="0"
+                value={supplementExp}
+                onChange={(e) => setSupplementExp(e.target.value)}
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button className="icon-btn" onClick={closeSupplementModal} type="button">取消</button>
+              <button className="confirm-btn" onClick={handleSubmitSupplement} type="button">确认补录</button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   );
 };
