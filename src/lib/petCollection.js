@@ -127,6 +127,29 @@ export const syncStudentCollectionProgress = (student) => {
 
 export const isStudentSleeping = (student) => student?.pet_status !== 'egg' && student?.pet_condition === 'sleeping';
 
+// 补录一条已毕业宠物记录，并累加 lifetime_exp（不影响当前宠物状态）
+export const addGraduatedEntry = (student, { petTypeId, petName, petDefaultName, exp }) => {
+  const collection = parsePetCollection(student?.pet_collection, student);
+  const completedAt = nowIso();
+  const resolvedName = (petName || '').trim() || petDefaultName || petTypeId;
+
+  const newEntry = {
+    id: createCollectionId(student?.id),
+    pet_type_id: petTypeId,
+    pet_name: resolvedName,
+    pet_level: 7,
+    adopted_at: completedAt,
+    completed_at: completedAt,
+    status: 'graduated',
+  };
+
+  return {
+    ...student,
+    lifetime_exp: Number(student.lifetime_exp || 0) + Number(exp || 0),
+    pet_collection: [...collection, newEntry],
+  };
+};
+
 export const graduateToNewEgg = (student) => {
   const collection = parsePetCollection(student?.pet_collection, student);
   const nextCollection = [...collection];

@@ -2099,10 +2099,12 @@ async function handleUpdateStudent(db, request, studentId) {
   const nextTotalExp = Math.max(0, Number(updates.total_exp ?? currentStudent.total_exp ?? 0));
   const prevTotalExp = Number(currentStudent.total_exp || 0);
   const prevLifetimeExp = Number(currentStudent.lifetime_exp || 0);
-  // total_exp 增加时才累加 lifetime_exp（毕业归零不影响）
-  const nextLifetimeExp = nextTotalExp > prevTotalExp
-    ? prevLifetimeExp + (nextTotalExp - prevTotalExp)
-    : prevLifetimeExp;
+  // 若前端明确传入 lifetime_exp（如补录场景），直接取较大值；否则按 total_exp 增量累加
+  const nextLifetimeExp = updates.lifetime_exp !== undefined
+    ? Math.max(prevLifetimeExp, Number(updates.lifetime_exp || 0))
+    : nextTotalExp > prevTotalExp
+      ? prevLifetimeExp + (nextTotalExp - prevTotalExp)
+      : prevLifetimeExp;
 
   const nextStudent = {
     name: nextName,
