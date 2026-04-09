@@ -2096,6 +2096,14 @@ async function handleUpdateStudent(db, request, studentId) {
     return error('学生姓名不能为空');
   }
 
+  const nextTotalExp = Math.max(0, Number(updates.total_exp ?? currentStudent.total_exp ?? 0));
+  const prevTotalExp = Number(currentStudent.total_exp || 0);
+  const prevLifetimeExp = Number(currentStudent.lifetime_exp || 0);
+  // total_exp 增加时才累加 lifetime_exp（毕业归零不影响）
+  const nextLifetimeExp = nextTotalExp > prevTotalExp
+    ? prevLifetimeExp + (nextTotalExp - prevTotalExp)
+    : prevLifetimeExp;
+
   const nextStudent = {
     name: nextName,
     pet_status: String(updates.pet_status ?? currentStudent.pet_status ?? 'egg'),
@@ -2108,7 +2116,8 @@ async function handleUpdateStudent(db, request, studentId) {
     pet_level: Math.max(0, Number(updates.pet_level ?? currentStudent.pet_level ?? 0)),
     pet_points: Math.max(0, Number(updates.pet_points ?? currentStudent.pet_points ?? 0)),
     coins: Math.max(0, Number(updates.coins ?? currentStudent.coins ?? 0)),
-    total_exp: Math.max(0, Number(updates.total_exp ?? currentStudent.total_exp ?? 0)),
+    total_exp: nextTotalExp,
+    lifetime_exp: nextLifetimeExp,
     total_coins: Math.max(0, Number(updates.total_coins ?? currentStudent.total_coins ?? 0)),
     reward_count: Math.max(0, Number(updates.reward_count ?? currentStudent.reward_count ?? 0)),
     pet_collection: parsePetCollection(updates.pet_collection ?? currentStudent.pet_collection ?? '[]'),
@@ -2135,7 +2144,7 @@ async function handleUpdateStudent(db, request, studentId) {
   await db
     .prepare(
       `UPDATE students
-       SET name = ?, pet_status = ?, pet_condition = ?, last_fed_at = ?, last_decay_at = ?, pet_condition_locked_at = ?, pet_name = ?, pet_type_id = ?, pet_level = ?, pet_points = ?, coins = ?, total_exp = ?, total_coins = ?, reward_count = ?, pet_collection = ?
+       SET name = ?, pet_status = ?, pet_condition = ?, last_fed_at = ?, last_decay_at = ?, pet_condition_locked_at = ?, pet_name = ?, pet_type_id = ?, pet_level = ?, pet_points = ?, coins = ?, total_exp = ?, lifetime_exp = ?, total_coins = ?, reward_count = ?, pet_collection = ?
        WHERE id = ?`,
     )
     .bind(
@@ -2151,6 +2160,7 @@ async function handleUpdateStudent(db, request, studentId) {
       nextStudent.pet_points,
       nextStudent.coins,
       nextStudent.total_exp,
+      nextStudent.lifetime_exp,
       nextStudent.total_coins,
       nextStudent.reward_count,
       JSON.stringify(nextStudent.pet_collection),
