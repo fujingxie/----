@@ -2035,6 +2035,11 @@ async function handleBatchDeleteStudents(db, request, classId) {
   }
 
   await db
+    .prepare(`DELETE FROM student_logs WHERE student_id IN (${placeholders})`)
+    .bind(...studentIds)
+    .run();
+
+  await db
     .prepare(`DELETE FROM students WHERE class_id = ? AND id IN (${placeholders})`)
     .bind(classId, ...studentIds)
     .run();
@@ -2073,6 +2078,7 @@ async function handleUpdateStudent(db, request, studentId) {
   }
 
   if (updates.archived) {
+    await db.prepare('DELETE FROM student_logs WHERE student_id = ?').bind(studentId).run();
     await db.prepare('DELETE FROM students WHERE id = ?').bind(studentId).run();
 
     if (body.actionType && body.detail) {
@@ -3304,6 +3310,7 @@ async function handleArchiveClassStudents(db, request, classId) {
     return error('当前班级没有可归档的学生');
   }
 
+  await db.prepare('DELETE FROM student_logs WHERE class_id = ?').bind(classId).run();
   await db.prepare('DELETE FROM students WHERE class_id = ?').bind(classId).run();
   await appendLog(db, {
     classId,
