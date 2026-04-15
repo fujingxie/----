@@ -2106,11 +2106,14 @@ async function handleUpdateStudent(db, request, studentId) {
   const prevTotalExp = Number(currentStudent.total_exp || 0);
   const prevLifetimeExp = Number(currentStudent.lifetime_exp || 0);
   // 若前端明确传入 lifetime_exp（如补录场景），直接取较大值；否则按 total_exp 增量累加
+  // 优先用 total_exp 增量来累加 lifetime_exp（覆盖正常互动场景）
+  // 仅当前端明确传入更高的 lifetime_exp 时才采纳（补录场景）
+  const deltaLifetimeExp = nextTotalExp > prevTotalExp
+    ? prevLifetimeExp + (nextTotalExp - prevTotalExp)
+    : prevLifetimeExp;
   const nextLifetimeExp = updates.lifetime_exp !== undefined
-    ? Math.max(prevLifetimeExp, Number(updates.lifetime_exp || 0))
-    : nextTotalExp > prevTotalExp
-      ? prevLifetimeExp + (nextTotalExp - prevTotalExp)
-      : prevLifetimeExp;
+    ? Math.max(deltaLifetimeExp, Number(updates.lifetime_exp || 0))
+    : deltaLifetimeExp;
 
   const nextStudent = {
     name: nextName,
