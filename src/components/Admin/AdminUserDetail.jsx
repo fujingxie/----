@@ -5,6 +5,7 @@ import {
   fetchAdminClassSettings,
   fetchAdminClassStudents,
   fetchAdminUserClasses,
+  fetchAdminStudentLogs,
   updateAdminStudent,
 } from '../../api/client';
 
@@ -24,6 +25,14 @@ const AdminUserDetail = ({ user, adminId, onBack }) => {
   const [searchName, setSearchName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // 日志弹框状态
+  const [logStudent, setLogStudent] = useState(null);
+  const [studentLogs, setStudentLogs] = useState([]);
+  const [logsTotal, setLogsTotal] = useState(0);
+  const [logsOffset, setLogsOffset] = useState(0);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const LOGS_PAGE_SIZE = 30;
 
   // 编辑弹框状态
   const [editingStudent, setEditingStudent] = useState(null);
@@ -79,6 +88,41 @@ const AdminUserDetail = ({ user, adminId, onBack }) => {
     () => [...students].sort((a, b) => (b.lifetime_exp || 0) - (a.lifetime_exp || 0)).slice(0, 10),
     [students],
   );
+
+  // 打开日志弹框
+  const openLogs = async (student) => {
+    setLogStudent(student);
+    setStudentLogs([]);
+    setLogsTotal(0);
+    setLogsOffset(0);
+    setIsLoadingLogs(true);
+    try {
+      const res = await fetchAdminStudentLogs({ adminId, studentId: student.id, limit: LOGS_PAGE_SIZE, offset: 0 });
+      setStudentLogs(res.logs || []);
+      setLogsTotal(res.total || 0);
+      setLogsOffset(LOGS_PAGE_SIZE);
+    } catch (e) {
+      setErrorMsg(e.message);
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
+  const loadMoreLogs = async () => {
+    if (!logStudent || isLoadingLogs) return;
+    setIsLoadingLogs(true);
+    try {
+      const res = await fetchAdminStudentLogs({ adminId, studentId: logStudent.id, limit: LOGS_PAGE_SIZE, offset: logsOffset });
+      setStudentLogs((prev) => [...prev, ...(res.logs || [])]);
+      setLogsOffset((prev) => prev + LOGS_PAGE_SIZE);
+    } catch (e) {
+      setErrorMsg(e.message);
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
+  const closeLogs = () => setLogStudent(null);
 
   // 打开编辑弹框
   const openEdit = (student) => {
@@ -251,13 +295,23 @@ const AdminUserDetail = ({ user, adminId, onBack }) => {
                   <td>⭐ {s.total_exp || 0}</td>
                   <td>🏆 {s.lifetime_exp || 0}</td>
                   <td>
-                    <button
-                      className="confirm-btn micro"
-                      onClick={() => openEdit(s)}
-                      type="button"
-                    >
-                      编辑经验
-                    </button>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      <button
+                        className="confirm-btn micro"
+                        onClick={() => openEdit(s)}
+                        type="button"
+                      >
+                        编辑经验
+                      </button>
+                      <button
+                        className="confirm-btn micro"
+                        onClick={() => openLogs(s)}
+                        type="button"
+                        style={{ background: 'rgba(99,102,241,0.12)', color: '#6366f1' }}
+                      >
+                        查看日志
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -265,6 +319,57 @@ const AdminUserDetail = ({ user, adminId, onBack }) => {
           </table>
         )}
       </div>
+
+      {/* 日志弹框 */}
+      {logStudent && (
+        <div className="modal-overlay" onClick={closeLogs}>
+          <div className="modal-content glass-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <h3 style={{ margin: 0 }}>加减分日志 — {logStudent.name}</h3>
+              <button className="icon-btn" onClick={closeLogs} type="button">✕</button>
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {studentLogs.length === 0 && !isLoadingLogs ? (
+                <div className="aud-empty">暂无日志记录</div>
+              ) : (
+                <table className="aud-table">
+                  <thead>
+                    <tr>
+                      <th>时间</th>
+                      <th>规则</th>
+                      <th>经验变化</th>
+                      <th>变化后经验</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {studentLogs.map((log) => (
+                      <tr key={log.id}>
+                        <td style={{ whiteSpace: 'nowrap', fontSize: 12, opacity: 0.6 }}>
+                          {new Date(log.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td>
+                          <span>{log.ruleIcon} {log.ruleName}</span>
+                        </td>
+                        <td style={{ fontWeight: 600, color: log.expDelta > 0 ? '#22c55e' : log.expDelta < 0 ? '#f87171' : undefined }}>
+                          {log.expDelta > 0 ? `+${log.expDelta}` : log.expDelta}
+                        </td>
+                        <td>{log.expAfter}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {isLoadingLogs && <div className="aud-loading">加载中...</div>}
+              {!isLoadingLogs && studentLogs.length < logsTotal && (
+                <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                  <button className="confirm-btn micro" onClick={loadMoreLogs} type="button">加载更多</button>
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: 12, opacity: 0.4, marginTop: 10 }}>共 {logsTotal} 条记录</div>
+          </div>
+        </div>
+      )}
 
       {/* 编辑弹框 */}
       {editingStudent && (

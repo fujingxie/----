@@ -3537,6 +3537,25 @@ async function handleAdminGetClassSettings(db, request, classId) {
   return json({ level_thresholds: thresholds });
 }
 
+async function handleAdminGetStudentLogs(db, request, studentId) {
+  const url = new URL(request.url);
+  const adminId = parseId(url.searchParams.get('adminId'));
+  if (!adminId) return error('缺少有效的超管身份');
+  await assertSuperAdmin(db, adminId);
+
+  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit')) || 30));
+  const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
+
+  const student = await db
+    .prepare('SELECT id, class_id FROM students WHERE id = ?')
+    .bind(studentId)
+    .first();
+  if (!student) return error('学生不存在');
+
+  const { logs, total } = await getStudentLogsByStudentId(db, student.class_id, studentId, limit, offset);
+  return json({ logs, total, hasMore: offset + logs.length < total });
+}
+
 async function handleAdminUpdateStudent(db, request, studentId) {
   const body = await readBody(request);
   const adminId = parseId(body.adminId);
@@ -4489,6 +4508,11 @@ export default {
       const adminStudentMatch = path.match(/^\/api\/admin\/students\/(\d+)$/);
       if (adminStudentMatch && request.method === 'PATCH') {
         return await handleAdminUpdateStudent(db, request, Number(adminStudentMatch[1]));
+      }
+
+      const adminStudentLogsMatch = path.match(/^\/api\/admin\/students\/(\d+)\/logs$/);
+      if (adminStudentLogsMatch && request.method === 'GET') {
+        return await handleAdminGetStudentLogs(db, request, Number(adminStudentLogsMatch[1]));
       }
 
       const adminRegisterChannelMatch = path.match(/^\/api\/admin\/register-channels\/(\d+)$/);

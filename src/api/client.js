@@ -300,3 +300,6 @@ export const updateAdminStudent = ({ adminId, studentId, totalExp, lifetimeExp }
     method: 'PATCH',
     body: JSON.stringify({ adminId, total_exp: totalExp, lifetime_exp: lifetimeExp }),
   });
+
+export const fetchAdminStudentLogs = ({ adminId, studentId, limit = 30, offset = 0 }) =>
+  request(`/admin/students/${studentId}/logs?adminId=${adminId}&limit=${limit}&offset=${offset}`);
