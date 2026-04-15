@@ -1856,6 +1856,7 @@ function App() {
 
           {activeTab === 'admin' && isSuperAdmin && (
             <AdminConsole
+              currentUser={user}
               users={adminUsers}
               activationCodes={adminCodes}
               adminLogs={adminLogs}

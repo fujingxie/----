@@ -3485,6 +3485,105 @@ async function handleListActivationCodes(db, request) {
   });
 }
 
+async function handleAdminGetUserClasses(db, request, targetUserId) {
+  const url = new URL(request.url);
+  const adminId = parseId(url.searchParams.get('adminId'));
+  if (!adminId) return error('缺少有效的超管身份');
+  await assertSuperAdmin(db, adminId);
+
+  const result = await db
+    .prepare(`
+      SELECT c.id, c.name, c.created_at,
+             COUNT(s.id) AS student_count
+      FROM classes c
+      LEFT JOIN students s ON s.class_id = c.id
+      WHERE c.user_id = ?
+      GROUP BY c.id
+      ORDER BY c.created_at DESC
+    `)
+    .bind(targetUserId)
+    .all();
+
+  return json({ classes: result.results || [] });
+}
+
+async function handleAdminGetClassStudents(db, request, classId) {
+  const url = new URL(request.url);
+  const adminId = parseId(url.searchParams.get('adminId'));
+  if (!adminId) return error('缺少有效的超管身份');
+  await assertSuperAdmin(db, adminId);
+
+  const result = await db
+    .prepare(`SELECT ${STUDENT_SELECT_FIELDS} FROM students WHERE class_id = ? ORDER BY name ASC`)
+    .bind(classId)
+    .all();
+
+  const students = (result.results || []).map((row) => {
+    const normalized = normalizeStudent(row);
+    const graduated_count = normalized.pet_collection.filter((e) => e.status === 'graduated').length;
+    return { ...normalized, graduated_count };
+  });
+
+  return json({ students });
+}
+
+async function handleAdminGetClassSettings(db, request, classId) {
+  const url = new URL(request.url);
+  const adminId = parseId(url.searchParams.get('adminId'));
+  if (!adminId) return error('缺少有效的超管身份');
+  await assertSuperAdmin(db, adminId);
+
+  const thresholds = await getThresholdsByClassId(db, classId);
+  return json({ level_thresholds: thresholds });
+}
+
+async function handleAdminUpdateStudent(db, request, studentId) {
+  const body = await readBody(request);
+  const adminId = parseId(body.adminId);
+  if (!adminId) return error('缺少有效的超管身份');
+  const admin = await assertSuperAdmin(db, adminId);
+
+  const student = await db
+    .prepare(`SELECT ${STUDENT_SELECT_FIELDS} FROM students WHERE id = ?`)
+    .bind(studentId)
+    .first();
+
+  if (!student) return error('学生不存在');
+
+  const prevTotalExp = Number(student.total_exp || 0);
+  const prevLifetimeExp = Number(student.lifetime_exp || 0);
+  const nextTotalExp = Math.max(0, Number(body.total_exp ?? prevTotalExp));
+  const nextLifetimeExp = Math.max(nextTotalExp, Math.max(0, Number(body.lifetime_exp ?? prevLifetimeExp)));
+
+  const thresholds = await getThresholdsByClassId(db, student.class_id);
+  const nextLevel = resolvePetLevel(nextTotalExp, thresholds);
+  const nextPetPoints = nextTotalExp;
+
+  await db
+    .prepare(`UPDATE students SET total_exp = ?, lifetime_exp = ?, pet_level = ?, pet_points = ? WHERE id = ?`)
+    .bind(nextTotalExp, nextLifetimeExp, nextLevel, nextPetPoints, studentId)
+    .run();
+
+  await appendAdminLog(db, {
+    userId: adminId,
+    actionType: '学生管理',
+    detail: `超管 ${admin.nickname || admin.username} 修改学生「${student.name}」经验：本宠经验 ${prevTotalExp} → ${nextTotalExp}，累积经验 ${prevLifetimeExp} → ${nextLifetimeExp}`,
+  });
+
+  const updated = await db
+    .prepare(`SELECT ${STUDENT_SELECT_FIELDS} FROM students WHERE id = ?`)
+    .bind(studentId)
+    .first();
+
+  const normalized = normalizeStudent(updated);
+  return json({
+    student: {
+      ...normalized,
+      graduated_count: normalized.pet_collection.filter((e) => e.status === 'graduated').length,
+    },
+  });
+}
+
 async function handleListAdminUsers(db, request) {
   const url = new URL(request.url);
   const userId = parseId(url.searchParams.get('userId'));
@@ -4370,6 +4469,26 @@ export default {
       const adminUserMatch = path.match(/^\/api\/admin\/users\/(\d+)$/);
       if (adminUserMatch && request.method === 'PATCH') {
         return await handleUpdateAdminUser(db, request, Number(adminUserMatch[1]));
+      }
+
+      const adminUserClassesMatch = path.match(/^\/api\/admin\/users\/(\d+)\/classes$/);
+      if (adminUserClassesMatch && request.method === 'GET') {
+        return await handleAdminGetUserClasses(db, request, Number(adminUserClassesMatch[1]));
+      }
+
+      const adminClassStudentsMatch = path.match(/^\/api\/admin\/classes\/(\d+)\/students$/);
+      if (adminClassStudentsMatch && request.method === 'GET') {
+        return await handleAdminGetClassStudents(db, request, Number(adminClassStudentsMatch[1]));
+      }
+
+      const adminClassSettingsMatch = path.match(/^\/api\/admin\/classes\/(\d+)\/settings$/);
+      if (adminClassSettingsMatch && request.method === 'GET') {
+        return await handleAdminGetClassSettings(db, request, Number(adminClassSettingsMatch[1]));
+      }
+
+      const adminStudentMatch = path.match(/^\/api\/admin\/students\/(\d+)$/);
+      if (adminStudentMatch && request.method === 'PATCH') {
+        return await handleAdminUpdateStudent(db, request, Number(adminStudentMatch[1]));
       }
 
       const adminRegisterChannelMatch = path.match(/^\/api\/admin\/register-channels\/(\d+)$/);

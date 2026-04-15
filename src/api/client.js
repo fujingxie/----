@@ -285,3 +285,18 @@ export const updateAdminCode = ({ userId, codeId, updates }) =>
     method: 'PATCH',
     body: JSON.stringify({ userId, updates }),
   });
+
+export const fetchAdminUserClasses = ({ adminId, userId }) =>
+  request(`/admin/users/${userId}/classes?adminId=${adminId}`);
+
+export const fetchAdminClassStudents = ({ adminId, classId }) =>
+  request(`/admin/classes/${classId}/students?adminId=${adminId}`);
+
+export const fetchAdminClassSettings = ({ adminId, classId }) =>
+  request(`/admin/classes/${classId}/settings?adminId=${adminId}`);
+
+export const updateAdminStudent = ({ adminId, studentId, totalExp, lifetimeExp }) =>
+  request(`/admin/students/${studentId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ adminId, total_exp: totalExp, lifetime_exp: lifetimeExp }),
+  });

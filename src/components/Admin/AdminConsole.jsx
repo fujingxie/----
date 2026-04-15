@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import './AdminConsole.css';
 import { ArrowDownUp, CheckSquare, ChevronDown, Copy, Download, History, KeyRound, Shield, Square, Ticket, Users, X } from 'lucide-react';
+import AdminUserDetail from './AdminUserDetail';
 
 const EMPTY_CODE_FORM = {
   code: '',
@@ -204,6 +205,7 @@ function CollapsiblePanel({ title, description, defaultOpen = false, children })
 }
 
 function AdminConsole({
+  currentUser,
   users,
   activationCodes,
   adminLogs,
@@ -235,6 +237,7 @@ function AdminConsole({
   const [codeLevelFilter, setCodeLevelFilter] = useState('all');
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [selectedCodeId, setSelectedCodeId] = useState(null);
+  const [adminDetailUser, setAdminDetailUser] = useState(null);
   const [userDraft, setUserDraft] = useState(null);
   const [codeDraft, setCodeDraft] = useState(null);
   const [passwordDraft, setPasswordDraft] = useState('');
@@ -810,6 +813,16 @@ function AdminConsole({
       </section>
     );
   };
+
+  if (adminDetailUser) {
+    return (
+      <AdminUserDetail
+        user={adminDetailUser}
+        adminId={currentUser?.id}
+        onBack={() => setAdminDetailUser(null)}
+      />
+    );
+  }
 
   return (
     <div className="admin-console">
@@ -1419,6 +1432,7 @@ function AdminConsole({
                   <th>{renderSortButton('同IP账号', userSort, setUserSort, 'same_ip_count')}</th>
                   <th>{renderSortButton('状态', userSort, setUserSort, 'status')}</th>
                   <th>{renderSortButton('到期', userSort, setUserSort, 'expire_at')}</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -1447,6 +1461,15 @@ function AdminConsole({
                       <td title={String(item.same_ip_count || 0)}><span className="admin-cell admin-cell-nowrap">{item.same_ip_count || 0}</span></td>
                       <td title={getUserStatusLabel(item.status || 'active')}><span className="admin-cell admin-cell-nowrap">{getUserStatusLabel(item.status || 'active')}</span></td>
                       <td title={item.expire_at || '长期有效'}><span className="admin-cell admin-cell-nowrap">{item.expire_at ? formatDateTime(item.expire_at) : '长期有效'}</span></td>
+                      <td onClick={(event) => event.stopPropagation()}>
+                        <button
+                          className="confirm-btn micro"
+                          type="button"
+                          onClick={(event) => { event.stopPropagation(); setAdminDetailUser(item); }}
+                        >
+                          学生管理
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
