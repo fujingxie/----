@@ -1,8 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Bell,
   Briefcase,
   ChevronDown,
   Gamepad2,
+  HelpCircle,
   LogOut,
   Plus,
   Settings as SettingsIcon,
@@ -10,7 +12,10 @@ import {
   ShoppingBag,
   Trophy,
   Users,
+  X,
 } from 'lucide-react';
+import DOMPurify from 'dompurify';
+import UserGuide from './components/Common/UserGuide';
 import Login from './components/Login/Login';
 import Modal from './components/Common/Modal';
 import PetParadise from './components/PetParadise/PetParadise';
@@ -63,7 +68,16 @@ import {
   updateClass,
   updateStudent,
   updateThresholds,
+  fetchNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  fetchMyFeedback,
+  fetchFeedbackDetail,
+  replyFeedback,
 } from './api/client';
+import FeedbackList from './components/Feedback/FeedbackList';
+import FeedbackForm from './components/Feedback/FeedbackForm';
+import FeedbackDetail from './components/Feedback/FeedbackDetail';
 import './App.css';
 
 const DEFAULT_LEVEL_THRESHOLDS = [10, 20, 30, 50, 70, 100];
@@ -230,6 +244,22 @@ function App() {
     updated_at: null,
   });
   const [toolboxAccessConfig, setToolboxAccessConfig] = useState(DEFAULT_TOOLBOX_ACCESS);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const [selectedNotif, setSelectedNotif] = useState(null);
+  const notifPanelRef = useRef(null);
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  // 反馈工单（教师端）
+  const [notifTab, setNotifTab] = useState('notif'); // 'notif' | 'feedback'
+  const [myFeedbacks, setMyFeedbacks] = useState([]);
+  const [feedbackUnread, setFeedbackUnread] = useState(0);
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+  const [selectedFeedbackTicket, setSelectedFeedbackTicket] = useState(null);
+  const [feedbackDetailMessages, setFeedbackDetailMessages] = useState([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackDetailError, setFeedbackDetailError] = useState('');
+
   const [confirmState, setConfirmState] = useState({
     isOpen: false,
     title: '',
@@ -376,6 +406,143 @@ function App() {
 
     restoreSession();
   }, [loadDashboard, persistSession]);
+
+  // 加载通知 + 反馈列表
+  const loadMyFeedback = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      setFeedbackLoading(true);
+      const res = await fetchMyFeedback({ userId: user.id });
+      setMyFeedbacks(res?.tickets || []);
+      setFeedbackUnread(res?.unread_count || 0);
+    } catch (e) {
+      console.error('[DEBUG] fetchMyFeedback failed:', e);
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setNotifications([]);
+      setUnreadCount(0);
+      setMyFeedbacks([]);
+      setFeedbackUnread(0);
+      return;
+    }
+    fetchNotifications({ userId: user.id })
+      .then((res) => {
+        setNotifications(res.notifications || []);
+        setUnreadCount(res.unread_count || 0);
+      })
+      .catch(() => {});
+    loadMyFeedback();
+  }, [user?.id, loadMyFeedback]);
+
+  const handleMarkRead = useCallback(async (notif) => {
+    if (notif.is_read) return;
+    try {
+      await markNotificationRead({ userId: user.id, notificationId: notif.id });
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n)),
+      );
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    } catch {
+      // silent
+    }
+  }, [user?.id]);
+
+  const handleMarkAllRead = useCallback(async () => {
+    if (!user?.id || unreadCount === 0) return;
+    try {
+      await markAllNotificationsRead({ userId: user.id });
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      setUnreadCount(0);
+    } catch {
+      // silent
+    }
+  }, [user?.id, unreadCount]);
+
+  const handleOpenNotif = useCallback((notif) => {
+    setSelectedNotif(notif);
+    setShowNotifPanel(false);
+    if (!notif.is_read) handleMarkRead(notif);
+  }, [handleMarkRead]);
+
+  // ─── 反馈工单 ───────────────────────────────────────
+  const handleOpenFeedbackTicket = useCallback(async (ticket) => {
+    if (!user?.id) return;
+    try {
+      setShowNotifPanel(false);
+      setFeedbackDetailError('');
+      setSelectedFeedbackTicket(ticket);
+      setFeedbackDetailMessages([]);
+      const detail = await fetchFeedbackDetail({ userId: user.id, ticketId: ticket.id });
+      setSelectedFeedbackTicket(detail.ticket);
+      setFeedbackDetailMessages(detail.messages || []);
+      // 本地清除该工单的未读标记
+      setMyFeedbacks((prev) =>
+        prev.map((t) => (t.id === ticket.id ? { ...t, user_has_unread_reply: false } : t)),
+      );
+      if (ticket.user_has_unread_reply) {
+        setFeedbackUnread((prev) => Math.max(0, prev - 1));
+      }
+    } catch (e) {
+      console.error('[DEBUG] fetchFeedbackDetail failed:', e);
+      setFeedbackDetailError(e?.message || '加载详情失败');
+    }
+  }, [user?.id]);
+
+  const handleCloseFeedbackDetail = useCallback(() => {
+    setSelectedFeedbackTicket(null);
+    setFeedbackDetailMessages([]);
+    setFeedbackDetailError('');
+    // 刷新列表，拿到最新的消息数 / 更新时间
+    loadMyFeedback();
+  }, [loadMyFeedback]);
+
+  const handleReplyFeedback = useCallback(async ({ content, imageData }) => {
+    if (!user?.id || !selectedFeedbackTicket) return;
+    await replyFeedback({
+      userId: user.id,
+      ticketId: selectedFeedbackTicket.id,
+      content,
+      imageData,
+    });
+    // 重新加载详情以显示新消息
+    const detail = await fetchFeedbackDetail({
+      userId: user.id,
+      ticketId: selectedFeedbackTicket.id,
+    });
+    setSelectedFeedbackTicket(detail.ticket);
+    setFeedbackDetailMessages(detail.messages || []);
+  }, [user?.id, selectedFeedbackTicket]);
+
+  const handleOpenFeedbackForm = useCallback(() => {
+    setShowHelpModal(false);
+    setShowNotifPanel(false);
+    setShowFeedbackForm(true);
+  }, []);
+
+  const handleFeedbackCreated = useCallback(() => {
+    setShowFeedbackForm(false);
+    setNotifTab('feedback');
+    loadMyFeedback();
+  }, [loadMyFeedback]);
+
+  const totalUnreadBadge = unreadCount + feedbackUnread;
+
+  // 点击通知面板外部关闭
+  useEffect(() => {
+    if (!showNotifPanel) return;
+    const handler = (e) => {
+      if (notifPanelRef.current && !notifPanelRef.current.contains(e.target)) {
+        setShowNotifPanel(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showNotifPanel]);
 
   useEffect(() => {
     const loadFreeRegisterConfig = async () => {
@@ -1747,6 +1914,96 @@ function App() {
           <div className="status-chip">
             {isLoadingClassData ? '同步中...' : isMutating ? '保存中...' : currentClass ? '已连接云端' : '等待建班'}
           </div>
+
+          {/* 使用说明按钮 */}
+          <button
+            className="notif-bell-btn help-btn"
+            onClick={() => setShowHelpModal(true)}
+            type="button"
+            title="使用说明"
+          >
+            <HelpCircle size={18} />
+          </button>
+
+          {/* 通知铃铛 */}
+          <div className="notif-bell-wrap" ref={notifPanelRef}>
+            <button
+              className="notif-bell-btn"
+              onClick={() => setShowNotifPanel((prev) => !prev)}
+              type="button"
+              title="通知"
+            >
+              <Bell size={18} />
+              {totalUnreadBadge > 0 && (
+                <span className="notif-badge">{totalUnreadBadge > 99 ? '99+' : totalUnreadBadge}</span>
+              )}
+            </button>
+
+            {showNotifPanel && (
+              <div className="notif-panel glass-card">
+                <div className="notif-panel-tabs">
+                  <button
+                    type="button"
+                    className={`notif-panel-tab ${notifTab === 'notif' ? 'active' : ''}`}
+                    onClick={() => setNotifTab('notif')}
+                  >
+                    系统通知{unreadCount > 0 ? ` (${unreadCount})` : ''}
+                  </button>
+                  <button
+                    type="button"
+                    className={`notif-panel-tab ${notifTab === 'feedback' ? 'active' : ''}`}
+                    onClick={() => setNotifTab('feedback')}
+                  >
+                    我的反馈{feedbackUnread > 0 ? ` (${feedbackUnread})` : ''}
+                  </button>
+                </div>
+
+                {notifTab === 'notif' ? (
+                  <>
+                    <div className="notif-panel-header">
+                      <strong>通知</strong>
+                      {unreadCount > 0 && (
+                        <button className="notif-mark-all" onClick={handleMarkAllRead} type="button">
+                          全部已读
+                        </button>
+                      )}
+                    </div>
+                    <div className="notif-panel-list">
+                      {notifications.length === 0 ? (
+                        <div className="notif-empty">暂无通知</div>
+                      ) : (
+                        notifications.map((n) => (
+                          <button
+                            key={n.id}
+                            className={`notif-item ${n.is_read ? '' : 'unread'}`}
+                            onClick={() => handleOpenNotif(n)}
+                            type="button"
+                          >
+                            <div className="notif-item-top">
+                              <span className="notif-item-title">{n.title}</span>
+                            </div>
+                            <span className="notif-item-time">
+                              {new Date(n.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="notif-panel-feedback">
+                    <FeedbackList
+                      tickets={myFeedbacks}
+                      loading={feedbackLoading}
+                      onSelect={handleOpenFeedbackTicket}
+                      onCreate={handleOpenFeedbackForm}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="user-profile">
             <span className="user-name">{user.nickname}</span>
             <span className="user-level">{membershipLabel}</span>
@@ -1756,6 +2013,124 @@ function App() {
           </div>
         </div>
       </nav>
+
+      {/* 通知详情弹框 */}
+      {selectedNotif && (
+        <div className="modal-overlay" onClick={() => setSelectedNotif(null)}>
+          <div className="notif-detail-modal glass-card" onClick={(e) => e.stopPropagation()}>
+            <div className="notif-detail-header">
+              <h3>{selectedNotif.title}</h3>
+              <button className="icon-btn" onClick={() => setSelectedNotif(null)} type="button">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="notif-detail-meta">
+              <span className="notif-detail-time">
+                {new Date(selectedNotif.created_at).toLocaleString('zh-CN')}
+              </span>
+            </div>
+            <div className="notif-detail-body">
+              {selectedNotif.type === 'image' && selectedNotif.image_url && (
+                <img
+                  src={selectedNotif.image_url}
+                  alt={selectedNotif.title}
+                  className="notif-detail-img"
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+              )}
+              {selectedNotif.type === 'html' && selectedNotif.html_content ? (
+                <div
+                  className="notif-html-content"
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(selectedNotif.html_content) }}
+                />
+              ) : null}
+              {selectedNotif.type !== 'html' && selectedNotif.content && (
+                <p className="notif-text-content">{selectedNotif.content}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 使用说明弹框 */}
+      {showHelpModal && (
+        <div className="modal-overlay" onClick={() => setShowHelpModal(false)}>
+          <div className="notif-detail-modal glass-card help-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="notif-detail-header">
+              <h3 style={{ margin: 0 }}>使用说明</h3>
+              <button className="icon-btn" onClick={() => setShowHelpModal(false)} type="button">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="notif-detail-body">
+              <UserGuide variant="modal" onOpenFeedback={handleOpenFeedbackForm} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 反馈提交弹框 */}
+      {showFeedbackForm && user && (
+        <div className="modal-overlay" onClick={() => setShowFeedbackForm(false)}>
+          <div
+            className="notif-detail-modal glass-card help-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="notif-detail-header">
+              <h3 style={{ margin: 0 }}>提交反馈</h3>
+              <button
+                className="icon-btn"
+                onClick={() => setShowFeedbackForm(false)}
+                type="button"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="notif-detail-body">
+              <FeedbackForm
+                userId={user.id}
+                onCreated={handleFeedbackCreated}
+                onCancel={() => setShowFeedbackForm(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 反馈详情弹框（教师端） */}
+      {selectedFeedbackTicket && user && (
+        <div className="modal-overlay" onClick={handleCloseFeedbackDetail}>
+          <div
+            className="notif-detail-modal glass-card help-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="notif-detail-header">
+              <h3 style={{ margin: 0, fontSize: 16 }}>
+                反馈详情 #{selectedFeedbackTicket.id}
+              </h3>
+              <button
+                className="icon-btn"
+                onClick={handleCloseFeedbackDetail}
+                type="button"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="notif-detail-body">
+              {feedbackDetailError ? (
+                <div className="feedback-form-error">{feedbackDetailError}</div>
+              ) : (
+                <FeedbackDetail
+                  ticket={selectedFeedbackTicket}
+                  messages={feedbackDetailMessages}
+                  role="user"
+                  onReply={handleReplyFeedback}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {appErrorMessage && <div className="app-error-banner">{appErrorMessage}</div>}
       {toast && <div className={`app-toast ${toast.type}`}>{toast.message}</div>}
@@ -1856,6 +2231,7 @@ function App() {
 
           {activeTab === 'admin' && isSuperAdmin && (
             <AdminConsole
+              currentUser={user}
               users={adminUsers}
               activationCodes={adminCodes}
               adminLogs={adminLogs}

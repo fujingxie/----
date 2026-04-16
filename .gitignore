@@ -15,8 +15,12 @@ dist-ssr
 # Wrangler local state & cache
 .wrangler/
 
-# Generated docs
-docs/
+# Generated docs（忽略 AI 产出的杂项文档，但保留计划归档）
+docs/*
+!docs/plans/
+
+# Claude Code 本地状态（仅限主仓根目录）
+.claude/
 
 # Editor directories and files
 .vscode/*

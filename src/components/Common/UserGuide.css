@@ -1,0 +1,279 @@
+/* ═══════════════════════════════════════════════
+   使用说明（共享组件样式）
+   ═══════════════════════════════════════════════ */
+
+.user-guide {
+  color: var(--text-main);
+  line-height: 1.7;
+}
+
+.user-guide-page {
+  padding: 8px 0;
+}
+
+.user-guide-modal {
+  padding: 4px 2px;
+}
+
+/* ─── 顶部标题 ─── */
+.guide-header {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.guide-header h2 {
+  margin: 0 0 6px 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.guide-subtitle {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.55;
+}
+
+/* ─── 区块 ─── */
+.guide-section {
+  margin-bottom: 28px;
+}
+
+.guide-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.guide-section p {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+}
+
+.guide-highlight {
+  padding: 18px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(245, 158, 11, 0.04));
+  border: 1px solid rgba(99, 102, 241, 0.14);
+  border-radius: 14px;
+}
+
+.guide-footer {
+  padding: 18px;
+  background: rgba(16, 185, 129, 0.05);
+  border-radius: 12px;
+}
+
+.guide-feedback-btn {
+  margin-top: 10px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.guide-feedback-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+/* ─── 两列对比卡 ─── */
+.guide-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 14px 0;
+}
+
+.guide-card {
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+}
+
+.guide-card-tag {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(99, 102, 241, 0.12);
+  color: #6366f1;
+  margin-bottom: 8px;
+}
+
+.guide-card-tag.lifetime {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.guide-card-tag.progress {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.guide-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.guide-card ul {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+}
+
+.guide-card ul li {
+  margin-bottom: 4px;
+}
+
+.guide-card p {
+  font-size: 13px;
+  margin: 0 0 8px 0;
+}
+
+.guide-hint {
+  font-size: 12px !important;
+  opacity: 0.6;
+  font-style: italic;
+  margin-top: 6px !important;
+}
+
+/* ─── 提示块（黄色高亮） ─── */
+.guide-callout {
+  margin: 14px 0 0 0;
+  padding: 14px 16px;
+  background: rgba(245, 158, 11, 0.08);
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+}
+
+.guide-callout strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.guide-callout p {
+  margin: 0 0 6px 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.guide-callout p:last-child {
+  margin-bottom: 0;
+}
+
+.guide-callout-tip {
+  background: rgba(16, 185, 129, 0.08);
+  border-left-color: #10b981;
+}
+
+/* ─── 步骤列表 ─── */
+.guide-steps {
+  margin: 0;
+  padding-left: 24px;
+  font-size: 14px;
+}
+
+.guide-steps li {
+  margin-bottom: 10px;
+}
+
+.guide-steps li strong {
+  color: #6366f1;
+}
+
+/* ─── 普通列表 ─── */
+.guide-list {
+  margin: 0;
+  padding-left: 22px;
+  font-size: 14px;
+}
+
+.guide-list li {
+  margin-bottom: 6px;
+}
+
+/* ─── FAQ 折叠 ─── */
+.guide-qa {
+  margin-bottom: 8px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.guide-qa summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 4px 0;
+  list-style: none;
+  position: relative;
+  padding-right: 24px;
+}
+
+.guide-qa summary::-webkit-details-marker {
+  display: none;
+}
+
+.guide-qa summary::after {
+  content: '+';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+  font-weight: 400;
+  opacity: 0.5;
+  transition: transform 0.2s;
+}
+
+.guide-qa[open] summary::after {
+  content: '−';
+}
+
+.guide-qa p {
+  margin: 10px 0 4px 0;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+/* ─── 夜间模式 ─── */
+:root[data-theme='night'] .guide-header {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme='night'] .guide-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme='night'] .guide-qa {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+:root[data-theme='night'] .guide-highlight {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(245, 158, 11, 0.06));
+}
+
+/* ─── 响应式 ─── */
+@media (max-width: 720px) {
+  .guide-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-header h2 {
+    font-size: 18px;
+  }
+
+  .guide-section h3 {
+    font-size: 15px;
+  }
+}
