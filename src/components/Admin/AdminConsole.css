@@ -1034,3 +1034,123 @@
   .aud-panels { grid-template-columns: 1fr; }
   .aud-table { min-width: 600px; }
 }
+
+/* ─── 通知管理 ─────────────────────────────────────── */
+.admin-notif-section {
+  padding: 8px 0;
+}
+
+.admin-notif-form {
+  padding: 18px;
+  border-radius: 12px;
+}
+
+.admin-notif-form-title {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.admin-notif-textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 60px;
+  font-family: inherit;
+}
+
+.admin-notif-img-preview {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.03);
+  text-align: center;
+}
+
+.admin-notif-img-preview img {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.admin-notif-img-error {
+  font-size: 12px;
+  color: #f87171;
+}
+
+.admin-notif-html-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-notif-html-preview {
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.admin-notif-html-preview-label {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.5;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.admin-notif-html-preview-body {
+  padding: 14px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.admin-notif-html-preview-body img {
+  max-width: 100%;
+  border-radius: 6px;
+}
+
+.admin-notif-error {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #f87171;
+}
+
+.admin-notif-table {
+  min-width: 700px;
+}
+
+.notif-type-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.notif-type-badge.text {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.notif-type-badge.image {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.notif-type-badge.html {
+  background: rgba(99, 102, 241, 0.12);
+  color: #6366f1;
+}
+
+.status-active {
+  color: #10b981;
+}
+
+.status-archived {
+  color: #9ca3af;
+}
+
+.admin-notif-archived {
+  opacity: 0.55;
+}

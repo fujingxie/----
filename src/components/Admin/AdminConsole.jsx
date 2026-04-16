@@ -1,7 +1,14 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import DOMPurify from 'dompurify';
 import './AdminConsole.css';
-import { ArrowDownUp, CheckSquare, ChevronDown, Copy, Download, History, KeyRound, Shield, Square, Ticket, Users, X } from 'lucide-react';
+import { ArrowDownUp, Bell, CheckSquare, ChevronDown, Copy, Download, History, KeyRound, Shield, Square, Ticket, Users, X } from 'lucide-react';
 import AdminUserDetail from './AdminUserDetail';
+import AdminFeedbackPanel from './AdminFeedbackPanel';
+import {
+  createAdminNotification,
+  fetchAdminNotifications,
+  updateAdminNotification,
+} from '../../api/client';
 
 const EMPTY_CODE_FORM = {
   code: '',
@@ -267,6 +274,74 @@ function AdminConsole({
   });
   const [channelForm, setChannelForm] = useState(EMPTY_CHANNEL_FORM);
   const [selectedChannelId, setSelectedChannelId] = useState(null);
+
+  // 通知管理状态
+  const [adminNotifications, setAdminNotifications] = useState([]);
+  const [notifTotalUsers, setNotifTotalUsers] = useState(0);
+  const [notifForm, setNotifForm] = useState({ type: 'text', title: '', content: '', image_url: '', html_content: '' });
+  const [isPublishingNotif, setIsPublishingNotif] = useState(false);
+  const [notifError, setNotifError] = useState('');
+  const [notifPage, setNotifPage] = useState(1);
+
+  // 加载通知列表
+  const loadAdminNotifications = useCallback(async () => {
+    if (!currentUser?.id) return;
+    try {
+      const res = await fetchAdminNotifications({ userId: currentUser.id });
+      setAdminNotifications(res.notifications || []);
+      setNotifTotalUsers(res.total_users || 0);
+    } catch {
+      // silent
+    }
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    loadAdminNotifications();
+  }, [loadAdminNotifications]);
+
+  const handlePublishNotification = async () => {
+    const title = notifForm.title.trim();
+    if (!title) {
+      setNotifError('请填写通知标题');
+      return;
+    }
+    setIsPublishingNotif(true);
+    setNotifError('');
+    try {
+      await createAdminNotification({
+        userId: currentUser.id,
+        type: notifForm.type,
+        title,
+        content: notifForm.content.trim() || undefined,
+        imageUrl: notifForm.type === 'image' ? notifForm.image_url.trim() || undefined : undefined,
+        htmlContent: notifForm.type === 'html' ? notifForm.html_content.trim() || undefined : undefined,
+      });
+      setNotifForm({ type: 'text', title: '', content: '', image_url: '', html_content: '' });
+      await loadAdminNotifications();
+      if (onRefresh) onRefresh();
+    } catch (e) {
+      setNotifError(e.message);
+    } finally {
+      setIsPublishingNotif(false);
+    }
+  };
+
+  const handleArchiveNotification = async (notifId, currentStatus) => {
+    const newStatus = currentStatus === 'active' ? 'archived' : 'active';
+    try {
+      await updateAdminNotification({ userId: currentUser.id, notificationId: notifId, status: newStatus });
+      await loadAdminNotifications();
+    } catch {
+      // silent
+    }
+  };
+
+  const pagedNotifications = useMemo(() => {
+    const start = (notifPage - 1) * PAGE_SIZE;
+    return adminNotifications.slice(start, start + PAGE_SIZE);
+  }, [adminNotifications, notifPage]);
+
+  const notifTotalPages = Math.max(1, Math.ceil(adminNotifications.length / PAGE_SIZE));
 
   const sortBy = (list, { key, direction }) => {
     const factor = direction === 'asc' ? 1 : -1;
@@ -1770,6 +1845,177 @@ function AdminConsole({
           {renderPagination(currentCodePage, codeTotalPages, setCodePage)}
         </CollapsiblePanel>
       </div>
+
+      <CollapsiblePanel
+        title="通知管理"
+        description="向所有教师广播通知公告，支持纯文字、图文和 HTML 三种类型。"
+      >
+        <div className="admin-notif-section">
+          <div className="admin-notif-form glass-card">
+            <strong className="admin-notif-form-title">发布新通知</strong>
+            <div className="admin-code-creator batch">
+              <label className="admin-field">
+                <span>通知类型</span>
+                <select
+                  className="glass-input compact"
+                  value={notifForm.type}
+                  onChange={(e) => setNotifForm((prev) => ({ ...prev, type: e.target.value }))}
+                >
+                  <option value="text">纯文字</option>
+                  <option value="image">图文</option>
+                  <option value="html">HTML</option>
+                </select>
+              </label>
+              <label className="admin-field" style={{ flex: 2 }}>
+                <span>标题</span>
+                <input
+                  className="glass-input compact"
+                  value={notifForm.title}
+                  onChange={(e) => setNotifForm((prev) => ({ ...prev, title: e.target.value }))}
+                  placeholder="通知标题"
+                />
+              </label>
+            </div>
+
+            <label className="admin-field" style={{ marginTop: 10 }}>
+              <span>正文内容</span>
+              <textarea
+                className="glass-input compact admin-notif-textarea"
+                value={notifForm.content}
+                onChange={(e) => setNotifForm((prev) => ({ ...prev, content: e.target.value }))}
+                placeholder="通知正文（可选）"
+                rows={3}
+              />
+            </label>
+
+            {notifForm.type === 'image' && (
+              <div style={{ marginTop: 10 }}>
+                <label className="admin-field">
+                  <span>图片 URL</span>
+                  <input
+                    className="glass-input compact"
+                    value={notifForm.image_url}
+                    onChange={(e) => setNotifForm((prev) => ({ ...prev, image_url: e.target.value }))}
+                    placeholder="粘贴图片链接，如 https://xxx.com/image.png"
+                  />
+                </label>
+                {notifForm.image_url.trim() && (
+                  <div className="admin-notif-img-preview">
+                    <img
+                      src={notifForm.image_url.trim()}
+                      alt="预览"
+                      onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }}
+                      onLoad={(e) => { e.target.style.display = 'block'; if (e.target.nextSibling) e.target.nextSibling.style.display = 'none'; }}
+                    />
+                    <span className="admin-notif-img-error" style={{ display: 'none' }}>图片加载失败，请检查 URL 或防盗链设置</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {notifForm.type === 'html' && (
+              <div className="admin-notif-html-editor" style={{ marginTop: 10 }}>
+                <label className="admin-field">
+                  <span>HTML 内容</span>
+                  <textarea
+                    className="glass-input compact admin-notif-textarea"
+                    value={notifForm.html_content}
+                    onChange={(e) => setNotifForm((prev) => ({ ...prev, html_content: e.target.value }))}
+                    placeholder="粘贴 HTML 代码"
+                    rows={6}
+                    style={{ fontFamily: 'monospace', fontSize: 12 }}
+                  />
+                </label>
+                {notifForm.html_content.trim() && (
+                  <div className="admin-notif-html-preview">
+                    <div className="admin-notif-html-preview-label">实时预览</div>
+                    <div
+                      className="admin-notif-html-preview-body"
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(notifForm.html_content) }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {notifError && <div className="admin-notif-error">{notifError}</div>}
+
+            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                className="confirm-btn"
+                onClick={handlePublishNotification}
+                disabled={isPublishingNotif}
+                type="button"
+              >
+                <Bell size={14} />
+                {isPublishingNotif ? '发布中...' : '发布通知'}
+              </button>
+            </div>
+          </div>
+
+          <div className="admin-table-shell" style={{ marginTop: 16 }}>
+            <table className="admin-table admin-notif-table">
+              <thead>
+                <tr>
+                  <th>标题</th>
+                  <th>类型</th>
+                  <th>状态</th>
+                  <th>已读</th>
+                  <th>发布人</th>
+                  <th>发布时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagedNotifications.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="admin-table-empty">还没有发布过通知。</td>
+                  </tr>
+                ) : (
+                  pagedNotifications.map((n) => (
+                    <tr key={n.id} className={n.status === 'archived' ? 'admin-notif-archived' : ''}>
+                      <td title={n.title}><span className="admin-cell">{n.title}</span></td>
+                      <td>
+                        <span className={`notif-type-badge ${n.type}`}>
+                          {n.type === 'text' ? '文字' : n.type === 'image' ? '图文' : 'HTML'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`admin-cell admin-cell-nowrap ${n.status === 'archived' ? 'status-archived' : 'status-active'}`}>
+                          {n.status === 'active' ? '发布中' : '已归档'}
+                        </span>
+                      </td>
+                      <td><span className="admin-cell admin-cell-nowrap">{n.read_count}/{notifTotalUsers}</span></td>
+                      <td><span className="admin-cell admin-cell-nowrap">{n.creator_name}</span></td>
+                      <td><span className="admin-cell admin-cell-nowrap">{formatDateTime(n.created_at)}</span></td>
+                      <td>
+                        <button
+                          className="confirm-btn micro"
+                          onClick={() => handleArchiveNotification(n.id, n.status)}
+                          type="button"
+                          style={n.status === 'active'
+                            ? { background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }
+                            : { background: 'rgba(16,185,129,0.1)', color: '#10b981' }}
+                        >
+                          {n.status === 'active' ? '归档' : '恢复'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          {renderPagination(notifPage, notifTotalPages, setNotifPage)}
+        </div>
+      </CollapsiblePanel>
+
+      <CollapsiblePanel
+        title="反馈工单"
+        description="查看并回复教师提交的 Bug / 功能建议 / 使用问题反馈，支持多轮对话。"
+      >
+        <AdminFeedbackPanel currentUser={currentUser} />
+      </CollapsiblePanel>
 
       <CollapsiblePanel
         title="超管操作日志"

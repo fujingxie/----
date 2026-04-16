@@ -303,3 +303,75 @@ export const updateAdminStudent = ({ adminId, studentId, totalExp, lifetimeExp }
 
 export const fetchAdminStudentLogs = ({ adminId, studentId, limit = 30, offset = 0 }) =>
   request(`/admin/students/${studentId}/logs?adminId=${adminId}&limit=${limit}&offset=${offset}`);
+
+// ─── 通知系统 ─────────────────────────────────────────
+export const fetchNotifications = ({ userId }) =>
+  request(`/notifications?${new URLSearchParams({ userId: String(userId) }).toString()}`);
+
+export const markNotificationRead = ({ userId, notificationId }) =>
+  request(`/notifications/${notificationId}/read`, {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+
+export const markAllNotificationsRead = ({ userId }) =>
+  request('/notifications/read-all', {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+
+export const createAdminNotification = ({ userId, type, title, content, imageUrl, htmlContent }) =>
+  request('/admin/notifications', {
+    method: 'POST',
+    body: JSON.stringify({ userId, type, title, content, image_url: imageUrl, html_content: htmlContent }),
+  });
+
+export const fetchAdminNotifications = ({ userId }) =>
+  request(`/admin/notifications?${new URLSearchParams({ userId: String(userId) }).toString()}`);
+
+export const updateAdminNotification = ({ userId, notificationId, status }) =>
+  request(`/admin/notifications/${notificationId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ userId, status }),
+  });
+
+// ─── 反馈工单 ─────────────────────────────────────────
+export const fetchMyFeedback = ({ userId }) =>
+  request(`/feedback?${new URLSearchParams({ userId: String(userId) }).toString()}`);
+
+export const fetchFeedbackDetail = ({ userId, ticketId }) =>
+  request(`/feedback/${ticketId}?${new URLSearchParams({ userId: String(userId) }).toString()}`);
+
+export const createFeedback = ({ userId, category, title, content, imageData }) =>
+  request('/feedback', {
+    method: 'POST',
+    body: JSON.stringify({ userId, category, title, content, image_data: imageData }),
+  });
+
+export const replyFeedback = ({ userId, ticketId, content, imageData }) =>
+  request(`/feedback/${ticketId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, content, image_data: imageData }),
+  });
+
+export const fetchAdminFeedback = ({ userId, status, category } = {}) => {
+  const params = new URLSearchParams({ userId: String(userId) });
+  if (status) params.set('status', status);
+  if (category) params.set('category', category);
+  return request(`/admin/feedback?${params.toString()}`);
+};
+
+export const fetchAdminFeedbackDetail = ({ userId, ticketId }) =>
+  request(`/admin/feedback/${ticketId}?${new URLSearchParams({ userId: String(userId) }).toString()}`);
+
+export const replyAdminFeedback = ({ userId, ticketId, content, imageData }) =>
+  request(`/admin/feedback/${ticketId}/reply`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, content, image_data: imageData }),
+  });
+
+export const updateAdminFeedbackStatus = ({ userId, ticketId, status }) =>
+  request(`/admin/feedback/${ticketId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ userId, status }),
+  });

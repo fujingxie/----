@@ -462,3 +462,314 @@
   text-align: center;
   margin-top: 100px;
 }
+
+/* ─── 通知铃铛 + 面板 ──────────────────────────── */
+.notif-bell-wrap {
+  position: relative;
+}
+
+.notif-bell-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.notif-bell-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.notif-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 360px;
+  max-height: 480px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  z-index: 200;
+  animation: fadeIn 0.15s ease;
+  overflow: hidden;
+}
+
+.notif-panel-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.notif-panel-tab {
+  flex: 1;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  opacity: 0.55;
+  cursor: pointer;
+  position: relative;
+  transition: opacity 0.15s;
+}
+
+.notif-panel-tab:hover {
+  opacity: 0.85;
+}
+
+.notif-panel-tab.active {
+  opacity: 1;
+}
+
+.notif-panel-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: #6366f1;
+  border-radius: 2px;
+}
+
+.notif-panel-feedback {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+
+.notif-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.notif-panel-header strong {
+  font-size: 15px;
+}
+
+.notif-mark-all {
+  border: none;
+  background: none;
+  color: var(--brand-color, #6366f1);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.notif-mark-all:hover {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.notif-panel-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+.notif-empty {
+  padding: 32px 16px;
+  text-align: center;
+  font-size: 13px;
+  opacity: 0.5;
+}
+
+.notif-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+  font-family: inherit;
+  color: var(--text-main);
+}
+
+.notif-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.notif-item.unread {
+  background: rgba(99, 102, 241, 0.06);
+  border-left: 3px solid var(--brand-color, #6366f1);
+}
+
+.notif-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.notif-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notif-item-time {
+  font-size: 11px;
+  opacity: 0.45;
+}
+
+.notif-type-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.notif-type-tag.text {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.notif-type-tag.image {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.notif-type-tag.html {
+  background: rgba(99, 102, 241, 0.12);
+  color: #6366f1;
+}
+
+/* ─── 通知详情弹框 ──────────────────────────── */
+.notif-detail-modal {
+  max-width: 560px;
+  width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  padding: 24px;
+  animation: slideUp 0.2s ease;
+}
+
+.notif-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.notif-detail-header h3 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.notif-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.notif-detail-time {
+  font-size: 12px;
+  opacity: 0.5;
+}
+
+.notif-detail-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  line-height: 1.7;
+  min-width: 0;
+  min-height: 0;
+}
+
+.notif-detail-img {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin-bottom: 14px;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.notif-text-content {
+  font-size: 14px;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.notif-html-content {
+  font-size: 14px;
+}
+
+.notif-html-content img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+:root[data-theme='night'] .notif-panel {
+  background: #0f1a2e;
+}
+
+:root[data-theme='night'] .notif-panel-tabs {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+/* 使用说明弹框（复用 notif-detail-modal 样式，但加宽） */
+.help-modal {
+  max-width: 760px !important;
+  max-height: 85vh !important;
+}
+
+:root[data-theme='night'] .notif-bell-btn {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme='night'] .notif-bell-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+:root[data-theme='night'] .notif-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+:root[data-theme='night'] .notif-item.unread {
+  background: rgba(99, 102, 241, 0.1);
+}

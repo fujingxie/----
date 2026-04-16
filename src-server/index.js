@@ -3603,6 +3603,564 @@ async function handleAdminUpdateStudent(db, request, studentId) {
   });
 }
 
+// ─── 通知系统 ───────────────────────────────────────────────────────────────
+
+async function handleGetNotifications(db, request) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+  if (!userId) return error('缺少有效的教师身份');
+
+  const rows = await db
+    .prepare(
+      `SELECT n.id, n.type, n.title, n.content, n.image_url, n.html_content, n.created_at,
+              CASE WHEN nr.user_id IS NOT NULL THEN 1 ELSE 0 END AS is_read
+       FROM notifications n
+       LEFT JOIN notification_reads nr ON nr.notification_id = n.id AND nr.user_id = ?
+       WHERE n.status = 'active'
+       ORDER BY n.created_at DESC
+       LIMIT 100`,
+    )
+    .bind(userId)
+    .all();
+
+  const notifications = (rows.results || []).map((r) => ({
+    id: r.id,
+    type: r.type,
+    title: r.title,
+    content: r.content,
+    image_url: r.image_url,
+    html_content: r.html_content,
+    is_read: !!r.is_read,
+    created_at: r.created_at,
+  }));
+
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
+
+  return json({ notifications, unread_count: unreadCount });
+}
+
+async function handleMarkNotificationRead(db, request, notificationId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  if (!userId) return error('缺少有效的教师身份');
+
+  await db
+    .prepare('INSERT OR IGNORE INTO notification_reads (user_id, notification_id) VALUES (?, ?)')
+    .bind(userId, notificationId)
+    .run();
+
+  return json({ success: true });
+}
+
+async function handleMarkAllNotificationsRead(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  if (!userId) return error('缺少有效的教师身份');
+
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO notification_reads (user_id, notification_id)
+       SELECT ?, n.id FROM notifications n
+       WHERE n.status = 'active'
+         AND n.id NOT IN (SELECT notification_id FROM notification_reads WHERE user_id = ?)`,
+    )
+    .bind(userId, userId)
+    .run();
+
+  return json({ success: true });
+}
+
+async function handleAdminCreateNotification(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  if (!userId) return error('缺少有效的超管身份');
+  const admin = await assertSuperAdmin(db, userId);
+
+  const type = ['text', 'image', 'html'].includes(body.type) ? body.type : 'text';
+  const title = (body.title || '').trim();
+  if (!title) return error('通知标题不能为空');
+
+  const content = (body.content || '').trim() || null;
+  const imageUrl = type === 'image' ? (body.image_url || '').trim() || null : null;
+  const htmlContent = type === 'html' ? (body.html_content || '').trim() || null : null;
+
+  const result = await db
+    .prepare(
+      `INSERT INTO notifications (type, title, content, image_url, html_content, created_by_user_id)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(type, title, content, imageUrl, htmlContent, userId)
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '通知管理',
+    detail: `超管 ${admin.nickname || admin.username} 发布通知「${title}」（类型：${type}）`,
+  });
+
+  const notification = await db
+    .prepare('SELECT * FROM notifications WHERE id = ?')
+    .bind(result.meta.last_row_id)
+    .first();
+
+  return json({ notification });
+}
+
+async function handleAdminGetNotifications(db, request) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+  if (!userId) return error('缺少有效的超管身份');
+  await assertSuperAdmin(db, userId);
+
+  const rows = await db
+    .prepare(
+      `SELECT n.*,
+              u.nickname AS creator_name,
+              (SELECT COUNT(*) FROM notification_reads nr WHERE nr.notification_id = n.id) AS read_count
+       FROM notifications n
+       LEFT JOIN users u ON u.id = n.created_by_user_id
+       ORDER BY n.created_at DESC
+       LIMIT 200`,
+    )
+    .all();
+
+  const totalUsers = await db
+    .prepare("SELECT COUNT(*) AS cnt FROM users WHERE role != 'super_admin' AND status = 'active'")
+    .first();
+
+  const notifications = (rows.results || []).map((r) => ({
+    id: r.id,
+    type: r.type,
+    title: r.title,
+    content: r.content,
+    image_url: r.image_url,
+    html_content: r.html_content,
+    status: r.status,
+    created_by_user_id: r.created_by_user_id,
+    creator_name: r.creator_name || '系统',
+    read_count: r.read_count || 0,
+    created_at: r.created_at,
+  }));
+
+  return json({ notifications, total_users: totalUsers?.cnt || 0 });
+}
+
+async function handleAdminUpdateNotification(db, request, notificationId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  if (!userId) return error('缺少有效的超管身份');
+  const admin = await assertSuperAdmin(db, userId);
+
+  const notification = await db
+    .prepare('SELECT id, title, status FROM notifications WHERE id = ?')
+    .bind(notificationId)
+    .first();
+  if (!notification) return error('通知不存在');
+
+  const newStatus = body.status === 'archived' ? 'archived' : body.status === 'active' ? 'active' : null;
+  if (!newStatus) return error('无效的状态值');
+
+  await db
+    .prepare('UPDATE notifications SET status = ? WHERE id = ?')
+    .bind(newStatus, notificationId)
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '通知管理',
+    detail: `超管 ${admin.nickname || admin.username} ${newStatus === 'archived' ? '归档' : '恢复'}通知「${notification.title}」`,
+  });
+
+  return json({ success: true, status: newStatus });
+}
+
+// ─── 反馈工单系统 ──────────────────────────────────────────────────────────
+
+const FEEDBACK_CATEGORIES = ['bug', 'feature', 'question'];
+const FEEDBACK_STATUSES = ['open', 'in_progress', 'resolved', 'closed'];
+const FEEDBACK_IMAGE_MAX_LEN = 800000; // ~500KB base64 字符上限
+const FEEDBACK_CONTENT_MAX_LEN = 5000;
+
+function validateFeedbackContent(content, imageData) {
+  const text = (content || '').trim();
+  const image = (imageData || '').trim();
+  if (!text && !image) {
+    return { ok: false, message: '内容和图片至少需要填一项' };
+  }
+  if (text.length > FEEDBACK_CONTENT_MAX_LEN) {
+    return { ok: false, message: `正文最多 ${FEEDBACK_CONTENT_MAX_LEN} 字` };
+  }
+  if (image && image.length > FEEDBACK_IMAGE_MAX_LEN) {
+    return { ok: false, message: '图片过大，请压缩后重试' };
+  }
+  if (image && !image.startsWith('data:image/')) {
+    return { ok: false, message: '图片格式无效' };
+  }
+  return { ok: true, text: text || null, image: image || null };
+}
+
+async function handleListMyFeedback(db, request) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+  if (!userId) return error('缺少有效的教师身份');
+
+  const rows = await db
+    .prepare(
+      `SELECT t.id, t.category, t.title, t.status,
+              t.user_has_unread_reply, t.admin_has_unread_reply,
+              t.created_at, t.updated_at,
+              (SELECT COUNT(*) FROM feedback_messages m WHERE m.ticket_id = t.id) AS message_count,
+              (SELECT m2.content FROM feedback_messages m2 WHERE m2.ticket_id = t.id
+                 ORDER BY m2.created_at DESC LIMIT 1) AS last_message_preview
+       FROM feedback_tickets t
+       WHERE t.user_id = ?
+       ORDER BY t.updated_at DESC
+       LIMIT 200`,
+    )
+    .bind(userId)
+    .all();
+
+  const tickets = (rows.results || []).map((r) => ({
+    id: r.id,
+    category: r.category,
+    title: r.title,
+    status: r.status,
+    user_has_unread_reply: !!r.user_has_unread_reply,
+    message_count: r.message_count || 0,
+    last_message_preview: (r.last_message_preview || '').slice(0, 80),
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+  }));
+
+  const unreadCount = tickets.filter((t) => t.user_has_unread_reply).length;
+  return json({ tickets, unread_count: unreadCount });
+}
+
+async function handleGetMyFeedbackDetail(db, request, ticketId) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+  if (!userId) return error('缺少有效的教师身份');
+
+  const ticket = await db
+    .prepare('SELECT * FROM feedback_tickets WHERE id = ?')
+    .bind(ticketId)
+    .first();
+  if (!ticket) return error('反馈不存在', 404);
+  if (ticket.user_id !== userId) return error('无权查看该反馈', 403);
+
+  const messageRows = await db
+    .prepare(
+      `SELECT m.id, m.sender_user_id, m.sender_role, m.content, m.image_data, m.created_at,
+              u.nickname AS sender_name, u.username AS sender_username
+       FROM feedback_messages m
+       LEFT JOIN users u ON u.id = m.sender_user_id
+       WHERE m.ticket_id = ?
+       ORDER BY m.created_at ASC`,
+    )
+    .bind(ticketId)
+    .all();
+
+  // 查看后清零教师的未读标记
+  if (ticket.user_has_unread_reply) {
+    await db
+      .prepare('UPDATE feedback_tickets SET user_has_unread_reply = 0 WHERE id = ?')
+      .bind(ticketId)
+      .run();
+  }
+
+  return json({
+    ticket: {
+      id: ticket.id,
+      user_id: ticket.user_id,
+      category: ticket.category,
+      title: ticket.title,
+      status: ticket.status,
+      created_at: ticket.created_at,
+      updated_at: ticket.updated_at,
+    },
+    messages: (messageRows.results || []).map((m) => ({
+      id: m.id,
+      sender_role: m.sender_role,
+      sender_name: m.sender_name || m.sender_username || (m.sender_role === 'admin' ? '官方' : '我'),
+      content: m.content,
+      image_data: m.image_data,
+      created_at: m.created_at,
+    })),
+  });
+}
+
+async function handleCreateFeedback(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  if (!userId) return error('缺少有效的教师身份');
+
+  const category = FEEDBACK_CATEGORIES.includes(body.category) ? body.category : 'question';
+  const title = (body.title || '').trim();
+  if (!title) return error('标题不能为空');
+  if (title.length > 120) return error('标题过长，请控制在 120 字以内');
+
+  const validated = validateFeedbackContent(body.content, body.image_data);
+  if (!validated.ok) return error(validated.message);
+
+  // 校验用户存在
+  const userRow = await db
+    .prepare('SELECT id, status FROM users WHERE id = ?')
+    .bind(userId)
+    .first();
+  if (!userRow || userRow.status !== 'active') return error('账号状态异常', 403);
+
+  const inserted = await db
+    .prepare(
+      `INSERT INTO feedback_tickets (user_id, category, title, status, admin_has_unread_reply)
+       VALUES (?, ?, ?, 'open', 1)`,
+    )
+    .bind(userId, category, title)
+    .run();
+
+  const ticketId = inserted.meta.last_row_id;
+
+  await db
+    .prepare(
+      `INSERT INTO feedback_messages (ticket_id, sender_user_id, sender_role, content, image_data)
+       VALUES (?, ?, 'user', ?, ?)`,
+    )
+    .bind(ticketId, userId, validated.text, validated.image)
+    .run();
+
+  const ticket = await db
+    .prepare('SELECT * FROM feedback_tickets WHERE id = ?')
+    .bind(ticketId)
+    .first();
+
+  return json({ ticket });
+}
+
+async function handleReplyFeedbackByUser(db, request, ticketId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  if (!userId) return error('缺少有效的教师身份');
+
+  const ticket = await db
+    .prepare('SELECT id, user_id, status FROM feedback_tickets WHERE id = ?')
+    .bind(ticketId)
+    .first();
+  if (!ticket) return error('反馈不存在', 404);
+  if (ticket.user_id !== userId) return error('无权操作该反馈', 403);
+  if (ticket.status === 'closed') return error('该反馈已关闭，无法追加消息');
+
+  const validated = validateFeedbackContent(body.content, body.image_data);
+  if (!validated.ok) return error(validated.message);
+
+  await db
+    .prepare(
+      `INSERT INTO feedback_messages (ticket_id, sender_user_id, sender_role, content, image_data)
+       VALUES (?, ?, 'user', ?, ?)`,
+    )
+    .bind(ticketId, userId, validated.text, validated.image)
+    .run();
+
+  await db
+    .prepare(
+      `UPDATE feedback_tickets
+       SET admin_has_unread_reply = 1,
+           updated_at = CURRENT_TIMESTAMP,
+           status = CASE WHEN status = 'resolved' THEN 'in_progress' ELSE status END
+       WHERE id = ?`,
+    )
+    .bind(ticketId)
+    .run();
+
+  return json({ success: true });
+}
+
+async function handleAdminListFeedback(db, request) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+  if (!userId) return error('缺少有效的超管身份');
+  await assertSuperAdmin(db, userId);
+
+  const status = url.searchParams.get('status');
+  const category = url.searchParams.get('category');
+  const filters = [];
+  const binds = [];
+  if (status && FEEDBACK_STATUSES.includes(status)) {
+    filters.push('t.status = ?');
+    binds.push(status);
+  }
+  if (category && FEEDBACK_CATEGORIES.includes(category)) {
+    filters.push('t.category = ?');
+    binds.push(category);
+  }
+  const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+  const rows = await db
+    .prepare(
+      `SELECT t.id, t.user_id, t.category, t.title, t.status,
+              t.user_has_unread_reply, t.admin_has_unread_reply,
+              t.created_at, t.updated_at,
+              u.nickname AS user_nickname, u.username AS user_username,
+              (SELECT COUNT(*) FROM feedback_messages m WHERE m.ticket_id = t.id) AS message_count
+       FROM feedback_tickets t
+       LEFT JOIN users u ON u.id = t.user_id
+       ${whereClause}
+       ORDER BY t.updated_at DESC
+       LIMIT 500`,
+    )
+    .bind(...binds)
+    .all();
+
+  const unreadRow = await db
+    .prepare('SELECT COUNT(*) AS cnt FROM feedback_tickets WHERE admin_has_unread_reply = 1')
+    .first();
+
+  const tickets = (rows.results || []).map((r) => ({
+    id: r.id,
+    user_id: r.user_id,
+    user_name: r.user_nickname || r.user_username || '（已注销）',
+    category: r.category,
+    title: r.title,
+    status: r.status,
+    admin_has_unread_reply: !!r.admin_has_unread_reply,
+    message_count: r.message_count || 0,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+  }));
+
+  return json({ tickets, unread_count: unreadRow?.cnt || 0 });
+}
+
+async function handleAdminGetFeedbackDetail(db, request, ticketId) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+  if (!userId) return error('缺少有效的超管身份');
+  await assertSuperAdmin(db, userId);
+
+  const ticket = await db
+    .prepare(
+      `SELECT t.*, u.nickname AS user_nickname, u.username AS user_username
+       FROM feedback_tickets t
+       LEFT JOIN users u ON u.id = t.user_id
+       WHERE t.id = ?`,
+    )
+    .bind(ticketId)
+    .first();
+  if (!ticket) return error('反馈不存在', 404);
+
+  const messageRows = await db
+    .prepare(
+      `SELECT m.id, m.sender_user_id, m.sender_role, m.content, m.image_data, m.created_at,
+              u.nickname AS sender_name, u.username AS sender_username
+       FROM feedback_messages m
+       LEFT JOIN users u ON u.id = m.sender_user_id
+       WHERE m.ticket_id = ?
+       ORDER BY m.created_at ASC`,
+    )
+    .bind(ticketId)
+    .all();
+
+  if (ticket.admin_has_unread_reply) {
+    await db
+      .prepare('UPDATE feedback_tickets SET admin_has_unread_reply = 0 WHERE id = ?')
+      .bind(ticketId)
+      .run();
+  }
+
+  return json({
+    ticket: {
+      id: ticket.id,
+      user_id: ticket.user_id,
+      user_name: ticket.user_nickname || ticket.user_username || '（已注销）',
+      category: ticket.category,
+      title: ticket.title,
+      status: ticket.status,
+      created_at: ticket.created_at,
+      updated_at: ticket.updated_at,
+    },
+    messages: (messageRows.results || []).map((m) => ({
+      id: m.id,
+      sender_role: m.sender_role,
+      sender_name: m.sender_name || m.sender_username || (m.sender_role === 'admin' ? '官方' : '教师'),
+      content: m.content,
+      image_data: m.image_data,
+      created_at: m.created_at,
+    })),
+  });
+}
+
+async function handleAdminReplyFeedback(db, request, ticketId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  if (!userId) return error('缺少有效的超管身份');
+  const admin = await assertSuperAdmin(db, userId);
+
+  const ticket = await db
+    .prepare('SELECT id, title, status FROM feedback_tickets WHERE id = ?')
+    .bind(ticketId)
+    .first();
+  if (!ticket) return error('反馈不存在', 404);
+  if (ticket.status === 'closed') return error('该反馈已关闭，请先恢复状态');
+
+  const validated = validateFeedbackContent(body.content, body.image_data);
+  if (!validated.ok) return error(validated.message);
+
+  await db
+    .prepare(
+      `INSERT INTO feedback_messages (ticket_id, sender_user_id, sender_role, content, image_data)
+       VALUES (?, ?, 'admin', ?, ?)`,
+    )
+    .bind(ticketId, userId, validated.text, validated.image)
+    .run();
+
+  await db
+    .prepare(
+      `UPDATE feedback_tickets
+       SET user_has_unread_reply = 1,
+           updated_at = CURRENT_TIMESTAMP,
+           status = CASE WHEN status = 'open' THEN 'in_progress' ELSE status END
+       WHERE id = ?`,
+    )
+    .bind(ticketId)
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '反馈回复',
+    detail: `超管 ${admin.nickname || admin.username} 回复反馈「${ticket.title}」（#${ticketId}）`,
+  });
+
+  return json({ success: true });
+}
+
+async function handleAdminUpdateFeedbackStatus(db, request, ticketId) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  if (!userId) return error('缺少有效的超管身份');
+  const admin = await assertSuperAdmin(db, userId);
+
+  if (!FEEDBACK_STATUSES.includes(body.status)) return error('无效的状态值');
+
+  const ticket = await db
+    .prepare('SELECT id, title, status FROM feedback_tickets WHERE id = ?')
+    .bind(ticketId)
+    .first();
+  if (!ticket) return error('反馈不存在', 404);
+
+  await db
+    .prepare('UPDATE feedback_tickets SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .bind(body.status, ticketId)
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '反馈状态变更',
+    detail: `超管 ${admin.nickname || admin.username} 将反馈「${ticket.title}」(#${ticketId}) 状态从 ${ticket.status} 变更为 ${body.status}`,
+  });
+
+  return json({ success: true, status: body.status });
+}
+
+// ─── 超管账户管理 ────────────────────────────────────────────────────────────
+
 async function handleListAdminUsers(db, request) {
   const url = new URL(request.url);
   const userId = parseId(url.searchParams.get('userId'));
@@ -4440,6 +4998,69 @@ export default {
 
       if (path === '/api/public/register-channel' && request.method === 'GET') {
         return await handleGetPublicRegistrationChannel(db, request);
+      }
+
+      // ─── 通知路由 ──────────────────────────────────────
+      if (path === '/api/notifications' && request.method === 'GET') {
+        return await handleGetNotifications(db, request);
+      }
+
+      const notifReadMatch = path.match(/^\/api\/notifications\/(\d+)\/read$/);
+      if (notifReadMatch && request.method === 'POST') {
+        return await handleMarkNotificationRead(db, request, Number(notifReadMatch[1]));
+      }
+
+      if (path === '/api/notifications/read-all' && request.method === 'POST') {
+        return await handleMarkAllNotificationsRead(db, request);
+      }
+
+      if (path === '/api/admin/notifications' && request.method === 'POST') {
+        return await handleAdminCreateNotification(db, request);
+      }
+
+      if (path === '/api/admin/notifications' && request.method === 'GET') {
+        return await handleAdminGetNotifications(db, request);
+      }
+
+      const adminNotifMatch = path.match(/^\/api\/admin\/notifications\/(\d+)$/);
+      if (adminNotifMatch && request.method === 'PATCH') {
+        return await handleAdminUpdateNotification(db, request, Number(adminNotifMatch[1]));
+      }
+
+      // ─── 反馈工单路由 ──────────────────────────────────
+      if (path === '/api/feedback' && request.method === 'GET') {
+        return await handleListMyFeedback(db, request);
+      }
+
+      if (path === '/api/feedback' && request.method === 'POST') {
+        return await handleCreateFeedback(db, request);
+      }
+
+      const feedbackMsgMatch = path.match(/^\/api\/feedback\/(\d+)\/messages$/);
+      if (feedbackMsgMatch && request.method === 'POST') {
+        return await handleReplyFeedbackByUser(db, request, Number(feedbackMsgMatch[1]));
+      }
+
+      const feedbackDetailMatch = path.match(/^\/api\/feedback\/(\d+)$/);
+      if (feedbackDetailMatch && request.method === 'GET') {
+        return await handleGetMyFeedbackDetail(db, request, Number(feedbackDetailMatch[1]));
+      }
+
+      if (path === '/api/admin/feedback' && request.method === 'GET') {
+        return await handleAdminListFeedback(db, request);
+      }
+
+      const adminFbReplyMatch = path.match(/^\/api\/admin\/feedback\/(\d+)\/reply$/);
+      if (adminFbReplyMatch && request.method === 'POST') {
+        return await handleAdminReplyFeedback(db, request, Number(adminFbReplyMatch[1]));
+      }
+
+      const adminFbDetailMatch = path.match(/^\/api\/admin\/feedback\/(\d+)$/);
+      if (adminFbDetailMatch && request.method === 'GET') {
+        return await handleAdminGetFeedbackDetail(db, request, Number(adminFbDetailMatch[1]));
+      }
+      if (adminFbDetailMatch && request.method === 'PATCH') {
+        return await handleAdminUpdateFeedbackStatus(db, request, Number(adminFbDetailMatch[1]));
       }
 
       if (path === '/api/bootstrap' && request.method === 'GET') {

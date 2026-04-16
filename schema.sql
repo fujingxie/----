@@ -185,3 +185,60 @@ CREATE INDEX idx_users_register_source ON users(register_source);
 CREATE INDEX idx_users_register_ip ON users(register_ip);
 CREATE INDEX idx_system_flags_updated_at ON system_flags(updated_at DESC);
 CREATE INDEX idx_registration_attempts_ip_created_at ON registration_attempts(ip, created_at DESC);
+
+-- 通知表
+CREATE TABLE notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL DEFAULT 'text',
+    title TEXT NOT NULL,
+    content TEXT,
+    image_url TEXT,
+    html_content TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_by_user_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+);
+
+-- 通知已读记录表
+CREATE TABLE notification_reads (
+    user_id INTEGER NOT NULL,
+    notification_id INTEGER NOT NULL,
+    read_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, notification_id),
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (notification_id) REFERENCES notifications(id)
+);
+
+CREATE INDEX idx_notifications_status_created ON notifications(status, created_at DESC);
+
+-- 反馈工单表
+CREATE TABLE feedback_tickets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    category TEXT NOT NULL DEFAULT 'question',      -- 'bug' | 'feature' | 'question'
+    title TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',             -- 'open' | 'in_progress' | 'resolved' | 'closed'
+    user_has_unread_reply INTEGER NOT NULL DEFAULT 0,
+    admin_has_unread_reply INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 反馈对话消息表
+CREATE TABLE feedback_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id INTEGER NOT NULL,
+    sender_user_id INTEGER NOT NULL,
+    sender_role TEXT NOT NULL,                       -- 'user' | 'admin'
+    content TEXT,
+    image_data TEXT,                                  -- 完整 data URL（含前缀）
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (ticket_id) REFERENCES feedback_tickets(id) ON DELETE CASCADE,
+    FOREIGN KEY (sender_user_id) REFERENCES users(id)
+);
+
+CREATE INDEX idx_feedback_user_updated ON feedback_tickets(user_id, updated_at DESC);
+CREATE INDEX idx_feedback_status_updated ON feedback_tickets(status, updated_at DESC);
+CREATE INDEX idx_feedback_messages_ticket ON feedback_messages(ticket_id, created_at);

@@ -3,6 +3,7 @@ import './Settings.css';
 import {
   ArrowDown,
   ArrowUp,
+  BookOpen,
   BookPlus,
   CheckSquare,
   ClipboardList,
@@ -19,6 +20,7 @@ import {
   User,
   Users,
 } from 'lucide-react';
+import UserGuide from '../Common/UserGuide';
 import { graduateToNewEgg, syncStudentCollectionProgress, addGraduatedEntry, parsePetCollection } from '../../lib/petCollection';
 import { ADOPTABLE_PET_LIBRARY, getPetNameById } from '../../api/petLibrary';
 import Modal from '../Common/Modal';
@@ -1701,6 +1703,7 @@ const Settings = ({
     { id: 'rules', label: '分值规则', icon: <Scale size={18} /> },
     { id: 'logs', label: '操作日志', icon: <ClipboardList size={18} /> },
     { id: 'export', label: '数据导出', icon: <Download size={18} /> },
+    { id: 'guide', label: '使用说明', icon: <BookOpen size={18} /> },
     { id: 'danger', label: '危险操作区', icon: <Skull size={18} />, danger: true },
   ];
 
@@ -1884,6 +1887,12 @@ const Settings = ({
                 onExportClassData={onExportClassData}
               />
             )}
+          </div>
+        )}
+
+        {activeMenu === 'guide' && (
+          <div className="settings-section">
+            <UserGuide variant="page" />
           </div>
         )}
 
