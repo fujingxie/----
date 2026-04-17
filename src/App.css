@@ -758,6 +758,45 @@
   max-height: 85vh !important;
 }
 
+/* 反馈详情弹窗（比 help-modal 更宽，适合对话布局） */
+.feedback-detail-modal {
+  max-width: 640px !important;
+  width: 92vw !important;
+  height: min(720px, calc(100vh - 48px)) !important;
+  max-height: calc(100vh - 48px) !important;
+  padding: 20px 24px !important;
+  overflow: hidden;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 1;
+}
+
+.feedback-modal-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw;
+  height: 100vh;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  z-index: 9999 !important;
+  isolation: isolate;
+}
+
+.feedback-detail-modal .notif-detail-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.feedback-detail-modal .notif-detail-header {
+  flex-shrink: 0;
+}
+
 :root[data-theme='night'] .notif-bell-btn {
   background: rgba(255, 255, 255, 0.08);
 }

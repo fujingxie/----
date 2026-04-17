@@ -292,9 +292,12 @@
 .feedback-detail {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
   width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .feedback-detail-header {
@@ -303,6 +306,7 @@
   gap: 6px;
   padding-bottom: 10px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
 }
 
 .feedback-detail-title {
@@ -324,10 +328,11 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: 50vh;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 4px 2px;
+  padding: 4px 6px 4px 2px;
   min-width: 0;
   width: 100%;
 }
@@ -411,11 +416,12 @@
 
 /* ─── 回复框 ─── */
 .feedback-reply-box {
-  padding-top: 10px;
+  padding: 10px 0 2px;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .feedback-reply-textarea {
@@ -440,6 +446,8 @@
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .feedback-closed-note {
@@ -449,6 +457,7 @@
   background: rgba(107, 114, 128, 0.08);
   border-radius: 8px;
   opacity: 0.8;
+  flex-shrink: 0;
 }
 
 /* ─── 超管快速操作条 ─── */
@@ -459,6 +468,7 @@
   padding: 8px 0;
   flex-wrap: wrap;
   border-top: 1px dashed rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
 }
 
 .feedback-admin-actions label {

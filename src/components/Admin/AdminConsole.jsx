@@ -945,7 +945,6 @@ function AdminConsole({
       <CollapsiblePanel
         title="渠道入口管理"
         description="给不同平台生成不同的注册链接，并分别控制是否需要激活码。"
-        defaultOpen
       >
         <div className="admin-code-create-grid">
           <section className="admin-code-create-card">
@@ -1143,7 +1142,6 @@ function AdminConsole({
       <CollapsiblePanel
         title="免激活注册"
         description="开启后，登录页的激活新账号模式将直接注册，不再要求输入激活码。"
-        defaultOpen
       >
         <div className="admin-code-create-grid">
           <section className="admin-code-create-card">
@@ -1318,7 +1316,6 @@ function AdminConsole({
         <CollapsiblePanel
           title="账户管理"
           description="表格更适合快速扫账号状态，点任意一行查看详情。"
-          defaultOpen
         >
           <div className="admin-account-toolbar-card">
             <div className="admin-account-toolbar-row">

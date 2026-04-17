@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import {
   fetchAdminFeedback,
@@ -299,10 +300,10 @@ const AdminFeedbackPanel = ({ currentUser, onUnreadChange }) => {
       ) : null}
 
       {/* 详情 Modal */}
-      {selectedTicket ? (
-        <div className="modal-overlay" onClick={closeTicket}>
+      {selectedTicket ? createPortal(
+        <div className="modal-overlay feedback-modal-overlay" onClick={closeTicket}>
           <div
-            className="notif-detail-modal glass-card help-modal"
+            className="notif-detail-modal glass-card feedback-detail-modal"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="notif-detail-header">
@@ -343,7 +344,8 @@ const AdminFeedbackPanel = ({ currentUser, onUnreadChange }) => {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );
