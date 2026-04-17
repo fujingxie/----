@@ -44,6 +44,7 @@ CREATE TABLE students (
     lifetime_exp INTEGER NOT NULL DEFAULT 0,
     total_coins INTEGER DEFAULT 0,
     reward_count INTEGER DEFAULT 0,
+    -- group_name 存储 JSON 数组，如 '["第一组","气氛组"]'，无分组为 NULL
     group_name TEXT DEFAULT NULL,
     pet_collection TEXT DEFAULT '[]',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

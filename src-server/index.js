@@ -480,7 +480,16 @@ const normalizeStudent = (row) => ({
   total_coins: Number(row.total_coins || 0),
   reward_count: Number(row.reward_count || 0),
   pet_collection: parsePetCollection(row.pet_collection),
-  group_name: row.group_name ?? null,
+  group_name: (() => {
+    const raw = row.group_name;
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      return [raw];
+    }
+  })(),
 });
 
 const normalizePetConditionConfig = (value) => {
@@ -2080,24 +2089,27 @@ async function handleSetStudentGroups(db, request) {
         return null;
       }
 
-      const rawGroupName = assignment?.groupName;
-      const groupName = rawGroupName === null || rawGroupName === undefined
-        ? null
-        : String(rawGroupName).trim() || null;
+      const rawNames = Array.isArray(assignment?.groupNames) ? assignment.groupNames : [];
+      const groupNames = [...new Set(
+        rawNames
+          .map((name) => String(name).trim())
+          .filter(Boolean)
+          .map((name) => name.slice(0, 20)),
+      )];
 
       return {
         studentId,
-        groupName: groupName ? groupName.slice(0, 20) : null,
+        groupNames,
       };
     })
     .filter(Boolean);
 
   if (normalizedAssignments.length > 0) {
     await db.batch(
-      normalizedAssignments.map(({ studentId, groupName }) =>
+      normalizedAssignments.map(({ studentId, groupNames }) =>
         db
           .prepare('UPDATE students SET group_name = ? WHERE id = ? AND class_id = ?')
-          .bind(groupName, studentId, classId),
+          .bind(groupNames.length > 0 ? JSON.stringify(groupNames) : null, studentId, classId),
       ),
     );
   }

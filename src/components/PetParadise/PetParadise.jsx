@@ -129,8 +129,8 @@ const PetParadise = ({
   const [isBulkAdopting, setIsBulkAdopting] = useState(false);
   const [isDailyBulkFeeding, setIsDailyBulkFeeding] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
-  const [activeGroupFilter, setActiveGroupFilter] = useState(null);
-  const [activeBulkGroupFilter, setActiveBulkGroupFilter] = useState(null);
+  const [activeGroupFilter, setActiveGroupFilter] = useState([]);
+  const [activeBulkGroupFilter, setActiveBulkGroupFilter] = useState([]);
   const [isGroupSettingMode, setIsGroupSettingMode] = useState(false);
   const [selectedGroupName, setSelectedGroupName] = useState(null);
   const [groupDraftAssign, setGroupDraftAssign] = useState({});
@@ -160,8 +160,10 @@ const PetParadise = ({
   const totalRewards = students.reduce((sum, student) => sum + (student.reward_count || 0), 0);
   const feedableStudents = useMemo(() => students.filter((student) => student.pet_status !== 'egg'), [students]);
   const visibleBulkStudents = useMemo(
-    () => activeBulkGroupFilter
-      ? feedableStudents.filter((student) => student.group_name === activeBulkGroupFilter)
+    () => activeBulkGroupFilter.length > 0
+      ? feedableStudents.filter((student) =>
+          (student.group_name || []).some((groupName) => activeBulkGroupFilter.includes(groupName))
+        )
       : feedableStudents,
     [activeBulkGroupFilter, feedableStudents],
   );
@@ -172,14 +174,12 @@ const PetParadise = ({
   const isAllVisibleBulkSelected = visibleBulkStudentIds.length > 0
     && visibleBulkStudentIds.every((id) => selectedStudentIds.includes(id));
   const groupNames = useMemo(() => {
-    const names = students
-      .map((student) => student.group_name)
-      .filter(Boolean);
+    const names = students.flatMap((student) => student.group_name || []);
     return [...new Set(names)].sort();
   }, [students]);
   const draftGroupNames = useMemo(
     () => [...new Set([
-      ...Object.values(groupDraftAssign).filter(Boolean),
+      ...Object.values(groupDraftAssign).flatMap((groups) => groups || []),
       ...draftGroupNameOverrides,
     ])].sort(),
     [groupDraftAssign, draftGroupNameOverrides],
@@ -208,8 +208,10 @@ const PetParadise = ({
       list = list.filter((student) => student.pet_status !== 'egg' && student.pet_condition === 'sleeping');
     }
 
-    if (activeGroupFilter) {
-      list = list.filter((student) => student.group_name === activeGroupFilter);
+    if (activeGroupFilter.length > 0) {
+      list = list.filter((student) =>
+        (student.group_name || []).some((groupName) => activeGroupFilter.includes(groupName))
+      );
     }
 
     return list;
@@ -263,16 +265,12 @@ const PetParadise = ({
   }, [activeBulkRuleType]);
 
   useEffect(() => {
-    if (activeGroupFilter && !groupNames.includes(activeGroupFilter)) {
-      setActiveGroupFilter(null);
-    }
-  }, [activeGroupFilter, groupNames]);
+    setActiveGroupFilter((prev) => prev.filter((name) => groupNames.includes(name)));
+  }, [groupNames]);
 
   useEffect(() => {
-    if (activeBulkGroupFilter && !groupNames.includes(activeBulkGroupFilter)) {
-      setActiveBulkGroupFilter(null);
-    }
-  }, [activeBulkGroupFilter, groupNames]);
+    setActiveBulkGroupFilter((prev) => prev.filter((name) => groupNames.includes(name)));
+  }, [groupNames]);
 
   useEffect(() => {
     if (!isGroupSettingMode) {
@@ -287,7 +285,7 @@ const PetParadise = ({
     hasInitializedGroupManagerRef.current = true;
     const init = {};
     students.forEach((student) => {
-      init[student.id] = student.group_name ?? null;
+      init[student.id] = Array.isArray(student.group_name) ? [...student.group_name] : [];
     });
     setGroupDraftAssign(init);
     setDraftGroupNameOverrides(groupNames);
@@ -582,13 +580,13 @@ const PetParadise = ({
 
     const assignments = students
       .filter((student) => {
-        const original = student.group_name ?? null;
-        const draft = groupDraftAssign[student.id] ?? null;
+        const original = JSON.stringify([...(student.group_name || [])].sort());
+        const draft = JSON.stringify([...(groupDraftAssign[student.id] || [])].sort());
         return original !== draft;
       })
       .map((student) => ({
         studentId: student.id,
-        groupName: groupDraftAssign[student.id] ?? null,
+        groupNames: groupDraftAssign[student.id] || [],
       }));
 
     if (assignments.length === 0) {
@@ -626,12 +624,12 @@ const PetParadise = ({
     }
 
     setGroupDraftAssign((prev) => {
-      const current = prev[studentId];
-      if (current === selectedGroupName) {
-        return { ...prev, [studentId]: null };
-      }
-
-      return { ...prev, [studentId]: selectedGroupName };
+      const currentGroups = prev[studentId] || [];
+      const isInGroup = currentGroups.includes(selectedGroupName);
+      const newGroups = isInGroup
+        ? currentGroups.filter((groupName) => groupName !== selectedGroupName)
+        : [...currentGroups, selectedGroupName];
+      return { ...prev, [studentId]: newGroups };
     });
   };
 
@@ -928,8 +926,14 @@ const PetParadise = ({
               {groupNames.map((name) => (
                 <button
                   key={name}
-                  className={`pet-filter-chip group ${activeGroupFilter === name ? 'active' : ''}`}
-                  onClick={() => setActiveGroupFilter((prev) => (prev === name ? null : name))}
+                  className={`pet-filter-chip group ${activeGroupFilter.includes(name) ? 'active' : ''}`}
+                  onClick={() =>
+                    setActiveGroupFilter((prev) =>
+                      prev.includes(name)
+                        ? prev.filter((item) => item !== name)
+                        : [...prev, name]
+                    )
+                  }
                   type="button"
                 >
                   {name}
@@ -1026,11 +1030,9 @@ const PetParadise = ({
                 {students
                   .filter((student) => student.name.includes(groupSearch.trim()))
                   .map((student) => {
-                    const isInGroup = groupDraftAssign[student.id] === selectedGroupName;
-                    const otherGroup = groupDraftAssign[student.id]
-                      && groupDraftAssign[student.id] !== selectedGroupName
-                      ? groupDraftAssign[student.id]
-                      : null;
+                    const currentGroups = groupDraftAssign[student.id] || [];
+                    const isInGroup = currentGroups.includes(selectedGroupName);
+                    const otherGroups = currentGroups.filter((groupName) => groupName !== selectedGroupName);
 
                     return (
                       <button
@@ -1043,9 +1045,9 @@ const PetParadise = ({
                           {isInGroup ? '☑' : '☐'}
                         </span>
                         <span className="group-student-name">{student.name}</span>
-                        {otherGroup && (
-                          <span className="group-student-other-tag">{otherGroup}</span>
-                        )}
+                        {otherGroups.map((groupName) => (
+                          <span key={groupName} className="group-student-other-tag">{groupName}</span>
+                        ))}
                       </button>
                     );
                   })}
@@ -1151,14 +1153,20 @@ const PetParadise = ({
             {groupNames.length > 0 && (
               <div className="bulk-group-chips">
                 {groupNames.map((name) => {
-                  const groupCount = feedableStudents.filter((student) => student.group_name === name).length;
+                  const groupCount = feedableStudents.filter((student) => (student.group_name || []).includes(name)).length;
 
                   return (
                     <button
                       key={name}
                       type="button"
-                      className={`bulk-group-chip ${activeBulkGroupFilter === name ? 'active' : ''}`}
-                      onClick={() => setActiveBulkGroupFilter((prev) => (prev === name ? null : name))}
+                      className={`bulk-group-chip ${activeBulkGroupFilter.includes(name) ? 'active' : ''}`}
+                      onClick={() =>
+                        setActiveBulkGroupFilter((prev) =>
+                          prev.includes(name)
+                            ? prev.filter((item) => item !== name)
+                            : [...prev, name]
+                        )
+                      }
                     >
                       {name}（{groupCount}人）
                     </button>
