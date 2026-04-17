@@ -38,7 +38,8 @@
 ├── schema.sql              # 完整建库脚本（与最新 migration 保持同步）
 ├── docs/
 │   └── plans/              # 归档的功能设计文档（.gitignore 例外放行）
-└── CHANGELOG.md            # 变更记录（每次新功能/改动都追加一条）
+├── STATUS.md               # 项目当前状态（每次迭代覆盖更新）
+└── CHANGELOG.md            # 变更记录（每次新功能/改动追加一条，只增不改）
 ```
 
 ## 关键命令
@@ -107,11 +108,12 @@
 ## 工作流（单人单 agent）
 
 1. **一个分支就够了**：直接在 `main` 上开发、提交。不再建 `claude/*` 分支或 worktree
-2. **每次改动前**：`git pull` + 浏览 `CHANGELOG.md` 最新几条看看之前改过什么
+2. **每次 session 开始**：读 `STATUS.md`（当前状态）+ `CHANGELOG.md` 最新几条（上次改了什么）
 3. **每次改完后**：
    - 提交前跑 `npm run build` + `npm run lint`
    - commit message 用中文简述（动词开头：新增 / 修复 / 优化 / 重构）
-   - 把本次改动追加到 `CHANGELOG.md`，重要功能额外在 `docs/plans/` 建设计文档
+   - 追加到 `CHANGELOG.md`（只增不改），重要功能额外在 `docs/plans/` 建设计文档
+   - 更新 `STATUS.md`（覆盖，反映最新状态）
 4. **设计先行**：复杂功能（3+ 文件）先让 agent 出 plan 并归档到 `docs/plans/YYYY-MM-DD-feature.md`，再动手
 
 ## 已知陷阱
