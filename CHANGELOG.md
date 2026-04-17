@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-04-17 — 通知与反馈工单删除功能
+
+**功能**：
+- 超管可删除任意通知（先清 `notification_reads` 再删 `notifications`，并记录操作日志）
+- 超管可删除任意反馈工单（`feedback_messages` 级联删除）
+- 教师可删除自己的**已关闭**工单（后端同步校验 `status = closed` + 归属，防止 API 绕过）
+- 删除后本地列表即时更新，铃铛未读计数同步修正
+
+**修改范围**：
+- `src-server/index.js` — 新增 3 个 handler + 路由注册
+- `src/api/client.js` — 新增 `adminDeleteNotification` / `adminDeleteFeedback` / `deleteMyFeedback`
+- `src/components/Admin/AdminConsole.jsx` — 通知列表加删除按钮
+- `src/components/Admin/AdminFeedbackPanel.jsx` — 工单列表加删除按钮
+- `src/components/Feedback/FeedbackList.jsx` — closed 工单悬停显示 × 删除按钮
+- `src/components/Feedback/Feedback.css` — `.feedback-delete-btn` 样式
+- `src/App.jsx` — `handleDeleteMyFeedback` + 传 `onDelete` prop
+
+---
+
+## 2026-04-17 — 学生多分组支持 + 分组多选过滤
+
+**Migration**: `0026_group_name_to_array.sql`（`students.group_name` 由单值字符串改为 JSON 数组格式）
+
+**功能**：
+- 一个学生可同时加入多个分组（管理分组弹窗支持 toggle 多选）
+- 宠物乐园分组筛选 / 批量互动分组快选改为多选（`string[]`，并集显示）
+- 学生行同时展示所有所属分组标签
+
+**关键决策**：
+- 不新增表，`group_name TEXT` 存 JSON 数组字符串，`normalizeStudent` 兼容旧单值格式
+
+**修改范围**：
+- `migrations/0026_group_name_to_array.sql` — 存量数据迁移
+- `src-server/index.js` — `normalizeStudent` 解析数组，`handleSetStudentGroups` 写入 JSON
+- `src/components/PetParadise/PetParadise.jsx` — 约 10 处引用改为数组操作
+- `schema.sql` — 注释说明存储格式
+
+---
+
 ## 2026-04-17 — 学生分组与分组批量互动
 
 **Migration**: `0025_student_groups.sql`（`students` 新增 `group_name` 字段与班级分组索引）
