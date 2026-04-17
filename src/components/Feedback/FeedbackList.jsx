@@ -34,9 +34,9 @@ function formatRelativeTime(isoStr) {
 
 /**
  * 教师的反馈工单列表
- * @param {{ tickets: Array, onSelect: (ticket)=>void, onCreate: ()=>void, loading?: boolean }} props
+ * @param {{ tickets: Array, onSelect: (ticket)=>void, onCreate: ()=>void, onDelete?: (ticketId:number)=>void, loading?: boolean }} props
  */
-const FeedbackList = ({ tickets, onSelect, onCreate, loading }) => {
+const FeedbackList = ({ tickets, onSelect, onCreate, onDelete, loading }) => {
   return (
     <div className="feedback-root">
       <div className="feedback-list-header">
@@ -55,15 +55,35 @@ const FeedbackList = ({ tickets, onSelect, onCreate, loading }) => {
       ) : (
         <div className="feedback-list">
           {tickets.map((t) => (
-            <button
+            <div
               key={t.id}
-              type="button"
+              role="button"
+              tabIndex={0}
               className={`feedback-list-item ${t.user_has_unread_reply ? 'unread' : ''}`}
               onClick={() => onSelect(t)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSelect(t);
+                }
+              }}
             >
               <div className="feedback-list-item-top">
                 {t.user_has_unread_reply ? <span className="feedback-unread-dot" /> : null}
                 <span className="feedback-list-item-title">{t.title}</span>
+                {t.status === 'closed' && onDelete ? (
+                  <button
+                    className="feedback-delete-btn"
+                    type="button"
+                    title="删除工单"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(t.id);
+                    }}
+                  >
+                    ×
+                  </button>
+                ) : null}
               </div>
               <div className="feedback-list-item-meta">
                 <span className={`feedback-category-tag ${t.category}`}>
@@ -78,7 +98,7 @@ const FeedbackList = ({ tickets, onSelect, onCreate, loading }) => {
               {t.last_message_preview ? (
                 <div className="feedback-list-item-preview">{t.last_message_preview}</div>
               ) : null}
-            </button>
+            </div>
           ))}
         </div>
       )}

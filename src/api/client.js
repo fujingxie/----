@@ -341,6 +341,11 @@ export const updateAdminNotification = ({ userId, notificationId, status }) =>
     body: JSON.stringify({ userId, status }),
   });
 
+export const adminDeleteNotification = ({ userId, notificationId }) =>
+  request(`/admin/notifications/${notificationId}?userId=${userId}`, {
+    method: 'DELETE',
+  });
+
 // ─── 反馈工单 ─────────────────────────────────────────
 export const fetchMyFeedback = ({ userId }) =>
   request(`/feedback?${new URLSearchParams({ userId: String(userId) }).toString()}`);
@@ -358,6 +363,11 @@ export const replyFeedback = ({ userId, ticketId, content, imageData }) =>
   request(`/feedback/${ticketId}/messages`, {
     method: 'POST',
     body: JSON.stringify({ userId, content, image_data: imageData }),
+  });
+
+export const deleteMyFeedback = ({ userId, ticketId }) =>
+  request(`/feedback/${ticketId}?userId=${userId}`, {
+    method: 'DELETE',
   });
 
 export const fetchAdminFeedback = ({ userId, status, category } = {}) => {
@@ -380,4 +390,9 @@ export const updateAdminFeedbackStatus = ({ userId, ticketId, status }) =>
   request(`/admin/feedback/${ticketId}`, {
     method: 'PATCH',
     body: JSON.stringify({ userId, status }),
+  });
+
+export const adminDeleteFeedback = ({ userId, ticketId }) =>
+  request(`/admin/feedback/${ticketId}?userId=${userId}`, {
+    method: 'DELETE',
   });

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import {
+  adminDeleteFeedback,
   fetchAdminFeedback,
   fetchAdminFeedbackDetail,
   replyAdminFeedback,
@@ -160,6 +161,29 @@ const AdminFeedbackPanel = ({ currentUser, onUnreadChange }) => {
     }
   }, [currentUser?.id, selectedTicket]);
 
+  const handleDeleteTicket = useCallback(async (ticketId) => {
+    const confirmed = window.confirm('确认删除此工单？操作不可撤销，所有对话记录也会一起删除。');
+    if (!confirmed) return;
+
+    try {
+      const deletingTicket = tickets.find((t) => t.id === ticketId);
+      await adminDeleteFeedback({ userId: currentUser.id, ticketId });
+      setTickets((prev) => prev.filter((t) => t.id !== ticketId));
+      if (deletingTicket?.admin_has_unread_reply && onUnreadChange) {
+        const nextUnread = Math.max(
+          0,
+          tickets.reduce((acc, t) => acc + (t.admin_has_unread_reply ? 1 : 0), 0) - 1,
+        );
+        onUnreadChange(nextUnread);
+      }
+      if (selectedTicket?.id === ticketId) {
+        closeTicket();
+      }
+    } catch (e) {
+      alert(e?.message || '删除失败');
+    }
+  }, [closeTicket, currentUser?.id, onUnreadChange, selectedTicket?.id, tickets]);
+
   return (
     <div className="admin-notif-section">
       {/* 过滤条 */}
@@ -262,13 +286,22 @@ const AdminFeedbackPanel = ({ currentUser, onUnreadChange }) => {
                     <span className="admin-cell admin-cell-nowrap">{formatDateTime(t.updated_at)}</span>
                   </td>
                   <td>
-                    <button
-                      className="confirm-btn micro"
-                      onClick={() => openTicket(t)}
-                      type="button"
-                    >
-                      查看
-                    </button>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        className="confirm-btn micro"
+                        onClick={() => openTicket(t)}
+                        type="button"
+                      >
+                        查看
+                      </button>
+                      <button
+                        className="confirm-btn micro danger"
+                        onClick={() => handleDeleteTicket(t.id)}
+                        type="button"
+                      >
+                        删除
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))

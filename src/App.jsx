@@ -74,6 +74,7 @@ import {
   fetchMyFeedback,
   fetchFeedbackDetail,
   replyFeedback,
+  deleteMyFeedback,
 } from './api/client';
 import FeedbackList from './components/Feedback/FeedbackList';
 import FeedbackForm from './components/Feedback/FeedbackForm';
@@ -529,6 +530,28 @@ function App() {
     setNotifTab('feedback');
     loadMyFeedback();
   }, [loadMyFeedback]);
+
+  const handleDeleteMyFeedback = useCallback(async (ticketId) => {
+    if (!user?.id) return;
+    const confirmed = window.confirm('确认删除这条已关闭的反馈工单？删除后聊天记录也会一起移除。');
+    if (!confirmed) return;
+
+    try {
+      const deletingTicket = myFeedbacks.find((t) => t.id === ticketId);
+      await deleteMyFeedback({ userId: user.id, ticketId });
+      setMyFeedbacks((prev) => prev.filter((t) => t.id !== ticketId));
+      if (deletingTicket?.user_has_unread_reply) {
+        setFeedbackUnread((prev) => Math.max(0, prev - 1));
+      }
+      if (selectedFeedbackTicket?.id === ticketId) {
+        setSelectedFeedbackTicket(null);
+        setFeedbackDetailMessages([]);
+        setFeedbackDetailError('');
+      }
+    } catch (e) {
+      alert(e?.message || '删除失败');
+    }
+  }, [myFeedbacks, selectedFeedbackTicket?.id, user?.id]);
 
   const totalUnreadBadge = unreadCount + feedbackUnread;
 
@@ -2017,6 +2040,7 @@ function App() {
                       loading={feedbackLoading}
                       onSelect={handleOpenFeedbackTicket}
                       onCreate={handleOpenFeedbackForm}
+                      onDelete={handleDeleteMyFeedback}
                     />
                   </div>
                 )}

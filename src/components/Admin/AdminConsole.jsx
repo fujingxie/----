@@ -5,6 +5,7 @@ import { ArrowDownUp, Bell, CheckSquare, ChevronDown, Copy, Download, History, K
 import AdminUserDetail from './AdminUserDetail';
 import AdminFeedbackPanel from './AdminFeedbackPanel';
 import {
+  adminDeleteNotification,
   createAdminNotification,
   fetchAdminNotifications,
   updateAdminNotification,
@@ -333,6 +334,23 @@ function AdminConsole({
       await loadAdminNotifications();
     } catch {
       // silent
+    }
+  };
+
+  const handleDeleteNotification = async (notifId) => {
+    const confirmed = await onRequestConfirm?.({
+      title: '删除通知',
+      message: '确认删除这条通知？删除后所有教师都将看不到它。',
+      confirmLabel: '确认删除',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+
+    try {
+      await adminDeleteNotification({ userId: currentUser.id, notificationId: notifId });
+      setAdminNotifications((prev) => prev.filter((n) => n.id !== notifId));
+    } catch (e) {
+      alert(e?.message || '删除失败');
     }
   };
 
@@ -1986,16 +2004,25 @@ function AdminConsole({
                       <td><span className="admin-cell admin-cell-nowrap">{n.creator_name}</span></td>
                       <td><span className="admin-cell admin-cell-nowrap">{formatDateTime(n.created_at)}</span></td>
                       <td>
-                        <button
-                          className="confirm-btn micro"
-                          onClick={() => handleArchiveNotification(n.id, n.status)}
-                          type="button"
-                          style={n.status === 'active'
-                            ? { background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }
-                            : { background: 'rgba(16,185,129,0.1)', color: '#10b981' }}
-                        >
-                          {n.status === 'active' ? '归档' : '恢复'}
-                        </button>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button
+                            className="confirm-btn micro"
+                            onClick={() => handleArchiveNotification(n.id, n.status)}
+                            type="button"
+                            style={n.status === 'active'
+                              ? { background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }
+                              : { background: 'rgba(16,185,129,0.1)', color: '#10b981' }}
+                          >
+                            {n.status === 'active' ? '归档' : '恢复'}
+                          </button>
+                          <button
+                            className="confirm-btn micro danger"
+                            onClick={() => handleDeleteNotification(n.id)}
+                            type="button"
+                          >
+                            删除
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

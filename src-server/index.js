@@ -3843,6 +3843,36 @@ async function handleAdminUpdateNotification(db, request, notificationId) {
   return json({ success: true, status: newStatus });
 }
 
+async function handleAdminDeleteNotification(db, request, notificationId) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+  if (!userId) return error('缺少有效的超管身份');
+  const admin = await assertSuperAdmin(db, userId);
+
+  const notification = await db
+    .prepare('SELECT id, title FROM notifications WHERE id = ?')
+    .bind(notificationId)
+    .first();
+  if (!notification) return error('通知不存在', 404);
+
+  await db
+    .prepare('DELETE FROM notification_reads WHERE notification_id = ?')
+    .bind(notificationId)
+    .run();
+  await db
+    .prepare('DELETE FROM notifications WHERE id = ?')
+    .bind(notificationId)
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '通知管理',
+    detail: `超管 ${admin.nickname || admin.username} 删除通知「${notification.title}」`,
+  });
+
+  return json({ success: true });
+}
+
 // ─── 反馈工单系统 ──────────────────────────────────────────────────────────
 
 const FEEDBACK_CATEGORIES = ['bug', 'feature', 'question'];
@@ -3956,6 +3986,28 @@ async function handleGetMyFeedbackDetail(db, request, ticketId) {
       created_at: m.created_at,
     })),
   });
+}
+
+async function handleUserDeleteFeedback(db, request, ticketId) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+  if (!userId) return error('缺少有效的教师身份');
+
+  const ticket = await db
+    .prepare('SELECT id, user_id, status FROM feedback_tickets WHERE id = ?')
+    .bind(ticketId)
+    .first();
+  if (!ticket) return error('工单不存在', 404);
+  if (ticket.user_id !== userId) return error('工单不存在或无权限', 403);
+  // 前端只对 closed 工单显示删除按钮，后端同步校验防止绕过
+  if (ticket.status !== 'closed') return error('仅已关闭的工单可以删除', 400);
+
+  await db
+    .prepare('DELETE FROM feedback_tickets WHERE id = ?')
+    .bind(ticketId)
+    .run();
+
+  return json({ success: true });
 }
 
 async function handleCreateFeedback(db, request) {
@@ -4226,6 +4278,32 @@ async function handleAdminUpdateFeedbackStatus(db, request, ticketId) {
   });
 
   return json({ success: true, status: body.status });
+}
+
+async function handleAdminDeleteFeedback(db, request, ticketId) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+  if (!userId) return error('缺少有效的超管身份');
+  const admin = await assertSuperAdmin(db, userId);
+
+  const ticket = await db
+    .prepare('SELECT id, title FROM feedback_tickets WHERE id = ?')
+    .bind(ticketId)
+    .first();
+  if (!ticket) return error('工单不存在', 404);
+
+  await db
+    .prepare('DELETE FROM feedback_tickets WHERE id = ?')
+    .bind(ticketId)
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '反馈工单管理',
+    detail: `超管 ${admin.nickname || admin.username} 删除反馈工单「${ticket.title}」(#${ticketId})`,
+  });
+
+  return json({ success: true });
 }
 
 // ─── 超管账户管理 ────────────────────────────────────────────────────────────
@@ -5092,6 +5170,9 @@ export default {
       }
 
       const adminNotifMatch = path.match(/^\/api\/admin\/notifications\/(\d+)$/);
+      if (adminNotifMatch && request.method === 'DELETE') {
+        return await handleAdminDeleteNotification(db, request, Number(adminNotifMatch[1]));
+      }
       if (adminNotifMatch && request.method === 'PATCH') {
         return await handleAdminUpdateNotification(db, request, Number(adminNotifMatch[1]));
       }
@@ -5111,6 +5192,9 @@ export default {
       }
 
       const feedbackDetailMatch = path.match(/^\/api\/feedback\/(\d+)$/);
+      if (feedbackDetailMatch && request.method === 'DELETE') {
+        return await handleUserDeleteFeedback(db, request, Number(feedbackDetailMatch[1]));
+      }
       if (feedbackDetailMatch && request.method === 'GET') {
         return await handleGetMyFeedbackDetail(db, request, Number(feedbackDetailMatch[1]));
       }
@@ -5125,6 +5209,9 @@ export default {
       }
 
       const adminFbDetailMatch = path.match(/^\/api\/admin\/feedback\/(\d+)$/);
+      if (adminFbDetailMatch && request.method === 'DELETE') {
+        return await handleAdminDeleteFeedback(db, request, Number(adminFbDetailMatch[1]));
+      }
       if (adminFbDetailMatch && request.method === 'GET') {
         return await handleAdminGetFeedbackDetail(db, request, Number(adminFbDetailMatch[1]));
       }
