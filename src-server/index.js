@@ -12,7 +12,7 @@ const DEFAULT_PET_CONDITION_CONFIG = {
   sleeping_decay: 2,
 };
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
-const STUDENT_SELECT_FIELDS = `id, class_id, name, pet_status, pet_condition, last_fed_at, last_decay_at, pet_condition_locked_at, pet_name, pet_type_id, pet_level, pet_points, coins, total_exp, lifetime_exp, total_coins, reward_count, pet_collection, created_at`;
+const STUDENT_SELECT_FIELDS = `id, class_id, name, pet_status, pet_condition, last_fed_at, last_decay_at, pet_condition_locked_at, pet_name, pet_type_id, pet_level, pet_points, coins, total_exp, lifetime_exp, total_coins, reward_count, pet_collection, created_at, group_name`;
 const FREE_REGISTER_LEVEL_EXPIRES_IN_DAYS = {
   temporary: null,
   vip1: null,
@@ -480,6 +480,7 @@ const normalizeStudent = (row) => ({
   total_coins: Number(row.total_coins || 0),
   reward_count: Number(row.reward_count || 0),
   pet_collection: parsePetCollection(row.pet_collection),
+  group_name: row.group_name ?? null,
 });
 
 const normalizePetConditionConfig = (value) => {
@@ -1245,6 +1246,7 @@ async function reconcileStudentConditions(db, classId, userId = null) {
               students.reward_count AS reward_count,
               students.pet_collection AS pet_collection,
               students.created_at AS created_at,
+              students.group_name AS group_name,
               cs.pet_condition_config
        FROM students
        LEFT JOIN class_settings cs ON cs.class_id = students.class_id
@@ -2054,6 +2056,61 @@ async function handleBatchDeleteStudents(db, request, classId) {
   });
 
   return json({
+    students: await getStudentsByClassId(db, classId, userId),
+    logs: await getLogsByClassId(db, classId),
+  });
+}
+
+async function handleSetStudentGroups(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const classId = parseId(body.classId);
+  const assignments = Array.isArray(body.assignments) ? body.assignments : null;
+
+  if (!userId || !classId || !assignments) {
+    return error('参数不完整', 400);
+  }
+
+  await assertClassOwnership(db, userId, classId);
+
+  const normalizedAssignments = assignments
+    .map((assignment) => {
+      const studentId = parseId(assignment?.studentId);
+      if (!studentId) {
+        return null;
+      }
+
+      const rawGroupName = assignment?.groupName;
+      const groupName = rawGroupName === null || rawGroupName === undefined
+        ? null
+        : String(rawGroupName).trim() || null;
+
+      return {
+        studentId,
+        groupName: groupName ? groupName.slice(0, 20) : null,
+      };
+    })
+    .filter(Boolean);
+
+  if (normalizedAssignments.length > 0) {
+    await db.batch(
+      normalizedAssignments.map(({ studentId, groupName }) =>
+        db
+          .prepare('UPDATE students SET group_name = ? WHERE id = ? AND class_id = ?')
+          .bind(groupName, studentId, classId),
+      ),
+    );
+  }
+
+  await appendLog(db, {
+    classId,
+    userId,
+    actionType: '学生管理',
+    detail: `更新了 ${normalizedAssignments.length} 名学生的分组`,
+  });
+
+  return json({
+    updated: normalizedAssignments.length,
     students: await getStudentsByClassId(db, classId, userId),
     logs: await getLogsByClassId(db, classId),
   });
@@ -5193,6 +5250,10 @@ export default {
       const batchDeleteStudentsMatch = path.match(/^\/api\/classes\/(\d+)\/students\/batch-delete$/);
       if (batchDeleteStudentsMatch && request.method === 'POST') {
         return await handleBatchDeleteStudents(db, request, Number(batchDeleteStudentsMatch[1]));
+      }
+
+      if (path === '/api/students/groups' && request.method === 'PATCH') {
+        return await handleSetStudentGroups(db, request);
       }
 
       const progressRankingMatch = path.match(/^\/api\/classes\/(\d+)\/progress-ranking$/);

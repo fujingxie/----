@@ -95,6 +95,12 @@ export const feedStudentsBatch = ({ userId, classId, studentIds, rule = null, da
     body: JSON.stringify({ userId, studentIds, rule, dailyBulkFeed }),
   });
 
+export const setStudentGroups = ({ userId, classId, assignments }) =>
+  request('/students/groups', {
+    method: 'PATCH',
+    body: JSON.stringify({ userId, classId, assignments }),
+  });
+
 export const fetchStudentLogs = ({ classId, studentId, limit = 30, offset = 0 }) =>
   request(`/classes/${classId}/students/${studentId}/logs?limit=${limit}&offset=${offset}`, {
     method: 'GET',

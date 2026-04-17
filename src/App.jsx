@@ -1055,6 +1055,26 @@ function App() {
     }
   };
 
+  const handleStudentGroupsUpdated = (response) => {
+    if (!currentClassId) {
+      return;
+    }
+
+    if (response?.students) {
+      setStudentsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.students || [],
+      }));
+    }
+
+    if (response?.logs) {
+      setLogsByClassId((prev) => ({
+        ...prev,
+        [currentClassId]: response.logs || [],
+      }));
+    }
+  };
+
   const handleUndoLog = async (logId) => {
     if (!user || !currentClassId || !logId) {
       return;
@@ -2139,6 +2159,7 @@ function App() {
         <section className="view-container" style={{ width: '100%' }}>
           {activeTab === 'pet' && (
             <PetParadise
+              currentUser={user}
               currentClass={currentClass}
               students={currentStudents}
               rules={currentRules}
@@ -2152,6 +2173,7 @@ function App() {
               onGraduatePet={handleGraduatePet}
               onInteractStudent={handleInteractStudent}
               onFeedStudentsBatch={handleFeedStudentsBatch}
+              onStudentGroupsUpdated={handleStudentGroupsUpdated}
               onRequestConfirm={requestConfirm}
             />
           )}

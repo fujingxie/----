@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-04-17 — 学生分组与分组批量互动
+
+**Migration**: `0025_student_groups.sql`（`students` 新增 `group_name` 字段与班级分组索引）
+
+**功能**：
+- 宠物乐园新增「管理分组」，教师可为学生填写自定义分组名
+- 宠物乐园列表可按已有分组筛选
+- 批量互动弹窗支持按分组快选已有宠物的学生，并在学生行显示分组标签
+
+**修改范围**：
+- `src-server/index.js` — 学生查询返回 `group_name`，新增 `PATCH /api/students/groups`
+- `src/api/client.js` — 新增 `setStudentGroups`
+- `src/App.jsx` — 接收分组保存后的最新学生与日志
+- `src/components/PetParadise/PetParadise.jsx/.css` — 分组管理、筛选与批量快选 UI
+- `schema.sql` — 同步 `students.group_name` 和索引
+
+---
+
 ## 2026-04-16 — 反馈工单系统
 
 **Migration**: `0024_feedback_system.sql`（新增 `feedback_tickets` / `feedback_messages` 两表）

@@ -12,6 +12,7 @@ import { ADOPTABLE_PET_LIBRARY, getPetImagePath, getPetNameById } from '../../ap
 import { activateStudentPet, getAdoptionCount, graduateToNewEgg, isStudentAtMaxLevel, syncStudentCollectionProgress } from '../../lib/petCollection';
 import { playActionSound } from '../../lib/sounds';
 import { speakText, stopVoicePlayback } from '../../lib/voice';
+import { setStudentGroups } from '../../api/client';
 
 const POSITIVE_EFFECT_ICONS = ['✨', '💖', '🌟', '🍗', '🎉'];
 const NEGATIVE_EFFECT_ICONS = ['💩', '😵', '⚠️', '🌧️', '🥀'];
@@ -98,6 +99,7 @@ const buildBatchInteractionSpeech = (rule, options = {}) => {
 };
 
 const PetParadise = ({
+  currentUser,
   currentClass,
   students,
   logs,
@@ -106,6 +108,7 @@ const PetParadise = ({
   onGraduatePet,
   onInteractStudent,
   onFeedStudentsBatch,
+  onStudentGroupsUpdated,
   onRequestConfirm,
   rules,
   levelThresholds,
@@ -126,12 +129,24 @@ const PetParadise = ({
   const [isBulkAdopting, setIsBulkAdopting] = useState(false);
   const [isDailyBulkFeeding, setIsDailyBulkFeeding] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [activeGroupFilter, setActiveGroupFilter] = useState(null);
+  const [activeBulkGroupFilter, setActiveBulkGroupFilter] = useState(null);
+  const [isGroupSettingMode, setIsGroupSettingMode] = useState(false);
+  const [selectedGroupName, setSelectedGroupName] = useState(null);
+  const [groupDraftAssign, setGroupDraftAssign] = useState({});
+  const [draftGroupNameOverrides, setDraftGroupNameOverrides] = useState([]);
+  const [groupSearch, setGroupSearch] = useState('');
+  const [newGroupInput, setNewGroupInput] = useState('');
+  const [isAddingGroup, setIsAddingGroup] = useState(false);
+  const [isSavingGroups, setIsSavingGroups] = useState(false);
+  const [groupError, setGroupError] = useState('');
   const [activeBulkRuleType, setActiveBulkRuleType] = useState('positive');
   const [selectedBulkRuleId, setSelectedBulkRuleId] = useState(null);
   const [levelUpHighlights, setLevelUpHighlights] = useState([]);
   const [activeLevelUpIndex, setActiveLevelUpIndex] = useState(0);
   const pendingBatchLevelUpRef = useRef(null);
   const spokenLevelUpQueueIdsRef = useRef(new Set());
+  const hasInitializedGroupManagerRef = useRef(false);
   const hasBatchLevelUpOverview = levelUpHighlights.length > 1;
   const totalLevelUpSlides = hasBatchLevelUpOverview ? levelUpHighlights.length + 1 : levelUpHighlights.length;
   const isBatchLevelUpOverview = hasBatchLevelUpOverview && activeLevelUpIndex === 0;
@@ -144,6 +159,31 @@ const PetParadise = ({
   const classCoins = students.reduce((sum, student) => sum + (student.coins || 0), 0);
   const totalRewards = students.reduce((sum, student) => sum + (student.reward_count || 0), 0);
   const feedableStudents = useMemo(() => students.filter((student) => student.pet_status !== 'egg'), [students]);
+  const visibleBulkStudents = useMemo(
+    () => activeBulkGroupFilter
+      ? feedableStudents.filter((student) => student.group_name === activeBulkGroupFilter)
+      : feedableStudents,
+    [activeBulkGroupFilter, feedableStudents],
+  );
+  const visibleBulkStudentIds = useMemo(
+    () => visibleBulkStudents.map((student) => student.id),
+    [visibleBulkStudents],
+  );
+  const isAllVisibleBulkSelected = visibleBulkStudentIds.length > 0
+    && visibleBulkStudentIds.every((id) => selectedStudentIds.includes(id));
+  const groupNames = useMemo(() => {
+    const names = students
+      .map((student) => student.group_name)
+      .filter(Boolean);
+    return [...new Set(names)].sort();
+  }, [students]);
+  const draftGroupNames = useMemo(
+    () => [...new Set([
+      ...Object.values(groupDraftAssign).filter(Boolean),
+      ...draftGroupNameOverrides,
+    ])].sort(),
+    [groupDraftAssign, draftGroupNameOverrides],
+  );
   const conditionSummary = useMemo(
     () =>
       students.reduce(
@@ -160,16 +200,20 @@ const PetParadise = ({
     [students],
   );
   const filteredStudents = useMemo(() => {
+    let list = students;
+
     if (activeFilter === 'attention') {
-      return students.filter((student) => student.pet_status !== 'egg' && student.pet_condition !== 'healthy');
+      list = list.filter((student) => student.pet_status !== 'egg' && student.pet_condition !== 'healthy');
+    } else if (activeFilter === 'sleeping') {
+      list = list.filter((student) => student.pet_status !== 'egg' && student.pet_condition === 'sleeping');
     }
 
-    if (activeFilter === 'sleeping') {
-      return students.filter((student) => student.pet_status !== 'egg' && student.pet_condition === 'sleeping');
+    if (activeGroupFilter) {
+      list = list.filter((student) => student.group_name === activeGroupFilter);
     }
 
-    return students;
-  }, [activeFilter, students]);
+    return list;
+  }, [activeFilter, activeGroupFilter, students]);
   const achievements = useMemo(() => {
     const rewardMaster = totalRewards >= 10;
     const firstGraduate = students.some((student) => isStudentAtMaxLevel(student, levelThresholds))
@@ -217,6 +261,42 @@ const PetParadise = ({
   useEffect(() => {
     setSelectedBulkRuleId(null);
   }, [activeBulkRuleType]);
+
+  useEffect(() => {
+    if (activeGroupFilter && !groupNames.includes(activeGroupFilter)) {
+      setActiveGroupFilter(null);
+    }
+  }, [activeGroupFilter, groupNames]);
+
+  useEffect(() => {
+    if (activeBulkGroupFilter && !groupNames.includes(activeBulkGroupFilter)) {
+      setActiveBulkGroupFilter(null);
+    }
+  }, [activeBulkGroupFilter, groupNames]);
+
+  useEffect(() => {
+    if (!isGroupSettingMode) {
+      hasInitializedGroupManagerRef.current = false;
+      return;
+    }
+
+    if (hasInitializedGroupManagerRef.current) {
+      return;
+    }
+
+    hasInitializedGroupManagerRef.current = true;
+    const init = {};
+    students.forEach((student) => {
+      init[student.id] = student.group_name ?? null;
+    });
+    setGroupDraftAssign(init);
+    setDraftGroupNameOverrides(groupNames);
+    setSelectedGroupName(groupNames[0] ?? null);
+    setGroupSearch('');
+    setIsAddingGroup(false);
+    setNewGroupInput('');
+    setGroupError('');
+  }, [groupNames, isGroupSettingMode, students]);
 
   useEffect(() => {
     const pendingBatch = pendingBatchLevelUpRef.current;
@@ -414,10 +494,18 @@ const PetParadise = ({
   };
 
   const handleSelectAllFeedable = () => {
-    const allFeedableIds = feedableStudents.map((student) => student.id);
-    setSelectedStudentIds((prev) =>
-      prev.length === allFeedableIds.length ? [] : allFeedableIds,
-    );
+    if (visibleBulkStudentIds.length === 0) {
+      return;
+    }
+
+    setSelectedStudentIds((prev) => {
+      const allVisibleSelected = visibleBulkStudentIds.every((id) => prev.includes(id));
+      if (allVisibleSelected) {
+        return prev.filter((id) => !visibleBulkStudentIds.includes(id));
+      }
+
+      return [...new Set([...prev, ...visibleBulkStudentIds])];
+    });
   };
 
   const handleBulkFeed = async () => {
@@ -485,6 +573,78 @@ const PetParadise = ({
     } finally {
       setIsDailyBulkFeeding(false);
     }
+  };
+
+  const handleSaveGroups = async () => {
+    if (!currentUser?.id || !currentClass?.id || isSavingGroups) {
+      return;
+    }
+
+    const assignments = students
+      .filter((student) => {
+        const original = student.group_name ?? null;
+        const draft = groupDraftAssign[student.id] ?? null;
+        return original !== draft;
+      })
+      .map((student) => ({
+        studentId: student.id,
+        groupName: groupDraftAssign[student.id] ?? null,
+      }));
+
+    if (assignments.length === 0) {
+      setIsGroupSettingMode(false);
+      return;
+    }
+
+    setIsSavingGroups(true);
+    setGroupError('');
+
+    try {
+      const response = await setStudentGroups({
+        userId: currentUser.id,
+        classId: currentClass.id,
+        assignments,
+      });
+      onStudentGroupsUpdated?.(response);
+      setIsGroupSettingMode(false);
+    } catch (error) {
+      console.error('[DEBUG] handleSaveGroups failed:', error);
+      setGroupError(error?.message || '保存失败，请重试');
+    } finally {
+      setIsSavingGroups(false);
+    }
+  };
+
+  const handleSelectGroup = (name) => {
+    setSelectedGroupName(name);
+    setGroupSearch('');
+  };
+
+  const handleToggleStudentInGroup = (studentId) => {
+    if (!selectedGroupName) {
+      return;
+    }
+
+    setGroupDraftAssign((prev) => {
+      const current = prev[studentId];
+      if (current === selectedGroupName) {
+        return { ...prev, [studentId]: null };
+      }
+
+      return { ...prev, [studentId]: selectedGroupName };
+    });
+  };
+
+  const handleAddGroup = () => {
+    const name = newGroupInput.trim();
+    if (!name) {
+      return;
+    }
+
+    setSelectedGroupName(name);
+    setDraftGroupNameOverrides((prev) => [...new Set([...prev, name])]);
+    setIsAddingGroup(false);
+    setNewGroupInput('');
   };
 
   const handleBulkFeedByRule = async (rule = selectedBulkRule) => {
@@ -644,6 +804,13 @@ const PetParadise = ({
               批量互动
             </button>
           )}
+          <button
+            className="bulk-mode-btn group-manage-btn"
+            onClick={() => setIsGroupSettingMode(true)}
+            type="button"
+          >
+            管理分组
+          </button>
           {feedableStudents.length > 0 && !hasUsedDailyBulkFeed && (
             <button
               className="bulk-adopt-btn"
@@ -755,6 +922,21 @@ const PetParadise = ({
           >
             已休眠
           </button>
+          {groupNames.length > 0 && (
+            <>
+              <span className="pet-filter-divider">|</span>
+              {groupNames.map((name) => (
+                <button
+                  key={name}
+                  className={`pet-filter-chip group ${activeGroupFilter === name ? 'active' : ''}`}
+                  onClick={() => setActiveGroupFilter((prev) => (prev === name ? null : name))}
+                  type="button"
+                >
+                  {name}
+                </button>
+              ))}
+            </>
+          )}
         </div>
         <div className="pet-paradise-grid">
           {filteredStudents.map(student => (
@@ -776,6 +958,119 @@ const PetParadise = ({
           ))}
         </div>
       </section>
+
+      <Modal
+        isOpen={isGroupSettingMode}
+        onClose={() => setIsGroupSettingMode(false)}
+        title="管理分组"
+        contentClassName="group-manager-modal"
+      >
+        <div className="group-manager-shell">
+          <div className="group-manager-left">
+            <div className="group-manager-list">
+              {draftGroupNames.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  className={`group-manager-item ${selectedGroupName === name ? 'active' : ''}`}
+                  onClick={() => handleSelectGroup(name)}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+
+            {isAddingGroup ? (
+              <div className="group-manager-add-input">
+                <input
+                  type="text"
+                  className="glass-input compact"
+                  placeholder="分组名称"
+                  maxLength={20}
+                  autoFocus
+                  value={newGroupInput}
+                  onChange={(event) => setNewGroupInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      handleAddGroup();
+                    }
+                    if (event.key === 'Escape') {
+                      setIsAddingGroup(false);
+                      setNewGroupInput('');
+                    }
+                  }}
+                />
+                <button type="button" className="confirm-btn micro" onClick={handleAddGroup}>确认</button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="group-manager-add-btn"
+                onClick={() => setIsAddingGroup(true)}
+              >
+                + 新建分组
+              </button>
+            )}
+          </div>
+
+          <div className="group-manager-right">
+            <input
+              type="text"
+              className="glass-input compact group-manager-search"
+              placeholder="搜索学生姓名..."
+              value={groupSearch}
+              onChange={(event) => setGroupSearch(event.target.value)}
+            />
+            {selectedGroupName ? (
+              <div className="group-manager-students">
+                {students
+                  .filter((student) => student.name.includes(groupSearch.trim()))
+                  .map((student) => {
+                    const isInGroup = groupDraftAssign[student.id] === selectedGroupName;
+                    const otherGroup = groupDraftAssign[student.id]
+                      && groupDraftAssign[student.id] !== selectedGroupName
+                      ? groupDraftAssign[student.id]
+                      : null;
+
+                    return (
+                      <button
+                        key={student.id}
+                        type="button"
+                        className={`group-manager-student-row ${isInGroup ? 'checked' : ''}`}
+                        onClick={() => handleToggleStudentInGroup(student.id)}
+                      >
+                        <span className={`group-check-icon ${isInGroup ? 'checked' : ''}`}>
+                          {isInGroup ? '☑' : '☐'}
+                        </span>
+                        <span className="group-student-name">{student.name}</span>
+                        {otherGroup && (
+                          <span className="group-student-other-tag">{otherGroup}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+              </div>
+            ) : (
+              <div className="group-manager-empty">先在左侧选择或新建一个分组</div>
+            )}
+          </div>
+        </div>
+
+        {groupError ? <div className="group-setting-error">{groupError}</div> : null}
+        <div className="group-setting-actions">
+          <button
+            type="button"
+            className="group-setting-cancel-btn"
+            onClick={() => setIsGroupSettingMode(false)}
+            disabled={isSavingGroups}
+          >
+            取消
+          </button>
+          <button type="button" className="confirm-btn" onClick={handleSaveGroups} disabled={isSavingGroups}>
+            {isSavingGroups ? '保存中...' : '保存'}
+          </button>
+        </div>
+      </Modal>
 
       {selectingStudent && (
         <PetSelectionModal 
@@ -853,8 +1148,26 @@ const PetParadise = ({
               <h4>选择学生</h4>
               <p>这里只显示已经拥有宠物的学生。</p>
             </div>
+            {groupNames.length > 0 && (
+              <div className="bulk-group-chips">
+                {groupNames.map((name) => {
+                  const groupCount = feedableStudents.filter((student) => student.group_name === name).length;
+
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      className={`bulk-group-chip ${activeBulkGroupFilter === name ? 'active' : ''}`}
+                      onClick={() => setActiveBulkGroupFilter((prev) => (prev === name ? null : name))}
+                    >
+                      {name}（{groupCount}人）
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <div className="bulk-student-list">
-              {feedableStudents.map((student) => {
+              {visibleBulkStudents.map((student) => {
                 const isSelected = selectedStudentIds.includes(student.id);
                 return (
                   <button
@@ -880,7 +1193,7 @@ const PetParadise = ({
           </div>
           <button className="bulk-feed-select-all" onClick={handleSelectAllFeedable} type="button">
             <CheckCircle2 size={18} />
-            <span>{selectedStudentIds.length === feedableStudents.length ? '取消全选' : '全选可用宠物'}</span>
+            <span>{isAllVisibleBulkSelected ? '取消全选' : '全选可见学生'}</span>
           </button>
           <button className="bulk-feed-cancel" onClick={() => setIsBulkMode(false)} type="button">
             取消

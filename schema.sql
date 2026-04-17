@@ -41,8 +41,10 @@ CREATE TABLE students (
     pet_points INTEGER DEFAULT 0,
     coins INTEGER DEFAULT 0,
     total_exp INTEGER DEFAULT 0,
+    lifetime_exp INTEGER NOT NULL DEFAULT 0,
     total_coins INTEGER DEFAULT 0,
     reward_count INTEGER DEFAULT 0,
+    group_name TEXT DEFAULT NULL,
     pet_collection TEXT DEFAULT '[]',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (class_id) REFERENCES classes(id)
@@ -170,6 +172,7 @@ CREATE TABLE student_logs (
 
 CREATE INDEX idx_classes_user_id ON classes(user_id);
 CREATE INDEX idx_students_class_id ON students(class_id);
+CREATE INDEX idx_students_group ON students(class_id, group_name);
 CREATE INDEX idx_shop_items_class_id ON shop_items(class_id);
 CREATE INDEX idx_rules_class_id ON rules(class_id);
 CREATE INDEX idx_rules_owner_user_id ON rules(owner_user_id);
