@@ -100,6 +100,24 @@ const UserGuide = ({ variant = 'page', onOpenFeedback }) => {
         </div>
       </section>
 
+      {/* ─── 学生分组 ─── */}
+      <section className="guide-section">
+        <h3>👥 学生分组</h3>
+        <p>在「宠物乐园」页面右上角点击「管理分组」，可以把学生按需分配到不同组别。</p>
+        <ul className="guide-list">
+          <li>点击左侧「＋ 新建分组」创建分组名称（如"第一组""气氛组"）</li>
+          <li>选中分组后，在右侧勾选要加入的学生；同一学生可以同时属于<strong>多个分组</strong></li>
+          <li>点「保存」后，学生卡片下方会显示所属分组标签</li>
+        </ul>
+        <div className="guide-callout guide-callout-tip">
+          <strong>💡 分组过滤</strong>
+          <p>
+            宠物乐园顶部筛选栏和批量互动弹窗都支持<strong>多选分组</strong>，
+            同时选中多个分组会显示所有组的学生（并集），方便跨组批量操作。
+          </p>
+        </div>
+      </section>
+
       {/* ─── 规则与加分 ─── */}
       <section className="guide-section">
         <h3>📋 分值规则</h3>
@@ -169,12 +187,27 @@ const UserGuide = ({ variant = 'page', onOpenFeedback }) => {
         </details>
       </section>
 
-      {/* ─── 反馈 ─── */}
+      {/* ─── 反馈工单 ─── */}
+      <section className="guide-section">
+        <h3>📬 反馈工单</h3>
+        <p>遇到问题或有建议？可以直接在系统内提交反馈，超管会逐条回复。</p>
+        <ol className="guide-steps">
+          <li>点击右上角 <strong>铃铛图标</strong> → 切换到「我的反馈」Tab</li>
+          <li>点「＋ 提交反馈」，选择类型：<strong>Bug 报告 / 功能建议 / 使用问题</strong></li>
+          <li>填写标题和描述；如需附图，直接在文本框内 <strong>粘贴截图</strong>（Cmd+V / Ctrl+V）</li>
+          <li>提交后可在「我的反馈」列表查看处理进度</li>
+          <li>超管回复后，铃铛会出现 <strong>红点提醒</strong>，点开即可查看对话</li>
+        </ol>
+        <div className="guide-callout guide-callout-tip">
+          <strong>💡 已关闭的工单</strong>
+          <p>状态为「已关闭」的工单，悬停后会出现 × 按钮，可以自行删除。</p>
+        </div>
+      </section>
+
+      {/* ─── 页脚入口 ─── */}
       <section className="guide-section guide-footer">
-        <h3>📮 反馈与建议</h3>
-        <p>
-          使用中遇到 Bug、有新功能建议或使用疑问，随时提交反馈。超管会直接回复到你的铃铛「我的反馈」Tab。
-        </p>
+        <h3>✍️ 立即提交反馈</h3>
+        <p>如有任何问题或建议，欢迎随时告诉我们。</p>
         {onOpenFeedback ? (
           <button
             type="button"
