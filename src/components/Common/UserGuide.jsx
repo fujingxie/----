@@ -168,7 +168,7 @@ const UserGuide = ({ variant = 'page', onOpenFeedback }) => {
 
         <details className="guide-qa">
           <summary>可以手动修改学生经验吗？</summary>
-          <p>可以。超管账号在「账户管理 → 学生管理」里可以直接修改任一学生的本宠经验和累积经验（用于数据校准或补录）。普通教师账号通过加减分规则间接修改。</p>
+          <p>可以。管理员账号在「账户管理 → 学生管理」里可以直接修改任一学生的本宠经验和累积经验（用于数据校准或补录）。普通教师账号通过加减分规则间接修改。</p>
         </details>
 
         <details className="guide-qa">
@@ -183,7 +183,7 @@ const UserGuide = ({ variant = 'page', onOpenFeedback }) => {
 
         <details className="guide-qa">
           <summary>忘记密码怎么办？</summary>
-          <p>联系超管账号在后台重置密码，或通过激活码渠道重新注册。</p>
+          <p>联系管理员账号在后台重置密码，或通过激活码渠道重新注册。</p>
         </details>
       </section>
 
