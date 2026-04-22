@@ -69,6 +69,7 @@ import {
   updateStudent,
   updateThresholds,
   fetchNotifications,
+  fetchPublicCustomPets,
   markNotificationRead,
   markAllNotificationsRead,
   fetchMyFeedback,
@@ -76,6 +77,7 @@ import {
   replyFeedback,
   deleteMyFeedback,
 } from './api/client';
+import { setCustomPetsCache } from './api/petLibrary';
 import FeedbackList from './components/Feedback/FeedbackList';
 import FeedbackForm from './components/Feedback/FeedbackForm';
 import FeedbackDetail from './components/Feedback/FeedbackDetail';
@@ -423,22 +425,41 @@ function App() {
     }
   }, [user?.id]);
 
+  const loadCustomPets = useCallback(async () => {
+    try {
+      const res = await fetchPublicCustomPets();
+      setCustomPetsCache(res?.pets || []);
+    } catch {
+      setCustomPetsCache([]);
+    }
+  }, []);
+
+  const loadNotifications = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetchNotifications({ userId: user.id });
+      setNotifications(res.notifications || []);
+      setUnreadCount(res.unread_count || 0);
+    } catch {
+      // silent
+    }
+  }, [user?.id]);
+
   useEffect(() => {
     if (!user?.id) {
       setNotifications([]);
       setUnreadCount(0);
       setMyFeedbacks([]);
       setFeedbackUnread(0);
+      setCustomPetsCache([]);
       return;
     }
-    fetchNotifications({ userId: user.id })
-      .then((res) => {
-        setNotifications(res.notifications || []);
-        setUnreadCount(res.unread_count || 0);
-      })
-      .catch(() => {});
-    loadMyFeedback();
-  }, [user?.id, loadMyFeedback]);
+    Promise.allSettled([
+      loadNotifications(),
+      loadMyFeedback(),
+      loadCustomPets(),
+    ]);
+  }, [user?.id, loadCustomPets, loadMyFeedback, loadNotifications]);
 
   const handleMarkRead = useCallback(async (notif) => {
     if (notif.is_read) return;

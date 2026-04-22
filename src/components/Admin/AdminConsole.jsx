@@ -4,6 +4,7 @@ import './AdminConsole.css';
 import { ArrowDownUp, Bell, CheckSquare, ChevronDown, Copy, Download, History, KeyRound, Shield, Square, Ticket, Users, X } from 'lucide-react';
 import AdminUserDetail from './AdminUserDetail';
 import AdminFeedbackPanel from './AdminFeedbackPanel';
+import AdminPetsPanel from './AdminPetsPanel';
 import {
   adminDeleteNotification,
   createAdminNotification,
@@ -2039,6 +2040,13 @@ function AdminConsole({
         description="查看并回复教师提交的 Bug / 功能建议 / 使用问题反馈，支持多轮对话。"
       >
         <AdminFeedbackPanel currentUser={currentUser} />
+      </CollapsiblePanel>
+
+      <CollapsiblePanel
+        title="自定义宠物"
+        description="上传并管理自定义宠物，供学生领养。"
+      >
+        <AdminPetsPanel currentUser={currentUser} />
       </CollapsiblePanel>
 
       <CollapsiblePanel

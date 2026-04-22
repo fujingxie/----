@@ -259,6 +259,53 @@ export const resetAdminUserPassword = ({ userId, targetUserId, nextPassword }) =
     body: JSON.stringify({ userId, nextPassword }),
   });
 
+export const uploadPetImage = async ({ userId, file }) => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_BASE_URL}/admin/pets/upload?userId=${encodeURIComponent(String(userId))}`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+
+  if (!response.ok) {
+    throw new Error(data?.error || '请求失败，请稍后重试');
+  }
+
+  return data;
+};
+
+export const createCustomPet = ({
+  userId,
+  name,
+  category,
+  imageLv1,
+  imageLv2,
+  imageLv3,
+  imageLv4,
+  imageLv5,
+  imageLv6,
+  imageLv7,
+}) =>
+  request(`/admin/pets?userId=${encodeURIComponent(String(userId))}`, {
+    method: 'POST',
+    body: JSON.stringify({ name, category, imageLv1, imageLv2, imageLv3, imageLv4, imageLv5, imageLv6, imageLv7 }),
+  });
+
+export const fetchCustomPets = ({ userId }) =>
+  request(`/admin/pets?userId=${encodeURIComponent(String(userId))}`);
+
+export const deleteCustomPet = ({ userId, petId }) =>
+  request(`/admin/pets/${petId}?userId=${encodeURIComponent(String(userId))}`, {
+    method: 'DELETE',
+  });
+
+export const fetchPublicCustomPets = () =>
+  request('/pets/custom');
+
 export const fetchAdminCodes = ({ userId }) =>
   request(`/admin/codes?${new URLSearchParams({ userId: String(userId) }).toString()}`);
 

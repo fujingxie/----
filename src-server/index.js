@@ -4306,6 +4306,179 @@ async function handleAdminDeleteFeedback(db, request, ticketId) {
   return json({ success: true });
 }
 
+async function handleUploadPetImage(db, request, env) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+
+  if (!userId) {
+    return error('缺少有效的超管身份');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  const formData = await request.formData();
+  const file = formData.get('file');
+
+  if (!file || typeof file === 'string') {
+    return error('缺少文件', 400);
+  }
+
+  if (!String(file.type || '').startsWith('image/')) {
+    return error('只支持图片文件', 400);
+  }
+
+  if (Number(file.size || 0) > 2 * 1024 * 1024) {
+    return error('图片不能超过 2MB', 400);
+  }
+
+  if (!env.PET_IMAGES) {
+    return error('未配置宠物图片存储', 500);
+  }
+
+  const rawExt = String(file.name || '').includes('.') ? String(file.name).split('.').pop() : 'png';
+  const ext = String(rawExt || 'png')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+    .slice(0, 10) || 'png';
+  const key = `pets/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+  await env.PET_IMAGES.put(key, file.stream(), {
+    httpMetadata: { contentType: file.type || 'image/png' },
+  });
+
+  return json({ key });
+}
+
+async function handleGetPetImage(request, env, key) {
+  if (!env.PET_IMAGES) {
+    return error('未配置宠物图片存储', 500);
+  }
+
+  const normalizedKey = decodeURIComponent(String(key || ''));
+  const object = await env.PET_IMAGES.get(normalizedKey);
+
+  if (!object) {
+    return error('图片不存在', 404);
+  }
+
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set('cache-control', 'public, max-age=31536000');
+
+  return new Response(object.body, { headers });
+}
+
+async function handleGetPublicCustomPets(db) {
+  const result = await db
+    .prepare('SELECT * FROM custom_pets ORDER BY category ASC, name ASC, id ASC')
+    .all();
+
+  return json({
+    pets: result.results || [],
+  });
+}
+
+async function handleCreateCustomPet(db, request) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+
+  if (!userId) {
+    return error('缺少有效的超管身份');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  const body = await readBody(request);
+  const name = String(body.name || '').trim();
+  const category = String(body.category || '');
+  const imageKeys = [1, 2, 3, 4, 5, 6, 7].map((level) => String(body[`imageLv${level}`] || '').trim());
+
+  if (!name) {
+    return error('宠物名称不能为空', 400);
+  }
+
+  if (!['animal', 'plant', 'dinosaur', 'robot'].includes(category)) {
+    return error('无效的分类', 400);
+  }
+
+  if (imageKeys.some((item) => !item)) {
+    return error('请上传全部 7 个等级的图片', 400);
+  }
+
+  const result = await db
+    .prepare(
+      `INSERT INTO custom_pets
+       (name, category, image_lv1, image_lv2, image_lv3, image_lv4, image_lv5, image_lv6, image_lv7)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(name, category, ...imageKeys)
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '新增自定义宠物',
+    detail: `宠物名称: ${name}, 分类: ${category}`,
+  });
+
+  return json({
+    success: true,
+    id: result.meta?.last_row_id || null,
+  });
+}
+
+async function handleListCustomPets(db, request) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+
+  if (!userId) {
+    return error('缺少有效的超管身份');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  const result = await db.prepare('SELECT * FROM custom_pets ORDER BY created_at DESC, id DESC').all();
+
+  return json({
+    pets: result.results || [],
+  });
+}
+
+async function handleDeleteCustomPet(db, request, env, petId) {
+  const url = new URL(request.url);
+  const userId = parseId(url.searchParams.get('userId'));
+
+  if (!userId) {
+    return error('缺少有效的超管身份');
+  }
+
+  await assertSuperAdmin(db, userId);
+
+  const pet = await db.prepare('SELECT * FROM custom_pets WHERE id = ?').bind(petId).first();
+
+  if (!pet) {
+    return error('宠物不存在', 404);
+  }
+
+  if (!env.PET_IMAGES) {
+    return error('未配置宠物图片存储', 500);
+  }
+
+  const keys = [pet.image_lv1, pet.image_lv2, pet.image_lv3, pet.image_lv4, pet.image_lv5, pet.image_lv6, pet.image_lv7]
+    .filter(Boolean);
+
+  await Promise.all(keys.map((key) => env.PET_IMAGES.delete(key)));
+
+  await db.prepare('DELETE FROM custom_pets WHERE id = ?').bind(petId).run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '删除自定义宠物',
+    detail: `宠物 ID: ${petId}, 名称: ${pet.name}`,
+  });
+
+  return json({ success: true });
+}
+
 // ─── 超管账户管理 ────────────────────────────────────────────────────────────
 
 async function handleListAdminUsers(db, request) {
@@ -5217,6 +5390,32 @@ export default {
       }
       if (adminFbDetailMatch && request.method === 'PATCH') {
         return await handleAdminUpdateFeedbackStatus(db, request, Number(adminFbDetailMatch[1]));
+      }
+
+      const petImageMatch = path.match(/^\/api\/pets\/images\/(.+)$/);
+      if (petImageMatch && request.method === 'GET') {
+        return await handleGetPetImage(request, env, petImageMatch[1]);
+      }
+
+      if (path === '/api/pets/custom' && request.method === 'GET') {
+        return await handleGetPublicCustomPets(db);
+      }
+
+      if (path === '/api/admin/pets/upload' && request.method === 'POST') {
+        return await handleUploadPetImage(db, request, env);
+      }
+
+      const adminPetsDetailMatch = path.match(/^\/api\/admin\/pets\/(\d+)$/);
+      if (adminPetsDetailMatch && request.method === 'DELETE') {
+        return await handleDeleteCustomPet(db, request, env, Number(adminPetsDetailMatch[1]));
+      }
+
+      if (path === '/api/admin/pets' && request.method === 'GET') {
+        return await handleListCustomPets(db, request);
+      }
+
+      if (path === '/api/admin/pets' && request.method === 'POST') {
+        return await handleCreateCustomPet(db, request);
       }
 
       if (path === '/api/bootstrap' && request.method === 'GET') {

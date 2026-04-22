@@ -1,13 +1,32 @@
 import React, { useMemo, useState } from 'react';
 import { Egg, X } from 'lucide-react';
 import Modal from '../Common/Modal';
-import { ADOPTABLE_PET_LIBRARY, PET_IMAGE_FALLBACK } from '../../api/petLibrary';
+import { getFullPetLibrary, PET_IMAGE_FALLBACK } from '../../api/petLibrary';
 import { activateStudentPet } from '../../lib/petCollection';
 import './PetSelectionModal.css';
+
+const CATEGORIES = [
+  { key: 'all', label: '全部' },
+  { key: 'animal', label: '动物' },
+  { key: 'plant', label: '植物' },
+  { key: 'dinosaur', label: '恐龙' },
+  { key: 'robot', label: '机器人' },
+];
 
 const PetSelectionModal = ({ isOpen, onClose, student, onConfirm }) => {
   const [selectedPet, setSelectedPet] = useState(null);
   const [petName, setPetName] = useState('');
+  const [activeCategory, setActiveCategory] = useState('all');
+
+  const allPets = useMemo(() => getFullPetLibrary(), []);
+  const filteredPets = useMemo(
+    () => (activeCategory === 'all' ? allPets : allPets.filter((pet) => pet.category === activeCategory)),
+    [activeCategory, allPets],
+  );
+  const availableCategories = useMemo(
+    () => CATEGORIES.filter((category) => category.key === 'all' || allPets.some((pet) => pet.category === category.key)),
+    [allPets],
+  );
 
   const previewName = useMemo(() => petName.trim() || selectedPet?.name || '未命名伙伴', [petName, selectedPet]);
 
@@ -36,8 +55,26 @@ const PetSelectionModal = ({ isOpen, onClose, student, onConfirm }) => {
           <p>从图鉴库中选择一个喜欢的生灵，建立你们的课堂羁绊吧！</p>
         </div>
 
+        {availableCategories.length > 1 ? (
+          <div className="pet-category-tabs">
+            {availableCategories.map((category) => (
+              <button
+                key={category.key}
+                type="button"
+                className={`pet-category-tab ${activeCategory === category.key ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveCategory(category.key);
+                  setSelectedPet(null);
+                }}
+              >
+                {category.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         <div className="pet-grid">
-          {ADOPTABLE_PET_LIBRARY.map((pet) => (
+          {filteredPets.map((pet) => (
             <button
               key={pet.id}
               className={`pet-option ${selectedPet?.id === pet.id ? 'active' : ''}`}

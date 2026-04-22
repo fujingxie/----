@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-04-22 — 自定义宠物系统模块一
+
+**Migration**: `0027_custom_pets.sql`（新增 `custom_pets` 表，元数据落 D1）
+
+**功能**：
+- 超管可上传 7 个等级的宠物图片到 R2，并通过 Worker 代理地址预览
+- 超管控制台新增「自定义宠物」面板，可新增、查看、删除自定义宠物
+- 新增自定义宠物后台 API 与前端接口，为后续领养模块打基础
+
+**修改范围**：
+- `migrations/0027_custom_pets.sql` / `schema.sql` — 新增 `custom_pets` 表定义
+- `src-server/index.js` — 新增图片上传、图片代理、宠物增删查 handler 与路由
+- `src/api/client.js` — 新增自定义宠物 API，上传改用原生 `fetch` 发送 `FormData`
+- `src/components/Admin/AdminPetsPanel.jsx` — 新建超管宠物管理面板
+- `src/components/Admin/AdminConsole.jsx/.css` — 挂载新面板并补上传区样式
+
+**关键决策**：
+- 图片对象不直接暴露 R2，而是统一走 `/api/pets/images/:key` 代理，后续更方便切缓存与权限策略
+- `uploadPetImage` 不复用现有 `request()`，避免 `multipart/form-data` 被误加 JSON 请求头
+
 ## 2026-04-17 — 通知与反馈工单删除功能
 
 **功能**：

@@ -8,7 +8,7 @@ import Modal from '../Common/Modal';
 import './PetParadise.css';
 import { CheckCircle2, UserPlus } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { ADOPTABLE_PET_LIBRARY, getPetImagePath, getPetNameById } from '../../api/petLibrary';
+import { getFullPetLibrary, getPetImagePath, getPetNameById } from '../../api/petLibrary';
 import { activateStudentPet, getAdoptionCount, graduateToNewEgg, isStudentAtMaxLevel, syncStudentCollectionProgress } from '../../lib/petCollection';
 import { playActionSound } from '../../lib/sounds';
 import { speakText, stopVoicePlayback } from '../../lib/voice';
@@ -715,8 +715,14 @@ const PetParadise = ({
     setIsBulkAdopting(true);
 
     try {
+      const fullLibrary = getFullPetLibrary();
+
+      if (fullLibrary.length === 0) {
+        return;
+      }
+
       for (const student of eggStudents) {
-        const randomPet = ADOPTABLE_PET_LIBRARY[Math.floor(Math.random() * ADOPTABLE_PET_LIBRARY.length)];
+        const randomPet = fullLibrary[Math.floor(Math.random() * fullLibrary.length)];
         await onActivatePet(activateStudentPet(student, randomPet));
       }
 

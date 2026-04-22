@@ -230,6 +230,20 @@ CREATE TABLE feedback_tickets (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+CREATE TABLE custom_pets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'animal',        -- 'animal' | 'plant' | 'dinosaur' | 'robot'
+    image_lv1 TEXT NOT NULL,                        -- R2 object key，由 Worker 代理访问
+    image_lv2 TEXT NOT NULL,
+    image_lv3 TEXT NOT NULL,
+    image_lv4 TEXT NOT NULL,
+    image_lv5 TEXT NOT NULL,
+    image_lv6 TEXT NOT NULL,
+    image_lv7 TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 反馈对话消息表
 CREATE TABLE feedback_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

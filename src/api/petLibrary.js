@@ -65,17 +65,52 @@ export const ADOPTABLE_PET_LIBRARY = PET_LIBRARY.filter((pet) => pet.adoptable);
 
 export const PET_IMAGE_FALLBACK = '/assets/pets/egg.png';
 
-export const getPetMeta = (id) => PET_LIBRARY.find((pet) => pet.id === id) || null;
+let customPetsCache = [];
+
+export const setCustomPetsCache = (pets) => {
+  customPetsCache = Array.isArray(pets) ? pets : [];
+};
+
+export const getCustomPetsCache = () => customPetsCache;
+
+export const buildCustomPetEntry = (dbPet) => ({
+  id: `custom:${dbPet.id}`,
+  slug: `custom:${dbPet.id}`,
+  name: dbPet.name,
+  category: dbPet.category,
+  adoptable: true,
+  icon: dbPet.image_lv1 ? `/api/pets/images/${dbPet.image_lv1}` : PET_IMAGE_FALLBACK,
+  _dbPet: dbPet,
+});
+
+export const getFullPetLibrary = () => [
+  ...ADOPTABLE_PET_LIBRARY,
+  ...customPetsCache.map(buildCustomPetEntry),
+];
+
+export const getPetMeta = (id) => getFullPetLibrary().find((pet) => pet.id === id) || null;
 
 export const getPetNameById = (id) => getPetMeta(id)?.name || '探索者';
 
-export const getPetsByCategory = (category) => PET_LIBRARY.filter((pet) => pet.category === category);
+export const getPetsByCategory = (category) =>
+  getFullPetLibrary().filter((pet) => pet.category === category);
 
 /**
  * 根据宠物 ID 和等级获取动态图片路径
  */
 export const getPetImagePath = (id, level) => {
   if (!id) return PET_IMAGE_FALLBACK;
-  const lv = level || 1;
+  const lv = Math.min(Math.max(Number(level) || 1, 1), 7);
+
+  if (String(id).startsWith('custom:')) {
+    const customId = Number(String(id).replace('custom:', ''));
+    const pet = customPetsCache.find((item) => item.id === customId);
+    if (!pet) {
+      return PET_IMAGE_FALLBACK;
+    }
+    const key = pet[`image_lv${lv}`];
+    return key ? `/api/pets/images/${key}` : PET_IMAGE_FALLBACK;
+  }
+
   return `/assets/pets/${id}${lv}.png`;
 };

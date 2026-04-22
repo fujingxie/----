@@ -1154,3 +1154,126 @@
 .admin-notif-archived {
   opacity: 0.55;
 }
+
+.admin-pets-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-pets-toolbar,
+.admin-pets-form-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.admin-pets-form {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-pets-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* 上传区做成固定格子，方便超管快速核对 7 个等级是否齐全。 */
+.pet-image-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.pet-image-upload-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.slot-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.slot-preview {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.slot-placeholder,
+.slot-filled {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, transform 0.15s;
+  text-align: center;
+  overflow: hidden;
+}
+
+.slot-placeholder {
+  border: 1.5px dashed var(--border-color);
+}
+
+.slot-filled {
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.slot-placeholder:hover,
+.slot-filled:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+  transform: translateY(-1px);
+}
+
+.admin-pets-table td {
+  vertical-align: middle;
+}
+
+.admin-pet-list-preview {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+@media (max-width: 1100px) {
+  .pet-image-upload-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .admin-pets-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pet-image-upload-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .pet-image-upload-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
