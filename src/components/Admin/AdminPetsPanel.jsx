@@ -70,8 +70,9 @@ function AdminPetsPanel({ currentUser }) {
 
     try {
       // 上传前压缩：最长边 800px，≤300KB，宠物图片无需高分辨率
-      const compressed = await compressImageToBlob(file, { maxBytes: 300 * 1024, maxDim: 800 });
-      const compressedFile = new File([compressed], file.name, { type: compressed.type });
+      // 宠物图片用 PNG 保留透明背景，体积放宽到 500KB
+      const compressed = await compressImageToBlob(file, { maxBytes: 500 * 1024, maxDim: 800, format: 'png' });
+      const compressedFile = new File([compressed], file.name.replace(/\.[^.]+$/, '.png'), { type: 'image/png' });
       const response = await uploadPetImage({ userId: currentUser.id, file: compressedFile });
       setFormData((prev) => ({
         ...prev,

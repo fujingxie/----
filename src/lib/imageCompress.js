@@ -1,8 +1,8 @@
 /**
- * 图片压缩工具 —— 反馈系统使用
+ * 图片压缩工具
  *
- * 目标：将粘贴板 / 选择文件得到的原始 Blob 压缩成 ≤ 500KB 的 Base64 data URL（JPEG），
- * 客户端一次压缩完毕后直接随 JSON 请求体发到后端，避免多媒体上传链路。
+ * - compressImageToDataUrl：输出 JPEG Base64（反馈截图，白底填充）
+ * - compressImageToBlob：输出 Blob，支持 format 选项（宠物图片用 PNG 保留透明）
  */
 
 const DEFAULT_MAX_BYTES = 500 * 1024;
@@ -40,9 +40,11 @@ function loadImage(dataUrl) {
 }
 
 /**
- * 把图片等比缩放至最长边 ≤ maxDim，再用指定 quality 输出 JPEG data URL
+ * 把图片等比缩放至最长边 ≤ maxDim，输出 data URL
+ * format = 'jpeg'：白底填充（不支持透明）
+ * format = 'png' ：保留透明通道
  */
-function drawToDataUrl(img, maxDim, quality) {
+function drawToDataUrl(img, maxDim, quality, format = 'jpeg') {
   const { width: srcW, height: srcH } = img;
   const ratio = Math.min(1, maxDim / Math.max(srcW, srcH));
   const targetW = Math.max(1, Math.round(srcW * ratio));
@@ -52,23 +54,31 @@ function drawToDataUrl(img, maxDim, quality) {
   canvas.width = targetW;
   canvas.height = targetH;
   const ctx = canvas.getContext('2d');
-  // 透明区用白底，避免 JPEG 变黑
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, targetW, targetH);
+
+  if (format === 'jpeg') {
+    // JPEG 不支持透明，用白底填充避免变黑
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, targetW, targetH);
+  }
+
   ctx.drawImage(img, 0, 0, targetW, targetH);
-  return canvas.toDataURL('image/jpeg', quality);
+
+  return format === 'jpeg'
+    ? canvas.toDataURL('image/jpeg', quality)
+    : canvas.toDataURL('image/png');
 }
 
 /**
  * 压缩图片到 Base64 data URL（JPEG），保证 ≤ maxBytes
  *
  * @param {File|Blob} file
- * @param {{ maxBytes?: number, maxDim?: number }} opts
- * @returns {Promise<string>} data:image/jpeg;base64,...
+ * @param {{ maxBytes?: number, maxDim?: number, format?: 'jpeg'|'png' }} opts
+ * @returns {Promise<string>} data URL
  */
 export async function compressImageToDataUrl(file, opts = {}) {
   const maxBytes = opts.maxBytes || DEFAULT_MAX_BYTES;
   const initialMaxDim = opts.maxDim || DEFAULT_MAX_DIM;
+  const format = opts.format || 'jpeg';
 
   if (!file || !(file instanceof Blob)) {
     throw new Error('未提供有效的图片文件');
@@ -77,17 +87,30 @@ export async function compressImageToDataUrl(file, opts = {}) {
   const dataUrl = await readFileAsDataUrl(file);
   const img = await loadImage(dataUrl);
 
-  // 逐步降低 quality 和 maxDim，直到满足大小
+  // PNG 不用 quality 循环，只靠缩小尺寸控制体积
+  if (format === 'png') {
+    let maxDim = initialMaxDim;
+    for (let i = 0; i < 8; i++) {
+      const out = drawToDataUrl(img, maxDim, 1, 'png');
+      if (estimateBase64Bytes(out) <= maxBytes) return out;
+      maxDim = Math.max(400, Math.round(maxDim * 0.8));
+    }
+    const fallback = drawToDataUrl(img, 400, 1, 'png');
+    if (estimateBase64Bytes(fallback) > maxBytes) {
+      throw new Error('图片过大，无法压缩到目标大小，请裁剪后重试');
+    }
+    return fallback;
+  }
+
+  // JPEG：逐步降低 quality 和 maxDim，直到满足大小
   let quality = 0.85;
   let maxDim = initialMaxDim;
 
   // 最多尝试 8 轮，避免死循环（理论上 3-4 轮就够）
   for (let i = 0; i < 8; i++) {
-    const out = drawToDataUrl(img, maxDim, quality);
+    const out = drawToDataUrl(img, maxDim, quality, 'jpeg');
     const bytes = estimateBase64Bytes(out);
-    if (bytes <= maxBytes) {
-      return out;
-    }
+    if (bytes <= maxBytes) return out;
     if (quality > MIN_QUALITY + 0.001) {
       quality = Math.max(MIN_QUALITY, quality - QUALITY_STEP);
     } else {
@@ -97,7 +120,7 @@ export async function compressImageToDataUrl(file, opts = {}) {
   }
 
   // 最终一次兜底（maxDim 缩到 640，quality 0.4）
-  const fallback = drawToDataUrl(img, 640, MIN_QUALITY);
+  const fallback = drawToDataUrl(img, 640, MIN_QUALITY, 'jpeg');
   if (estimateBase64Bytes(fallback) > maxBytes) {
     throw new Error('图片过大，无法压缩到 500KB 以内，请裁剪后重试');
   }
@@ -106,15 +129,13 @@ export async function compressImageToDataUrl(file, opts = {}) {
 
 /**
  * 压缩图片并返回 Blob（用于 FormData 上传，如 R2）
- * 内部复用 compressImageToDataUrl，再将 data URL 转回 Blob
  *
  * @param {File|Blob} file
- * @param {{ maxBytes?: number, maxDim?: number }} opts
- * @returns {Promise<Blob>} image/jpeg Blob
+ * @param {{ maxBytes?: number, maxDim?: number, format?: 'jpeg'|'png' }} opts
+ * @returns {Promise<Blob>}
  */
 export async function compressImageToBlob(file, opts = {}) {
   const dataUrl = await compressImageToDataUrl(file, opts);
-  // data URL → Blob
   const [header, base64] = dataUrl.split(',');
   const mime = header.match(/:(.*?);/)[1];
   const binary = atob(base64);
