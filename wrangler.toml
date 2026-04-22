@@ -11,3 +11,8 @@ binding = "DB"
 database_name = "class_pets_db"
 database_id = "413950c7-1d1e-4c2e-b012-82b14c3c1f1a"
 preview_database_id = "413950c7-1d1e-4c2e-b012-82b14c3c1f1a"
+
+# R2 宠物图片存储
+[[r2_buckets]]
+binding = "PET_IMAGES"
+bucket_name = "pet-images"
