@@ -144,3 +144,23 @@
 ## 此前历史
 
 早期 migrations（0001 ~ 0021）包含：用户表、学生表、宠物系统、分值规则、商店、批量喂养、衰减配置、操作日志、规则排序/模板等。详见 `migrations/` 目录与 `git log`。
+
+## 2026-04-22 — 荣誉工坊 Module 1（冰箱贴制作）
+
+- a0c30da 新增荣誉工坊 Tab：冰箱贴制作功能上线
+- 78158b5 新增荣誉工坊 Module 1 设计文档
+
+**新增文件**
+- `src/components/HonorWorkshop/HonorWorkshop.jsx` — 框架骨架，左侧三功能导航
+- `src/components/HonorWorkshop/StickerWorkshop.jsx` — 冰箱贴制作，Canvas 渲染 + JSZip 批量下载
+- `src/components/HonorWorkshop/HonorWorkshop.css` — 荣誉工坊全部样式
+- `docs/plans/2026-04-22-honor-workshop-module1.md` — 模块设计文档
+
+**改动文件**
+- `src/App.jsx` — 新增荣誉工坊 Tab，import HonorWorkshop
+- `src-server/index.js` — 修复 R2 图片代理缺少 `Access-Control-Allow-Origin: *`（Canvas 跨域加载必要）
+- `package.json` — 新增 `jszip` 依赖（按需动态 import）
+
+**架构决策**
+- 荣誉工坊全部纯前端，不增加后端接口
+- JSZip 动态 import，打包时独立分包（~96KB），不影响首屏加载
