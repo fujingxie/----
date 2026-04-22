@@ -4364,6 +4364,7 @@ async function handleGetPetImage(request, env, key) {
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set('cache-control', 'public, max-age=31536000');
+  headers.set('Access-Control-Allow-Origin', '*');
 
   return new Response(object.body, { headers });
 }

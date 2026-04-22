@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Award,
   Bell,
   Briefcase,
   ChevronDown,
@@ -78,6 +79,7 @@ import {
   deleteMyFeedback,
 } from './api/client';
 import { setCustomPetsCache } from './api/petLibrary';
+import HonorWorkshop from './components/HonorWorkshop/HonorWorkshop';
 import FeedbackList from './components/Feedback/FeedbackList';
 import FeedbackForm from './components/Feedback/FeedbackForm';
 import FeedbackDetail from './components/Feedback/FeedbackDetail';
@@ -202,6 +204,7 @@ const tabs = [
   { id: 'shop', label: '小卖部', icon: <ShoppingBag size={20} /> },
   { id: 'rank', label: '光荣榜', icon: <Trophy size={20} /> },
   { id: 'toolbox', label: '百宝箱', icon: <Briefcase size={20} /> },
+  { id: 'honor', label: '荣誉工坊', icon: <Award size={20} /> },
   { id: 'settings', label: '系统设置', icon: <SettingsIcon size={20} /> },
 ];
 const ADMIN_TAB = { id: 'admin', label: '超管后台', icon: <Shield size={20} /> };
@@ -2248,6 +2251,14 @@ function App() {
               savedSmartSeatingConfig={currentSeatingConfig}
               onSaveSmartSeatingConfig={handleSaveSmartSeatingConfig}
               toolboxAccessConfig={toolboxAccessConfig}
+            />
+          )}
+
+          {activeTab === 'honor' && (
+            <HonorWorkshop
+              students={currentStudents}
+              currentClass={currentClass}
+              user={user}
             />
           )}
 
