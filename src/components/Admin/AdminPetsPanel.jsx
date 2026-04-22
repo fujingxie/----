@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createCustomPet, deleteCustomPet, fetchCustomPets, uploadPetImage } from '../../api/client';
+import { compressImageToBlob } from '../../lib/imageCompress';
 
 const CATEGORY_OPTIONS = [
   { value: 'animal', label: '动物' },
@@ -68,7 +69,10 @@ function AdminPetsPanel({ currentUser }) {
     setUploading((prev) => ({ ...prev, [`lv${level}`]: true }));
 
     try {
-      const response = await uploadPetImage({ userId: currentUser.id, file });
+      // 上传前压缩：最长边 800px，≤300KB，宠物图片无需高分辨率
+      const compressed = await compressImageToBlob(file, { maxBytes: 300 * 1024, maxDim: 800 });
+      const compressedFile = new File([compressed], file.name, { type: compressed.type });
+      const response = await uploadPetImage({ userId: currentUser.id, file: compressedFile });
       setFormData((prev) => ({
         ...prev,
         [`imageLv${level}`]: response?.key || '',

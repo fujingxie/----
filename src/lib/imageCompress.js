@@ -103,3 +103,24 @@ export async function compressImageToDataUrl(file, opts = {}) {
   }
   return fallback;
 }
+
+/**
+ * 压缩图片并返回 Blob（用于 FormData 上传，如 R2）
+ * 内部复用 compressImageToDataUrl，再将 data URL 转回 Blob
+ *
+ * @param {File|Blob} file
+ * @param {{ maxBytes?: number, maxDim?: number }} opts
+ * @returns {Promise<Blob>} image/jpeg Blob
+ */
+export async function compressImageToBlob(file, opts = {}) {
+  const dataUrl = await compressImageToDataUrl(file, opts);
+  // data URL → Blob
+  const [header, base64] = dataUrl.split(',');
+  const mime = header.match(/:(.*?);/)[1];
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mime });
+}
