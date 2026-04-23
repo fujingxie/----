@@ -1253,14 +1253,17 @@ const LogsPanel = ({ logs, onUndoLog, isMutating }) => {
               <div className="log-footer">
                 <span className="log-operator">{log.operator}</span>
                 {log.canUndo && (
-                  <button
-                    className="log-undo-btn"
-                    disabled={isMutating}
-                    onClick={() => onUndoLog(log.id)}
-                    type="button"
-                  >
-                    {isMutating ? '撤销中...' : '撤销最近一次'}
-                  </button>
+                  <div className="log-undo-area">
+                    <button
+                      className="log-undo-btn"
+                      disabled={isMutating}
+                      onClick={() => onUndoLog(log.id)}
+                      type="button"
+                    >
+                      {isMutating ? '撤销中...' : '撤销最近一次'}
+                    </button>
+                    <span className="log-undo-tip">撤销仅恢复宠物经验和金币，不影响战力榜累计经验</span>
+                  </div>
                 )}
               </div>
             </article>
@@ -1724,6 +1727,18 @@ const Settings = ({
          detailMsg.push(`宠物改名为 ${updates.pet_name}`);
       } else {
          detailMsg.push(`清除了宠物名字`);
+      }
+    }
+    // 补录宠物：新增了毕业条目时生成专属日志
+    if (Array.isArray(updates.pet_collection)) {
+      const oldCount = parsePetCollection(student.pet_collection, student).filter((e) => e.status === 'graduated').length;
+      const newEntries = updates.pet_collection.filter((e) => e.status === 'graduated');
+      if (newEntries.length > oldCount) {
+        const added = newEntries.slice(oldCount);
+        const expGained = Math.max(0, Number(updates.lifetime_exp || 0) - Number(student.lifetime_exp || 0));
+        added.forEach((e) => {
+          detailMsg.push(`补录宠物「${e.pet_name || e.pet_type_id || '未知'}」，累计经验 +${expGained}`);
+        });
       }
     }
 

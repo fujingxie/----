@@ -1295,7 +1295,9 @@ async function reconcileStudentConditions(db, classId, userId = null) {
             nextStudent.pet_level,
             nextStudent.pet_points,
             nextStudent.total_exp,
-            JSON.stringify(nextStudent.pet_collection || []),
+            // 确保写回的是数组而非字符串，防止 pet_collection 被双重 JSON 序列化
+            // totalDecay=0 时 nextStudent.pet_collection 仍是 DB 原始字符串，直接 stringify 会双重编码
+            JSON.stringify(parsePetCollection(nextStudent.pet_collection)),
             row.id,
           ),
       );
