@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-04-23 — 修复宠物衰减双重序列化 + 优化撤销提示
+
+**Bug 修复**：
+- `reconcileStudentConditions` 写回 `pet_collection` 时，若 `totalDecay=0` 但触发了状态变更（如饥饿判定），`nextStudent.pet_collection` 仍是数据库原始字符串，直接 `JSON.stringify` 会产生双重编码，导致宠物历史数据损坏
+- 修复方式：写回前统一经过 `parsePetCollection()` 解析，确保写入的始终是数组
+
+**数据恢复**：
+- 修复了线上 teacheryu 班级（class_id=26）8 名学生的损坏 `pet_collection`，其中曾依琳还原了已毕业宠物"小雪"（雪狐 lv7）
+
+**功能优化**：
+- 补录宠物时在操作日志生成专属条目，内容包含宠物名和经验增量
+- 撤销按钮下方新增说明文字，提示战力榜累计经验不受撤销影响，消除教师误解
+
+**修改范围**：
+- `src-server/index.js` — 衰减写回修复（line ~1298）
+- `src/components/Settings/Settings.jsx` — 撤销按钮提示 + 补录日志逻辑
+- `src/components/Settings/Settings.css` — 撤销提示样式
+
+---
+
 ## 2026-04-22 — 自定义宠物系统模块一
 
 **Migration**: `0027_custom_pets.sql`（新增 `custom_pets` 表，元数据落 D1）
