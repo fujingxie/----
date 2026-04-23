@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import CertWorkshop from './CertWorkshop';
 import StickerWorkshop from './StickerWorkshop';
 import './HonorWorkshop.css';
 
@@ -8,7 +9,7 @@ const SECTIONS = [
   { id: 'graduate-cert', label: '毕业证书制作' },
 ];
 
-const HonorWorkshop = ({ students, currentClass }) => {
+const HonorWorkshop = ({ students, currentClass, user }) => {
   const [activeSection, setActiveSection] = useState('sticker');
 
   return (
@@ -33,7 +34,11 @@ const HonorWorkshop = ({ students, currentClass }) => {
           <StickerWorkshop students={students} currentClass={currentClass} />
         )}
         {activeSection === 'honor-cert' && (
-          <div className="honor-coming-soon">光荣榜证书制作 — 即将上线</div>
+          <CertWorkshop
+            students={students}
+            currentClass={currentClass}
+            user={user}
+          />
         )}
         {activeSection === 'graduate-cert' && (
           <div className="honor-coming-soon">毕业证书制作 — 即将上线</div>
