@@ -175,9 +175,9 @@ async function renderFridgeMagnetToCanvas(pet, student, className, sticker) {
   roundRect(ctx, W - 170, imgAreaY + imgAreaH - 52, 140, 36, 18);
   ctx.fill();
   ctx.fillStyle = '#FFFFFF';
-  ctx.font = 'bold 16px sans-serif';
+  ctx.font = 'bold 18px "Noto Sans SC", sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('GRADUATED', W - 100, imgAreaY + imgAreaH - 28);
+  ctx.fillText('✦ 光荣毕业', W - 100, imgAreaY + imgAreaH - 28);
 
   // 宠物名
   const petName = pet.name || pet.pet_name || '未命名';
@@ -291,7 +291,7 @@ const BigMagnetPreview = ({ pet, student, className, sticker }) => {
           background: sticker.ring, color: '#fff',
           fontSize: 11, fontWeight: 700, letterSpacing: 1,
         }}>
-          GRADUATED
+          ✦ 光荣毕业
         </div>
       </div>
 
