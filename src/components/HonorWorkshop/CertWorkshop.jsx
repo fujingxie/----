@@ -74,26 +74,37 @@ function buildRanking(students, rankingTypeId, n) {
     .map((s, i) => {
       const pets = parsePetCollection(s.pet_collection);
 
+      // 从 pet_collection 找展示宠物：
       // 优先：有 pet_type_id 的 active 宠物（已孵化）
-      // 次选：最近一条毕业宠物（学生当前养着蛋，但历史有宠物）
-      // 最后：任意一条
+      // 次选：最近一条毕业宠物
+      // 最后：集合里任意一条
       const activePetWithType = pets.find(
-        (p) => (p.status === 'active') && (p.pet_type_id || p.type),
+        (p) => p.status === 'active' && (p.pet_type_id || p.type),
       );
       const lastGraduated = [...pets]
         .reverse()
         .find((p) => p.status === 'graduated' && (p.pet_type_id || p.type));
-      const fallbackPet = pets[pets.length - 1];
+      const collectionPet = activePetWithType || lastGraduated || pets[pets.length - 1];
 
-      const displayPet = activePetWithType || lastGraduated || fallbackPet;
-      const petTypeId  = displayPet?.pet_type_id || displayPet?.type || null;
-      const petLevel   = displayPet?.pet_level   || displayPet?.level || 1;
+      // Fallback：pet_collection 为空或未同步时，读学生顶层字段
+      // pet_status !== 'egg' 才有意义，蛋没有 pet_type_id
+      const topLevelHasPet = s.pet_status !== 'egg' && s.pet_type_id;
+
+      const petTypeId = collectionPet?.pet_type_id || collectionPet?.type
+        || (topLevelHasPet ? s.pet_type_id : null)
+        || null;
+      const petLevel  = collectionPet?.pet_level || collectionPet?.level
+        || (topLevelHasPet ? s.pet_level : null)
+        || 1;
+      const petName   = collectionPet?.pet_name || collectionPet?.name
+        || (topLevelHasPet ? s.pet_name : null)
+        || '—';
 
       return {
         rank: i + 1,
         name: s.name,
         studentId: s.id,
-        pet: displayPet?.pet_name || displayPet?.name || '—',
+        pet: petName,
         petTypeId,
         petLevel,
         value: s[key] || 0,
