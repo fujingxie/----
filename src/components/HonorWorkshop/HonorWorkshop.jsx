@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import CertWorkshop from './CertWorkshop';
+import GradCertWorkshop from './GradCertWorkshop';
 import StickerWorkshop from './StickerWorkshop';
 import './HonorWorkshop.css';
 
@@ -40,27 +41,24 @@ const HonorWorkshop = ({ students, currentClass, user }) => {
     );
   }
 
-  // 其他模块（毕业证书等）保留外层导航 sidebar
+  if (activeSection === 'graduate-cert') {
+    return (
+      <div className="honor-workshop">
+        <GradCertWorkshop
+          students={students}
+          currentClass={currentClass}
+          user={user}
+          activeSection={activeSection}
+          onSwitchSection={setActiveSection}
+        />
+      </div>
+    );
+  }
+
+  // 兜底（理论上不会到达这里）
   return (
     <div className="honor-workshop">
-      <aside className="honor-sidebar">
-        {SECTIONS.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            className={`honor-nav-item ${activeSection === s.id ? 'active' : ''}`}
-            onClick={() => setActiveSection(s.id)}
-          >
-            {s.label}
-          </button>
-        ))}
-      </aside>
-
-      <main className="honor-content">
-        {activeSection === 'graduate-cert' && (
-          <div className="honor-coming-soon">毕业证书制作 — 即将上线</div>
-        )}
-      </main>
+      <div className="honor-coming-soon">— 即将上线 —</div>
     </div>
   );
 };
