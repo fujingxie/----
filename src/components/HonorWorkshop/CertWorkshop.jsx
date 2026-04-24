@@ -73,16 +73,27 @@ function buildRanking(students, rankingTypeId, n) {
     .slice(0, n)
     .map((s, i) => {
       const pets = parsePetCollection(s.pet_collection);
-      const activePet =
-        pets.find((p) => p.status === 'active' || p.status === 'active-egg') ||
-        pets[pets.length - 1];
-      const petTypeId = activePet?.pet_type_id || activePet?.type || null;
-      const petLevel  = activePet?.pet_level  || activePet?.level || 1;
+
+      // 优先：有 pet_type_id 的 active 宠物（已孵化）
+      // 次选：最近一条毕业宠物（学生当前养着蛋，但历史有宠物）
+      // 最后：任意一条
+      const activePetWithType = pets.find(
+        (p) => (p.status === 'active') && (p.pet_type_id || p.type),
+      );
+      const lastGraduated = [...pets]
+        .reverse()
+        .find((p) => p.status === 'graduated' && (p.pet_type_id || p.type));
+      const fallbackPet = pets[pets.length - 1];
+
+      const displayPet = activePetWithType || lastGraduated || fallbackPet;
+      const petTypeId  = displayPet?.pet_type_id || displayPet?.type || null;
+      const petLevel   = displayPet?.pet_level   || displayPet?.level || 1;
+
       return {
         rank: i + 1,
         name: s.name,
         studentId: s.id,
-        pet: activePet?.pet_name || activePet?.name || '—',
+        pet: displayPet?.pet_name || displayPet?.name || '—',
         petTypeId,
         petLevel,
         value: s[key] || 0,
@@ -227,28 +238,31 @@ const CertificateCard = React.forwardRef(
 
             {/* 右：宠物形象 */}
             <div style={{ width: 155, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-              <div style={{
-                width: 134, height: 134, borderRadius: 14,
-                border: `2.5px solid ${tmpl.border}`,
-                background: `${tmpl.border}18`,
-                boxShadow: `inset 0 0 0 5px ${tmpl.bg}, inset 0 0 0 7px ${tmpl.border}44`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 70, overflow: 'hidden', position: 'relative',
-              }}>
-                {/* 排名徽章 */}
+              {/* 排名徽章放在图片框外层，避免被 overflow:hidden 裁掉 */}
+              <div style={{ position: 'relative', paddingTop: 12 }}>
                 <div style={{
-                  position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)',
+                  position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
                   padding: '2px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700,
                   background: tmpl.border, color: '#FFF', whiteSpace: 'nowrap',
+                  zIndex: 1,
                 }}>
                   #{entry.rank} · Lv.{entry.petLevel}
                 </div>
-                <img
-                  src={petImgError ? '/assets/pets/egg.png' : petImgSrc}
-                  alt={entry.pet}
-                  style={{ width: '85%', height: '85%', objectFit: 'contain' }}
-                  onError={() => setPetImgError(true)}
-                />
+                <div style={{
+                  width: 134, height: 134, borderRadius: 14,
+                  border: `2.5px solid ${tmpl.border}`,
+                  background: `${tmpl.border}18`,
+                  boxShadow: `inset 0 0 0 5px ${tmpl.bg}, inset 0 0 0 7px ${tmpl.border}44`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  overflow: 'hidden',
+                }}>
+                  <img
+                    src={petImgError ? '/assets/pets/egg.png' : petImgSrc}
+                    alt={entry.pet}
+                    style={{ width: '85%', height: '85%', objectFit: 'contain' }}
+                    onError={() => setPetImgError(true)}
+                  />
+                </div>
               </div>
               <div style={{ fontSize: 13, fontWeight: 700, color: tmpl.title, fontFamily: 'sans-serif', textAlign: 'center' }}>
                 {entry.pet}
