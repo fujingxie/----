@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-04-24 — 荣誉工坊 Module 2 & 3（光荣榜证书 + 毕业证书）
+
+**功能**：
+
+**Module 2 · CertWorkshop（光荣榜证书）**：
+- 典雅书卷布局（全宽三区：左工具栏 / 右工作区），使用 `cw-*` + `sw2-rail` CSS 类
+- 8 套证书模板（典雅金、薄荷现代、樱花粉、羊皮卷、晴空、阳光、森林派对、新春红）
+- 按排名类型（积分、升级次数、进步等）+ 显示人数过滤候选，支持逐页翻看
+- 6 套荣誉寄语模板，自动填充姓名/宠物/班级/经验
+- 宠物图片展示修复（active pet 优先 → 末次毕业宠物 → 顶层字段兜底）
+- PNG 下载（html2canvas × 2x）+ 新窗口打印（只含 CertificateCard DOM）
+- 证书背景跟随系统主题（CSS 变量）
+
+**Module 3 · GradCertWorkshop（毕业证书）**：
+- 三列布局：左侧工具栏（sw2-rail + 签发信息块）/ 中间毕业宠物选择器（gc-picker）/ 右侧工作区
+- 从 `pet_collection` 解析 status='graduated' 宠物，支持姓名/宠物名搜索
+- DiplomaCard：圆形宠物头像、Lv.X 毕业徽章、成长时间线（Lv.0→Lv.N 节点+连线）、外双边框
+- 证书编号：`GRAD-{班级纯数字}-{毕业日期YYYYMMDD}-{宠物ID后6位大写}`
+- 6 套毕业寄语模板（正式/旅程回望/温柔/俏皮/以你为荣/诗意），话术变量填充
+- 8 色块横排模板选择（32×32 swatch + 当前模板名胶囊）
+- PNG 下载 + 新窗口打印（A4 横版）
+- 背景跟随系统主题
+
+**修改范围**：
+- `src/components/HonorWorkshop/CertWorkshop.jsx` — 完整重写（典雅书卷布局）
+- `src/components/HonorWorkshop/GradCertWorkshop.jsx` — 新建
+- `src/components/HonorWorkshop/HonorWorkshop.jsx` — 增加 graduate-cert 分支，渲染 GradCertWorkshop
+- `src/components/HonorWorkshop/HonorWorkshop.css` — 新增 cw-* + gc-* + sw2-* 样式类
+- `src/components/HonorWorkshop/StickerWorkshop.jsx` — 修复缩略图图片显示、GRADUATED→光荣毕业
+
+**关键决策**：
+- 打印统一走 `window.open()` 新窗口 + `outerHTML` 注入，避免 `window.print()` 打整页
+- 毕业宠物展示优先级：active pet 有 pet_type_id → pet_collection 末次毕业宠物 → top-level 字段兜底
+- 证书背景色跟随系统主题，内部内容颜色由模板定义（硬编码，保留设计感）
+
 ## 2026-04-22 — 自定义宠物系统模块一
 
 **Migration**: `0027_custom_pets.sql`（新增 `custom_pets` 表，元数据落 D1）
