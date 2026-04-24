@@ -1715,11 +1715,12 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 20px;
+  padding: 16px 20px;
+  margin-top: 16px;
   border-top: 2px solid var(--glass-border);
   background: var(--theme-soft, rgba(0,0,0,0.12));
-  box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
-  min-height: 100px;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.10);
+  min-height: 108px;
 }
 
 .sw2-thumb-strip-label {
