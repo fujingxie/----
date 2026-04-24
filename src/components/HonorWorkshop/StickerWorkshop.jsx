@@ -592,6 +592,10 @@ const StickerWorkshop = ({ students, currentClass, activeSection, onSwitchSectio
             <div className="sw2-thumb-scroll">
               {currentGraduated.map((pet, idx) => {
                 const on = idx === safePetIdx;
+                const petType = pet.type || pet.pet_type_id;
+                const petLevel = pet.level || pet.pet_level || 1;
+                const petName = pet.name || pet.pet_name || '未命名';
+                const imgSrc = petType ? getPetImagePath(petType, petLevel) : null;
                 return (
                   <button
                     key={idx}
@@ -603,11 +607,20 @@ const StickerWorkshop = ({ students, currentClass, activeSection, onSwitchSectio
                     <div className="sw2-thumb-img" style={{
                       background: on ? 'rgba(255,255,255,0.08)' : '#fff',
                     }}>
-                      {pet.emoji || '🐾'}
+                      {imgSrc ? (
+                        <img
+                          src={imgSrc}
+                          alt={petName}
+                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      ) : (
+                        <span>{pet.emoji || '🐾'}</span>
+                      )}
                     </div>
-                    <div className="sw2-thumb-name">{pet.name || '未命名'}</div>
+                    <div className="sw2-thumb-name">{petName}</div>
                     <div className="sw2-thumb-info">
-                      Lv.{pet.level || pet.pet_level || 1} · {getPetDisplayExp(pet, currentData.student)}xp
+                      Lv.{petLevel} · {getPetDisplayExp(pet, currentData.student)}xp
                     </div>
                   </button>
                 );
