@@ -106,6 +106,7 @@ function roundRect(ctx, x, y, w, h, r) {
 
 // ─── Canvas 渲染（下载专用，只渲染贴纸卡片本身）─────────────────────────────
 
+// renderFridgeMagnetToCanvas 接收 student 用于 fallback lifetime_exp
 async function renderFridgeMagnetToCanvas(pet, student, className, sticker) {
   const W = 600;
   const H = 760;
@@ -200,8 +201,8 @@ async function renderFridgeMagnetToCanvas(pet, student, className, sticker) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // EXP + 毕业日期
-  const exp = pet.exp ?? pet.lifetime_exp ?? 0;
+  // EXP + 毕业日期：优先 grad_exp（毕业快照），fallback 学生累积经验
+  const exp = getPetDisplayExp(pet, student);
   const graduatedAt = pet.graduatedAt || pet.graduated_at || pet.completed_at;
   ctx.fillStyle = '#5A6864';
   ctx.font = '22px sans-serif';
@@ -214,6 +215,15 @@ async function renderFridgeMagnetToCanvas(pet, student, className, sticker) {
   return canvas;
 }
 
+// ─── 取宠物展示用经验：优先用 grad_exp（毕业时快照），fallback 到学生累积经验 ──
+
+function getPetDisplayExp(pet, student) {
+  // grad_exp：新格式，宠物毕业时保存的本宠经验
+  if (pet.grad_exp != null && pet.grad_exp > 0) return pet.grad_exp;
+  // 旧数据没有 grad_exp，fallback 到学生的战力累积经验
+  return student?.lifetime_exp ?? 0;
+}
+
 // ─── BigMagnetPreview（DOM 可视预览，不用于下载）──────────────────────────────
 
 const BigMagnetPreview = ({ pet, student, className, sticker }) => {
@@ -222,7 +232,7 @@ const BigMagnetPreview = ({ pet, student, className, sticker }) => {
   const petLevel = pet.level || pet.pet_level || 1;
   const imgSrc = petType ? getPetImagePath(petType, petLevel) : null;
   const petName = pet.name || pet.pet_name || '未命名';
-  const exp = pet.exp ?? 0;
+  const exp = getPetDisplayExp(pet, student);
   const graduatedAt = pet.graduatedAt || pet.graduated_at || pet.completed_at;
 
   return (
@@ -511,7 +521,7 @@ const StickerWorkshop = ({ students, currentClass, activeSection, onSwitchSectio
                 <div className="sw2-pet-stats">
                   <div>
                     <div className="sw2-stat-label">累计 exp</div>
-                    <div className="sw2-stat-val">⭐ {currentPet.exp ?? 0}</div>
+                    <div className="sw2-stat-val">⭐ {getPetDisplayExp(currentPet, currentData.student)}</div>
                   </div>
                   <div>
                     <div className="sw2-stat-label">毕业日期</div>
@@ -597,7 +607,7 @@ const StickerWorkshop = ({ students, currentClass, activeSection, onSwitchSectio
                     </div>
                     <div className="sw2-thumb-name">{pet.name || '未命名'}</div>
                     <div className="sw2-thumb-info">
-                      Lv.{pet.level || pet.pet_level || 1} · {pet.exp ?? 0}xp
+                      Lv.{pet.level || pet.pet_level || 1} · {getPetDisplayExp(pet, currentData.student)}xp
                     </div>
                   </button>
                 );

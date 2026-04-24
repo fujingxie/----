@@ -157,11 +157,15 @@ export const graduateToNewEgg = (student) => {
   const completedAt = nowIso();
 
   if (currentIndex >= 0) {
+    // grad_exp：记录宠物毕业时的本宠经验，用于荣誉工坊冰箱贴等展示
+    // 毕业后 total_exp 会归零，不存这个字段就丢失了
+    const gradExp = Number(student?.total_exp || student?.pet_points || 0);
     nextCollection[currentIndex] = {
       ...nextCollection[currentIndex],
       pet_type_id: student?.pet_type_id || nextCollection[currentIndex].pet_type_id,
       pet_name: student?.pet_name || nextCollection[currentIndex].pet_name,
       pet_level: Number(student?.pet_level || nextCollection[currentIndex].pet_level || 0),
+      grad_exp: gradExp,
       status: 'graduated',
       completed_at: completedAt,
     };

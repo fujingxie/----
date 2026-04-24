@@ -1715,9 +1715,11 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--glass-border);
-  background: var(--glass-bg);
+  padding: 12px 20px;
+  border-top: 2px solid var(--glass-border);
+  background: var(--theme-soft, rgba(0,0,0,0.12));
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+  min-height: 100px;
 }
 
 .sw2-thumb-strip-label {
@@ -1730,9 +1732,9 @@
 .sw2-thumb-scroll {
   flex: 1;
   display: flex;
-  gap: 8px;
+  gap: 10px;
   overflow-x: auto;
-  padding-bottom: 2px;
+  padding: 4px 2px 6px;
 }
 
 .sw2-thumb-scroll::-webkit-scrollbar {
@@ -1746,8 +1748,8 @@
 
 .sw2-thumb-card {
   flex-shrink: 0;
-  width: 88px;
-  padding: 6px;
+  width: 92px;
+  padding: 8px 6px;
   border-radius: 12px;
   border: 1.5px solid transparent;
   background: var(--glass-bg);
