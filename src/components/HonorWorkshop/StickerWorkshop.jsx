@@ -317,7 +317,7 @@ const BigMagnetPreview = ({ pet, student, className, sticker }) => {
 
 // ─── StickerWorkshop 主组件（V2 工坊聚焦布局）───────────────────────────────
 
-const StickerWorkshop = ({ students, currentClass, activeSection, onSwitchSection }) => {
+const StickerWorkshop = ({ students, currentClass, onSwitchSection }) => {
   const [selectedStudentId, setSelectedStudentId] = useState(null);
   const [activePetIdx, setActivePetIdx] = useState(0);
   const [activeCategoryId, setActiveCategoryId] = useState('classic');
@@ -343,7 +343,7 @@ const StickerWorkshop = ({ students, currentClass, activeSection, onSwitchSectio
     [studentsWithGraduated, effectiveStudentId],
   );
 
-  const currentGraduated = currentData?.graduated || [];
+  const currentGraduated = useMemo(() => currentData?.graduated || [], [currentData]);
   const safePetIdx = Math.min(activePetIdx, Math.max(0, currentGraduated.length - 1));
   const currentPet = currentGraduated[safePetIdx] || null;
 

@@ -158,7 +158,8 @@ const CertificateCard = React.forwardRef(
   ({ tmpl, entry, speechBody, awarder, certDate, rankingLabel, rtype }, ref) => {
     const [petImgError, setPetImgError] = useState(false);
 
-    // 切换到不同学生/名次时重置图片错误状态
+    // 切换到不同学生/名次时重置图片错误状态（setState in effect 此处是合理用法）
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => { setPetImgError(false); }, [entry?.petTypeId, entry?.rank]);
 
     if (!entry) return null;
@@ -387,7 +388,7 @@ const TemplatePicker = ({ current, onSelect, onClose }) => {
 };
 
 // ─── CertWorkshop 主组件（V2 工坊聚焦布局）──────────────────────────────────
-const CertWorkshop = ({ students, currentClass, user, activeSection, onSwitchSection }) => {
+const CertWorkshop = ({ students, user, activeSection, onSwitchSection }) => {
   const [rankingTypeId, setRankingTypeId]   = useState('power');
   const [rankSizeId, setRankSizeId]         = useState('top5');
   const [templateId, setTemplateId]         = useState('classic-gold');

@@ -74,6 +74,8 @@ const DiplomaCard = React.forwardRef(
     const petExp    = pet?.grad_exp    ?? pet?.exp    ?? 0;
     const gradDate  = pet?.completed_at || pet?.graduated_at || pet?.graduatedAt;
 
+    // 切换宠物时重置图片错误状态（setState in effect 此处是合理用法）
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => { setPetImgError(false); }, [petTypeId, pet?.id]);
 
     const petImgSrc = getPetImagePath(petTypeId, petLevel);
