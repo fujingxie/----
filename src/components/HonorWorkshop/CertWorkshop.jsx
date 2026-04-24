@@ -135,9 +135,14 @@ const CornerOrnament = ({ symbol, color, position }) => {
 const CertificateCard = React.forwardRef(
   ({ tmpl, entry, speechBody, awarder, certDate, rankingLabel, rtype }, ref) => {
     const [petImgError, setPetImgError] = useState(false);
+
+    // 切换到不同学生/名次时重置图片错误状态
+    useEffect(() => { setPetImgError(false); }, [entry?.petTypeId, entry?.rank]);
+
     if (!entry) return null;
     const symbol = CORNER_SYMBOLS[tmpl.corner] || '✦';
-    const petImgSrc = entry.petTypeId ? getPetImagePath(entry.petTypeId, entry.petLevel) : null;
+    // 有宠物类型用真实图；蛋学生用 egg.png；都失败时也用 egg.png
+    const petImgSrc = getPetImagePath(entry.petTypeId || null, entry.petLevel);
 
     return (
       <div
@@ -238,16 +243,12 @@ const CertificateCard = React.forwardRef(
                 }}>
                   #{entry.rank} · Lv.{entry.petLevel}
                 </div>
-                {petImgSrc && !petImgError ? (
-                  <img
-                    src={petImgSrc}
-                    alt={entry.pet}
-                    style={{ width: '85%', height: '85%', objectFit: 'contain' }}
-                    onError={() => setPetImgError(true)}
-                  />
-                ) : (
-                  <span>🐾</span>
-                )}
+                <img
+                  src={petImgError ? '/assets/pets/egg.png' : petImgSrc}
+                  alt={entry.pet}
+                  style={{ width: '85%', height: '85%', objectFit: 'contain' }}
+                  onError={() => setPetImgError(true)}
+                />
               </div>
               <div style={{ fontSize: 13, fontWeight: 700, color: tmpl.title, fontFamily: 'sans-serif', textAlign: 'center' }}>
                 {entry.pet}

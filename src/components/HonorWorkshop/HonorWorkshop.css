@@ -1094,10 +1094,8 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: #F5EFDF;
-  background-image:
-    radial-gradient(circle at 18% 20%, rgba(215,209,192,0.45), transparent 45%),
-    radial-gradient(circle at 82% 80%, rgba(215,209,192,0.38), transparent 50%);
+  /* 跟随系统主题，不硬编码纸张色 */
+  background: var(--primary-bg, var(--glass-bg));
   position: relative;
 }
 
@@ -1151,7 +1149,7 @@
 
 .cw-speech-card {
   flex-shrink: 0;
-  width: 200px;
+  width: 260px;
   padding: 10px 12px;
   border-radius: 12px;
   border: 1.5px solid var(--glass-border);
@@ -1192,10 +1190,10 @@
 .cw-speech-card-preview {
   font-size: 11px;
   opacity: 0.75;
-  line-height: 1.55;
+  line-height: 1.65;
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 6;
   -webkit-box-orient: vertical;
 }
 
