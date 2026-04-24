@@ -12,9 +12,23 @@ const SECTIONS = [
 const HonorWorkshop = ({ students, currentClass, user }) => {
   const [activeSection, setActiveSection] = useState('sticker');
 
+  // 冰箱贴模块拥有自己的全宽左侧工具栏（V2 工坊聚焦布局），不需要外层 sidebar
+  if (activeSection === 'sticker') {
+    return (
+      <div className="honor-workshop">
+        <StickerWorkshop
+          students={students}
+          currentClass={currentClass}
+          activeSection={activeSection}
+          onSwitchSection={setActiveSection}
+        />
+      </div>
+    );
+  }
+
+  // 其他模块保留外层导航 sidebar
   return (
     <div className="honor-workshop">
-      {/* 左侧功能导航 */}
       <aside className="honor-sidebar">
         {SECTIONS.map((s) => (
           <button
@@ -28,11 +42,7 @@ const HonorWorkshop = ({ students, currentClass, user }) => {
         ))}
       </aside>
 
-      {/* 右侧内容区 */}
       <main className="honor-content">
-        {activeSection === 'sticker' && (
-          <StickerWorkshop students={students} currentClass={currentClass} />
-        )}
         {activeSection === 'honor-cert' && (
           <CertWorkshop
             students={students}

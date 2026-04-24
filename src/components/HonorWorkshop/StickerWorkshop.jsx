@@ -1,12 +1,19 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { getPetImagePath } from '../../api/petLibrary';
 
-// ─── 贴纸分类常量（4 类 20+ 贴纸）─────────────────────────────────────────────
+// ─── 工具列表（左侧导航栏）────────────────────────────────────────────────────
+
+const TOOLS = [
+  { id: 'sticker',       label: '冰箱贴制作',     icon: '🧲', desc: '为毕业宠物生成专属纪念贴' },
+  { id: 'honor-cert',   label: '光荣榜证书制作', icon: '📜', desc: '为上榜同学颁发荣誉证书' },
+  { id: 'graduate-cert', label: '毕业证书制作',   icon: '🎓', desc: '为毕业宠物颁发毕业证' },
+];
+
+// ─── 贴纸分类常量（4 类 22 个样式）──────────────────────────────────────────
 
 const STICKER_CATEGORIES = [
   {
-    id: 'classic',
-    label: '经典',
+    id: 'classic', label: '经典',
     stickers: [
       { id: 'c1', name: '奶油边框', ring: '#F3E6C7', bg: '#FBF3DE' },
       { id: 'c2', name: '薄荷方卡', ring: '#CFE7DA', bg: '#E6F3EC' },
@@ -16,8 +23,7 @@ const STICKER_CATEGORIES = [
     ],
   },
   {
-    id: 'cute',
-    label: '萌趣',
+    id: 'cute', label: '萌趣',
     stickers: [
       { id: 'k1', name: '樱花粉',   ring: '#F3CBD8', bg: '#FDE7EE' },
       { id: 'k2', name: '云朵',     ring: '#D8E3F1', bg: '#EAF1FB' },
@@ -28,8 +34,7 @@ const STICKER_CATEGORIES = [
     ],
   },
   {
-    id: 'badge',
-    label: '奖章',
+    id: 'badge', label: '奖章',
     stickers: [
       { id: 'b1', name: '金质勋章', ring: '#D8B35A', bg: '#FBEFC8' },
       { id: 'b2', name: '毕业印章', ring: '#B86A4E', bg: '#FBE4D7' },
@@ -39,8 +44,7 @@ const STICKER_CATEGORIES = [
     ],
   },
   {
-    id: 'season',
-    label: '季节',
+    id: 'season', label: '季节',
     stickers: [
       { id: 's1s', name: '春日樱', ring: '#EEC3CF', bg: '#FCE5EC' },
       { id: 's2s', name: '夏日海', ring: '#9BC4D8', bg: '#D7EBF5' },
@@ -52,14 +56,12 @@ const STICKER_CATEGORIES = [
   },
 ];
 
-// ─── 工具函数 ─────────────────────────────────────────────────────────────────
+// ─── 工具函数 ──────────────────────────────────────────────────────────────────
 
-/** 安全解析 pet_collection 字段（DB 来的 JSON 字符串）*/
 function parsePetCollection(raw) {
   try {
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
     if (!Array.isArray(parsed)) return [];
-    // 防止双重序列化
     if (typeof parsed[0] === 'string') return JSON.parse(parsed[0]);
     return parsed;
   } catch {
@@ -67,12 +69,10 @@ function parsePetCollection(raw) {
   }
 }
 
-/** 判断宠物是否已毕业（兼容 graduated:true 和 status:'graduated' 两种格式）*/
 function isPetGraduated(pet) {
   return pet.graduated === true || pet.status === 'graduated';
 }
 
-/** 格式化日期 */
 function formatDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -80,7 +80,6 @@ function formatDate(iso) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** 加载图片，失败时返回 null */
 function loadImage(src) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -91,7 +90,6 @@ function loadImage(src) {
   });
 }
 
-/** 圆角矩形路径 */
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -106,102 +104,119 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-/** 渲染单张冰箱贴到 Canvas，返回 canvas 元素 */
+// ─── Canvas 渲染（下载专用，只渲染贴纸卡片本身）─────────────────────────────
+
 async function renderFridgeMagnetToCanvas(pet, student, className, sticker) {
-  const W = 300;
-  const H = 380;
+  const W = 600;
+  const H = 760;
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d');
 
-  // 背景（圆角矩形）
+  // 背景
   ctx.fillStyle = sticker.bg;
-  roundRect(ctx, 0, 0, W, H, 20);
+  roundRect(ctx, 0, 0, W, H, 40);
   ctx.fill();
 
-  // 边框（ring 色）
+  // 边框
+  ctx.strokeStyle = sticker.ring;
+  ctx.lineWidth = 6;
+  roundRect(ctx, 3, 3, W - 6, H - 6, 40);
+  ctx.stroke();
+
+  // 胶带装饰（顶部中央）
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+  ctx.lineWidth = 1;
+  roundRect(ctx, W / 2 - 80, 0, 160, 28, 4);
+  ctx.fill();
+  ctx.stroke();
+
+  // 宠物图片区
+  const imgAreaY = 40;
+  const imgAreaH = 380;
+  ctx.fillStyle = pet.bg || sticker.bg;
   ctx.strokeStyle = sticker.ring;
   ctx.lineWidth = 3;
-  roundRect(ctx, 1.5, 1.5, W - 3, H - 3, 20);
-  ctx.stroke();
-
-  // 顶部孔洞
-  const holeY = 16;
-  ctx.fillStyle = sticker.ring + '66'; // 半透明
-  ctx.beginPath();
-  ctx.arc(W / 2, holeY, 8, 0, Math.PI * 2);
+  ctx.setLineDash([10, 6]);
+  roundRect(ctx, 30, imgAreaY, W - 60, imgAreaH, 30);
   ctx.fill();
-  ctx.strokeStyle = sticker.ring;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(W / 2, holeY, 8, 0, Math.PI * 2);
   ctx.stroke();
+  ctx.setLineDash([]);
 
-  // 宠物图片区（120px 高，从 y=36 开始）
-  const imgY = 36;
-  const imgSize = 120;
-  const imgX = (W - imgSize) / 2;
-
+  // 宠物图片或 emoji
   const petType = pet.type || pet.pet_type_id;
   const petLevel = pet.level || pet.pet_level || 1;
   let img = null;
-  if (petType) {
-    img = await loadImage(getPetImagePath(petType, petLevel));
-  }
+  if (petType) img = await loadImage(getPetImagePath(petType, petLevel));
 
   if (img) {
-    ctx.drawImage(img, imgX, imgY, imgSize, imgSize);
+    const size = 280;
+    ctx.drawImage(img, (W - size) / 2, imgAreaY + (imgAreaH - size) / 2, size, size);
   } else {
-    // fallback emoji
-    ctx.font = '64px serif';
+    ctx.font = '200px serif';
     ctx.textAlign = 'center';
-    ctx.fillText(pet.emoji || '🐾', W / 2, imgY + 80);
+    ctx.fillText(pet.emoji || '🐾', W / 2, imgAreaY + imgAreaH - 60);
   }
 
-  // Lv 徽章（右下角图片区）
-  const lvX = imgX + imgSize - 2;
-  const lvY = imgY + imgSize - 2;
-  ctx.fillStyle = sticker.ring;
-  ctx.beginPath();
-  ctx.arc(lvX, lvY, 16, 0, Math.PI * 2);
+  // Lv 徽章（左上角）
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  roundRect(ctx, 50, imgAreaY + 16, 90, 36, 18);
   ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 11px sans-serif';
+  ctx.fillStyle = '#243330';
+  ctx.font = 'bold 20px "Noto Sans SC", sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(`Lv${petLevel}`, lvX, lvY + 4);
+  ctx.fillText(`Lv.${petLevel}`, 95, imgAreaY + 40);
 
-  // 宠物名 · 学生姓名
+  // GRADUATED 徽章（右下角）
+  ctx.fillStyle = sticker.ring;
+  roundRect(ctx, W - 170, imgAreaY + imgAreaH - 52, 140, 36, 18);
+  ctx.fill();
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = 'bold 16px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('GRADUATED', W - 100, imgAreaY + imgAreaH - 28);
+
+  // 宠物名
   const petName = pet.name || pet.pet_name || '未命名';
   ctx.fillStyle = '#243330';
-  ctx.font = 'bold 16px "Noto Sans SC", sans-serif';
+  ctx.font = 'bold 42px "Noto Serif SC", "Noto Sans SC", serif';
   ctx.textAlign = 'center';
-  ctx.fillText(petName, W / 2, imgY + imgSize + 28);
+  ctx.fillText(petName, W / 2, imgAreaY + imgAreaH + 64);
 
-  ctx.fillStyle = '#5A6864';
-  ctx.font = '13px "Noto Sans SC", sans-serif';
-  ctx.fillText(student.name, W / 2, imgY + imgSize + 48);
+  // 学生名 + 班级
+  ctx.fillStyle = '#6B7570';
+  ctx.font = '24px "Noto Sans SC", sans-serif';
+  ctx.fillText(`${student.name} · ${className || ''}`, W / 2, imgAreaY + imgAreaH + 104);
 
-  ctx.fillStyle = '#97A09B';
-  ctx.font = '12px sans-serif';
-  ctx.fillText(className || '', W / 2, imgY + imgSize + 66);
+  // 分隔线
+  ctx.strokeStyle = sticker.ring;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 5]);
+  ctx.beginPath();
+  ctx.moveTo(50, imgAreaY + imgAreaH + 124);
+  ctx.lineTo(W - 50, imgAreaY + imgAreaH + 124);
+  ctx.stroke();
+  ctx.setLineDash([]);
 
   // EXP + 毕业日期
   const exp = pet.exp ?? pet.lifetime_exp ?? 0;
   const graduatedAt = pet.graduatedAt || pet.graduated_at || pet.completed_at;
   ctx.fillStyle = '#5A6864';
-  ctx.font = '12px sans-serif';
-  ctx.fillText(`⭐ ${exp} EXP`, W / 2, imgY + imgSize + 90);
-  ctx.fillStyle = '#97A09B';
-  ctx.font = '11px sans-serif';
-  ctx.fillText(`毕业：${formatDate(graduatedAt)}`, W / 2, imgY + imgSize + 110);
+  ctx.font = '22px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(`⭐ ${exp} exp`, 60, imgAreaY + imgAreaH + 164);
+  ctx.textAlign = 'right';
+  ctx.font = '20px monospace';
+  ctx.fillText(formatDate(graduatedAt), W - 60, imgAreaY + imgAreaH + 164);
 
   return canvas;
 }
 
-// ─── FridgeMagnet 卡片预览组件（纯 DOM，非 Canvas）─────────────────────────
+// ─── BigMagnetPreview（DOM 可视预览，不用于下载）──────────────────────────────
 
-const FridgeMagnetCard = ({ pet, student, className, sticker, selected, onToggle }) => {
+const BigMagnetPreview = ({ pet, student, className, sticker }) => {
   const [imgError, setImgError] = useState(false);
   const petType = pet.type || pet.pet_type_id;
   const petLevel = pet.level || pet.pet_level || 1;
@@ -211,64 +226,92 @@ const FridgeMagnetCard = ({ pet, student, className, sticker, selected, onToggle
   const graduatedAt = pet.graduatedAt || pet.graduated_at || pet.completed_at;
 
   return (
-    <div
-      className={`sw-magnet-card ${selected ? 'sw-magnet-card--selected' : ''}`}
-      style={{ background: sticker.bg, borderColor: sticker.ring }}
-      onClick={onToggle}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onToggle()}
-    >
-      {/* 孔洞 */}
-      <div className="sw-magnet-hole" style={{ borderColor: sticker.ring }} />
+    <div style={{
+      width: 300,
+      padding: 20,
+      borderRadius: 28,
+      background: sticker.bg,
+      border: `3px solid ${sticker.ring}`,
+      boxShadow: '0 20px 40px rgba(0,0,0,0.15), 0 6px 12px rgba(0,0,0,0.08)',
+      transform: 'rotate(-3deg)',
+      position: 'relative',
+      flexShrink: 0,
+    }}>
+      {/* 胶带装饰 */}
+      <div style={{
+        position: 'absolute', top: -14, left: '50%',
+        transform: 'translateX(-50%) rotate(2deg)',
+        width: 80, height: 22,
+        background: 'rgba(255,255,255,0.65)',
+        border: '1px solid rgba(0,0,0,0.06)',
+        borderRadius: 3,
+      }} />
 
       {/* 图片区 */}
-      <div className="sw-magnet-img-wrap">
+      <div style={{
+        height: 220, borderRadius: 18,
+        background: pet.bg || sticker.bg,
+        border: `2px dashed ${sticker.ring}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        position: 'relative', overflow: 'hidden',
+      }}>
         {imgSrc && !imgError ? (
           <img
             src={imgSrc}
             alt={petName}
-            className="sw-magnet-img"
+            style={{ width: '70%', height: '70%', objectFit: 'contain' }}
             onError={() => setImgError(true)}
           />
         ) : (
-          <span className="sw-magnet-emoji">{pet.emoji || '🐾'}</span>
+          <span style={{ fontSize: 96, lineHeight: 1 }}>{pet.emoji || '🐾'}</span>
         )}
-        <span className="sw-magnet-lv" style={{ background: sticker.ring }}>
-          Lv{petLevel}
-        </span>
+        {/* Lv 徽章 */}
+        <div style={{
+          position: 'absolute', top: 10, left: 10,
+          padding: '4px 10px', borderRadius: 999,
+          background: 'rgba(255,255,255,0.88)',
+          color: '#243330', fontSize: 12, fontWeight: 700,
+        }}>
+          Lv.{petLevel}
+        </div>
+        {/* GRADUATED 徽章 */}
+        <div style={{
+          position: 'absolute', bottom: 10, right: 10,
+          padding: '4px 10px', borderRadius: 999,
+          background: sticker.ring, color: '#fff',
+          fontSize: 11, fontWeight: 700, letterSpacing: 1,
+        }}>
+          GRADUATED
+        </div>
       </div>
 
       {/* 文字信息 */}
-      <div className="sw-magnet-info">
-        <div className="sw-magnet-petname">{petName}</div>
-        <div className="sw-magnet-stuname">{student.name}</div>
-        <div className="sw-magnet-class">{className || ''}</div>
-        <div className="sw-magnet-exp">⭐ {exp} EXP</div>
-        <div className="sw-magnet-date">毕业：{formatDate(graduatedAt)}</div>
+      <div style={{ marginTop: 14, textAlign: 'center' }}>
+        <div style={{ fontSize: 26, fontWeight: 800, color: '#243330' }}>{petName}</div>
+        <div style={{ fontSize: 13, color: '#6B7570', marginTop: 2 }}>
+          {student.name} · {className || ''}
+        </div>
+        <div style={{
+          marginTop: 12, paddingTop: 10,
+          borderTop: `1.5px dashed ${sticker.ring}`,
+          display: 'flex', justifyContent: 'space-between',
+          fontSize: 12, color: '#5A6864',
+        }}>
+          <span>⭐ <b style={{ color: '#243330' }}>{exp}</b> exp</span>
+          <span style={{ fontFamily: 'monospace' }}>{formatDate(graduatedAt)}</span>
+        </div>
       </div>
-
-      {/* checkbox */}
-      <input
-        type="checkbox"
-        className="sw-magnet-checkbox"
-        checked={selected}
-        onChange={onToggle}
-        onClick={(e) => e.stopPropagation()}
-      />
     </div>
   );
 };
 
-// ─── StickerWorkshop 主组件 ───────────────────────────────────────────────────
+// ─── StickerWorkshop 主组件（V2 工坊聚焦布局）───────────────────────────────
 
-const StickerWorkshop = ({ students, currentClass }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterTab, setFilterTab] = useState('all'); // 'all' | 'multi' | 'recent'
+const StickerWorkshop = ({ students, currentClass, activeSection, onSwitchSection }) => {
   const [selectedStudentId, setSelectedStudentId] = useState(null);
+  const [activePetIdx, setActivePetIdx] = useState(0);
   const [activeCategoryId, setActiveCategoryId] = useState('classic');
   const [selectedStickerId, setSelectedStickerId] = useState('c1');
-  const [selectedCards, setSelectedCards] = useState(new Set()); // Set of pet ids
   const [downloading, setDownloading] = useState(false);
 
   // 解析所有有毕业宠物的学生
@@ -282,49 +325,19 @@ const StickerWorkshop = ({ students, currentClass }) => {
       .filter(Boolean);
   }, [students]);
 
-  // 过滤学生列表
-  const filteredStudents = useMemo(() => {
-    let list = studentsWithGraduated;
+  // 未主动选择时自动选第一个学生
+  const effectiveStudentId = selectedStudentId || studentsWithGraduated[0]?.student.id || null;
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim();
-      list = list.filter((item) => item.student.name.includes(q));
-    }
-
-    if (filterTab === 'multi') {
-      list = list.filter((item) => item.graduated.length >= 2);
-    } else if (filterTab === 'recent') {
-      // 按最近毕业日期排序
-      list = [...list].sort((a, b) => {
-        const getLatest = (item) => {
-          const dates = item.graduated
-            .map((p) => p.graduatedAt || p.graduated_at || p.completed_at)
-            .filter(Boolean)
-            .map((d) => new Date(d).getTime());
-          return dates.length > 0 ? Math.max(...dates) : 0;
-        };
-        return getLatest(b) - getLatest(a);
-      });
-    }
-
-    return list;
-  }, [studentsWithGraduated, searchQuery, filterTab]);
-
-  // 当前选中学生的数据
-  const currentData = useMemo(() => {
-    if (!selectedStudentId) return null;
-    return filteredStudents.find((item) => item.student.id === selectedStudentId) || null;
-  }, [filteredStudents, selectedStudentId]);
-
-  const currentGraduated = currentData?.graduated || [];
-
-  // 当前激活的贴纸类别
-  const activeCategory = useMemo(
-    () => STICKER_CATEGORIES.find((c) => c.id === activeCategoryId) || STICKER_CATEGORIES[0],
-    [activeCategoryId],
+  const currentData = useMemo(
+    () => studentsWithGraduated.find((item) => item.student.id === effectiveStudentId) || null,
+    [studentsWithGraduated, effectiveStudentId],
   );
 
-  // 当前选中的贴纸样式
+  const currentGraduated = currentData?.graduated || [];
+  const safePetIdx = Math.min(activePetIdx, Math.max(0, currentGraduated.length - 1));
+  const currentPet = currentGraduated[safePetIdx] || null;
+
+  const activeCategory = STICKER_CATEGORIES.find((c) => c.id === activeCategoryId) || STICKER_CATEGORIES[0];
   const currentSticker = useMemo(() => {
     for (const cat of STICKER_CATEGORIES) {
       const found = cat.stickers.find((s) => s.id === selectedStickerId);
@@ -333,73 +346,44 @@ const StickerWorkshop = ({ students, currentClass }) => {
     return STICKER_CATEGORIES[0].stickers[0];
   }, [selectedStickerId]);
 
-  // 切换学生时重置卡片选中
   const handleSelectStudent = useCallback((id) => {
     setSelectedStudentId(id);
-    setSelectedCards(new Set());
+    setActivePetIdx(0);
   }, []);
 
-  // 切换单张卡片选中
-  const handleToggleCard = useCallback((petId) => {
-    setSelectedCards((prev) => {
-      const next = new Set(prev);
-      if (next.has(petId)) {
-        next.delete(petId);
-      } else {
-        next.add(petId);
-      }
-      return next;
-    });
-  }, []);
-
-  // 全选 / 取消全选
-  const allSelected = currentGraduated.length > 0 && selectedCards.size === currentGraduated.length;
-  const handleToggleAll = useCallback(() => {
-    if (allSelected) {
-      setSelectedCards(new Set());
-    } else {
-      // pet id 可能是数字或字符串，统一用 index 作为 key
-      setSelectedCards(new Set(currentGraduated.map((_, i) => i)));
+  // 下载当前预览的单张贴纸（Canvas 渲染，只是贴纸本身）
+  const handleDownload = useCallback(async () => {
+    if (!currentPet || !currentData) return;
+    setDownloading(true);
+    try {
+      const canvas = await renderFridgeMagnetToCanvas(
+        currentPet, currentData.student, currentClass?.name, currentSticker,
+      );
+      const url = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${currentData.student.name}_${currentPet.name || '冰箱贴'}.png`;
+      a.click();
+    } finally {
+      setDownloading(false);
     }
-  }, [allSelected, currentGraduated]);
+  }, [currentPet, currentData, currentClass?.name, currentSticker]);
 
-  // 下载单张
-  const handleDownloadSingle = useCallback(async (pet, idx) => {
-    if (!currentData) return;
-    const canvas = await renderFridgeMagnetToCanvas(
-      pet,
-      currentData.student,
-      currentClass?.name,
-      currentSticker,
-    );
-    const url = canvas.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${currentData.student.name}_${pet.name || pet.pet_name || idx}_冰箱贴.png`;
-    a.click();
-  }, [currentData, currentClass?.name, currentSticker]);
-
-  // 批量下载
+  // 批量打包该学生所有毕业宠物
   const handleBatchDownload = useCallback(async () => {
-    if (!currentData || selectedCards.size === 0) return;
+    if (!currentData || currentGraduated.length === 0) return;
     setDownloading(true);
     try {
       const JSZip = (await import('jszip')).default;
       const zip = new JSZip();
-
-      for (const idx of selectedCards) {
-        const pet = currentGraduated[idx];
-        if (!pet) continue;
+      for (let i = 0; i < currentGraduated.length; i++) {
+        const pet = currentGraduated[i];
         const canvas = await renderFridgeMagnetToCanvas(
-          pet,
-          currentData.student,
-          currentClass?.name,
-          currentSticker,
+          pet, currentData.student, currentClass?.name, currentSticker,
         );
         const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-        zip.file(`${currentData.student.name}_${pet.name || pet.pet_name || idx}_冰箱贴.png`, blob);
+        zip.file(`${currentData.student.name}_${pet.name || i}_冰箱贴.png`, blob);
       }
-
       const content = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(content);
       const a = document.createElement('a');
@@ -410,155 +394,219 @@ const StickerWorkshop = ({ students, currentClass }) => {
     } finally {
       setDownloading(false);
     }
-  }, [currentData, selectedCards, currentGraduated, currentClass?.name, currentSticker]);
+  }, [currentData, currentGraduated, currentClass?.name, currentSticker]);
 
   return (
-    <div className="sw-root">
-      {/* 左列：工具栏说明 */}
-      <aside className="sw-sidebar">
-        <div className="sw-sidebar-title">冰箱贴制作</div>
-        <div className="sw-sidebar-desc">
-          为毕业宠物制作专属纪念冰箱贴，导出高清图片留作纪念。
+    <div className="sw2-root">
+
+      {/* ── 左侧工具栏 ─────────────────────────────────────────────────── */}
+      <aside className="sw2-rail">
+        <div className="sw2-rail-section-label">01 · 选择工具</div>
+
+        <div className="sw2-tool-list">
+          {TOOLS.map((t) => {
+            const on = t.id === 'sticker';
+            return (
+              <button
+                key={t.id}
+                type="button"
+                className={`sw2-tool-btn ${on ? 'active' : ''}`}
+                onClick={() => onSwitchSection && onSwitchSection(t.id)}
+              >
+                <span className="sw2-tool-icon">{t.icon}</span>
+                <div className="sw2-tool-body">
+                  <div className="sw2-tool-label">{t.label}</div>
+                  <div className="sw2-tool-desc">{t.desc}</div>
+                </div>
+                {on && <span className="sw2-tool-badge">NOW</span>}
+              </button>
+            );
+          })}
         </div>
-        <div className="sw-sidebar-tip">
-          📖 小提示：只有养过宠物且宠物已毕业的学生才会出现在此列表中。
+
+        {/* 贴纸分类（放左栏底部） */}
+        <div style={{ marginTop: 'auto' }}>
+          <div className="sw2-rail-section-label" style={{ marginBottom: 8 }}>03 · 贴纸分类</div>
+          <div className="sw2-cat-grid">
+            {STICKER_CATEGORIES.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className={`sw2-cat-btn ${activeCategoryId === c.id ? 'active' : ''}`}
+                onClick={() => setActiveCategoryId(c.id)}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
         </div>
       </aside>
 
-      {/* 中列：学生列表 */}
-      <section className="sw-student-col">
-        <div className="sw-student-header">
-          <input
-            type="text"
-            className="sw-search"
-            placeholder="搜索学生…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          <div className="sw-filter-tabs">
-            {[
-              { id: 'all', label: '全部' },
-              { id: 'multi', label: '≥ 2 只' },
-              { id: 'recent', label: '按最近' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                className={`sw-filter-tab ${filterTab === tab.id ? 'active' : ''}`}
-                onClick={() => setFilterTab(tab.id)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* ── 主内容区 ────────────────────────────────────────────────────── */}
+      <div className="sw2-main">
 
-        {filteredStudents.length === 0 ? (
-          <div className="sw-student-empty">还没有学生的宠物毕业，加油吧！</div>
-        ) : (
-          <div className="sw-student-list">
-            {filteredStudents.map((item) => (
-              <div
-                key={item.student.id}
-                className={`sw-student-item ${selectedStudentId === item.student.id ? 'active' : ''}`}
-                onClick={() => handleSelectStudent(item.student.id)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && handleSelectStudent(item.student.id)}
-              >
-                <span className="sw-student-avatar">
-                  {(item.student.name || '?')[0]}
-                </span>
-                <span className="sw-student-name">{item.student.name}</span>
-                <span className="sw-student-badge">{item.graduated.length}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* 右列：贴纸选择 + 预览 */}
-      <section className="sw-right-col">
-        {/* 贴纸选择器 */}
-        <div className="sw-sticker-selector">
-          <div className="sw-category-tabs">
-            {STICKER_CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                type="button"
-                className={`sw-category-tab ${activeCategoryId === cat.id ? 'active' : ''}`}
-                onClick={() => setActiveCategoryId(cat.id)}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-          <div className="sw-sticker-grid">
-            {activeCategory.stickers.map((sticker) => (
-              <button
-                key={sticker.id}
-                type="button"
-                className={`sw-sticker-chip ${selectedStickerId === sticker.id ? 'active' : ''}`}
-                style={{
-                  background: sticker.bg,
-                  borderColor: selectedStickerId === sticker.id ? sticker.ring : sticker.ring + '88',
-                  outline: selectedStickerId === sticker.id ? `3px solid ${sticker.ring}` : 'none',
-                }}
-                onClick={() => setSelectedStickerId(sticker.id)}
-                title={sticker.name}
-              >
-                <span className="sw-sticker-chip-name">{sticker.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* 冰箱贴预览网格 */}
-        {!currentData ? (
-          <div className="sw-preview-empty">← 选择左侧学生以查看毕业宠物冰箱贴</div>
-        ) : (
-          <>
-            <div className="sw-magnet-grid">
-              {currentGraduated.map((pet, idx) => (
-                <div key={idx} className="sw-magnet-wrap">
-                  <FridgeMagnetCard
-                    pet={pet}
-                    student={currentData.student}
-                    className={currentClass?.name}
-                    sticker={currentSticker}
-                    selected={selectedCards.has(idx)}
-                    onToggle={() => handleToggleCard(idx)}
-                  />
+        {/* 学生横向选择条 */}
+        <div className="sw2-student-bar">
+          <div className="sw2-rail-section-label" style={{ flexShrink: 0 }}>02 · 选择毕业学生</div>
+          <div className="sw2-student-scroll">
+            {studentsWithGraduated.length === 0 ? (
+              <span className="sw2-empty-tip">暂无学生的宠物毕业，继续加油！</span>
+            ) : (
+              studentsWithGraduated.map((item) => {
+                const on = item.student.id === effectiveStudentId;
+                return (
                   <button
+                    key={item.student.id}
                     type="button"
-                    className="sw-magnet-dl-btn"
-                    onClick={() => handleDownloadSingle(pet, idx)}
-                    title="下载这张冰箱贴"
+                    className={`sw2-stu-pill ${on ? 'active' : ''}`}
+                    onClick={() => handleSelectStudent(item.student.id)}
                   >
-                    ⬇ 下载
+                    <span className="sw2-stu-avatar">{(item.student.name || '?')[0]}</span>
+                    <span className="sw2-stu-name">{item.student.name}</span>
+                    <span className="sw2-stu-count">{item.graduated.length}</span>
                   </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* 舞台：大预览 + 右侧面板 */}
+        <div className="sw2-stage">
+
+          {/* 大预览区 */}
+          <div className="sw2-preview-area">
+            {!currentPet ? (
+              <div className="sw2-preview-empty">← 请先在顶部选择一位同学</div>
+            ) : (
+              <BigMagnetPreview
+                pet={currentPet}
+                student={currentData.student}
+                className={currentClass?.name}
+                sticker={currentSticker}
+              />
+            )}
+          </div>
+
+          {/* 右侧面板：宠物信息 + 贴纸选择 + 下载 */}
+          <div className="sw2-side-panel">
+
+            {/* 预览计数 */}
+            {currentData && (
+              <div className="sw2-preview-meta">
+                <span>预览 · PREVIEW</span>
+                <span>{safePetIdx + 1}/{currentGraduated.length}</span>
+              </div>
+            )}
+
+            {/* 宠物信息卡 */}
+            {currentPet && currentData && (
+              <div className="sw2-pet-card">
+                <div className="sw2-pet-meta">{currentData.student.name} · {currentClass?.name || ''}</div>
+                <div className="sw2-pet-name">{currentPet.name || currentPet.pet_name || '未命名'}</div>
+                <div className="sw2-pet-badges">
+                  <span className="sw2-badge sw2-badge--lv">Lv.{currentPet.level || currentPet.pet_level || 1}</span>
+                  <span className="sw2-badge sw2-badge--grad">已毕业</span>
                 </div>
-              ))}
+                <div className="sw2-pet-stats">
+                  <div>
+                    <div className="sw2-stat-label">累计 exp</div>
+                    <div className="sw2-stat-val">⭐ {currentPet.exp ?? 0}</div>
+                  </div>
+                  <div>
+                    <div className="sw2-stat-label">毕业日期</div>
+                    <div className="sw2-stat-val sw2-stat-mono">
+                      {formatDate(currentPet.graduatedAt || currentPet.graduated_at || currentPet.completed_at)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 贴纸样式选择（3列网格，当前类别前 6 个） */}
+            <div className="sw2-sticker-section">
+              <div className="sw2-sticker-section-label">
+                贴纸样式 · {activeCategory.label}
+              </div>
+              <div className="sw2-sticker-grid3">
+                {activeCategory.stickers.slice(0, 6).map((s) => {
+                  const on = s.id === selectedStickerId;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className={`sw2-sticker-chip ${on ? 'active' : ''}`}
+                      style={{ background: s.bg, borderColor: on ? '#243330' : s.ring }}
+                      onClick={() => setSelectedStickerId(s.id)}
+                    >
+                      <div className="sw2-chip-swatch" style={{ borderColor: s.ring }}>🐾</div>
+                      <div className="sw2-chip-name" style={{ fontWeight: on ? 700 : 400 }}>{s.name}</div>
+                      {on && <div className="sw2-chip-check">✓</div>}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* 底部操作栏 */}
-            <div className="sw-action-bar">
-              <span className="sw-action-count">已选 {selectedCards.size} 张</span>
-              <button type="button" className="sw-action-btn" onClick={handleToggleAll}>
-                {allSelected ? '取消全选' : '全选'}
-              </button>
+            {/* 下载按钮组 */}
+            <div className="sw2-dl-group">
               <button
                 type="button"
-                className="sw-action-btn sw-action-btn--primary"
-                onClick={handleBatchDownload}
-                disabled={selectedCards.size === 0 || downloading}
+                className="sw2-dl-primary"
+                onClick={handleDownload}
+                disabled={!currentPet || downloading}
               >
-                {downloading ? '打包中…' : `⬇ 批量下载 (${selectedCards.size})`}
+                {downloading ? '处理中…' : '⬇ 下载冰箱贴 (PNG)'}
               </button>
+              <div className="sw2-dl-row">
+                <button
+                  type="button"
+                  className="sw2-dl-ghost"
+                  onClick={handleBatchDownload}
+                  disabled={!currentData || downloading}
+                >
+                  {downloading ? '打包中…' : '📦 全选打包'}
+                </button>
+              </div>
             </div>
-          </>
+
+          </div>{/* end sw2-side-panel */}
+        </div>{/* end sw2-stage */}
+
+        {/* 宠物缩略图条 */}
+        {currentData && currentGraduated.length > 0 && (
+          <div className="sw2-thumb-strip">
+            <div className="sw2-thumb-strip-label">
+              {currentData.student.name} 的毕业宠物
+            </div>
+            <div className="sw2-thumb-scroll">
+              {currentGraduated.map((pet, idx) => {
+                const on = idx === safePetIdx;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    className={`sw2-thumb-card ${on ? 'active' : ''}`}
+                    style={on ? {} : { background: pet.bg || undefined }}
+                    onClick={() => setActivePetIdx(idx)}
+                  >
+                    <div className="sw2-thumb-img" style={{
+                      background: on ? 'rgba(255,255,255,0.08)' : '#fff',
+                    }}>
+                      {pet.emoji || '🐾'}
+                    </div>
+                    <div className="sw2-thumb-name">{pet.name || '未命名'}</div>
+                    <div className="sw2-thumb-info">
+                      Lv.{pet.level || pet.pet_level || 1} · {pet.exp ?? 0}xp
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
-      </section>
+
+      </div>{/* end sw2-main */}
     </div>
   );
 };
