@@ -12,7 +12,7 @@ const SECTIONS = [
 const HonorWorkshop = ({ students, currentClass, user }) => {
   const [activeSection, setActiveSection] = useState('sticker');
 
-  // 冰箱贴模块拥有自己的全宽左侧工具栏（V2 工坊聚焦布局），不需要外层 sidebar
+  // 冰箱贴 & 光荣榜证书均拥有自己的全宽左侧工具栏（V2 工坊聚焦布局），不需要外层 sidebar
   if (activeSection === 'sticker') {
     return (
       <div className="honor-workshop">
@@ -26,7 +26,21 @@ const HonorWorkshop = ({ students, currentClass, user }) => {
     );
   }
 
-  // 其他模块保留外层导航 sidebar
+  if (activeSection === 'honor-cert') {
+    return (
+      <div className="honor-workshop">
+        <CertWorkshop
+          students={students}
+          currentClass={currentClass}
+          user={user}
+          activeSection={activeSection}
+          onSwitchSection={setActiveSection}
+        />
+      </div>
+    );
+  }
+
+  // 其他模块（毕业证书等）保留外层导航 sidebar
   return (
     <div className="honor-workshop">
       <aside className="honor-sidebar">
@@ -43,13 +57,6 @@ const HonorWorkshop = ({ students, currentClass, user }) => {
       </aside>
 
       <main className="honor-content">
-        {activeSection === 'honor-cert' && (
-          <CertWorkshop
-            students={students}
-            currentClass={currentClass}
-            user={user}
-          />
-        )}
         {activeSection === 'graduate-cert' && (
           <div className="honor-coming-soon">毕业证书制作 — 即将上线</div>
         )}
