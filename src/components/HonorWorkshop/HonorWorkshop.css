@@ -1197,6 +1197,70 @@
   -webkit-box-orient: vertical;
 }
 
+/* 自定义寄语按钮 */
+.cw-speech-edit-btn {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1.5px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.cw-speech-edit-btn:hover:not(:disabled) {
+  border-color: #6BAE9F;
+  color: #2F6F5E;
+}
+.cw-speech-edit-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.cw-speech-edit-btn--active {
+  background: #C9E4D8;
+  border-color: #6BAE9F;
+  color: #2F5F52;
+}
+.cw-speech-edit-btn--active:hover {
+  background: #B8D9CC;
+}
+
+/* 自定义寄语编辑区 */
+.cw-speech-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 16px 10px;
+}
+.cw-speech-textarea {
+  width: 100%;
+  min-height: 84px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--glass-border);
+  background: var(--theme-soft, rgba(0,0,0,0.04));
+  color: var(--text-main);
+  font-size: 13px;
+  line-height: 1.7;
+  font-family: 'Noto Serif SC', 'Noto Sans SC', serif;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+.cw-speech-textarea:focus {
+  border-color: #6BAE9F;
+}
+.cw-speech-char-count {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: right;
+  opacity: 0.7;
+}
+
 /* 打印降级（当浏览器阻止新窗口弹出时，window.print() 作为 fallback） */
 @media print {
   /* 隐藏所有 UI 铬层 */

@@ -280,6 +280,8 @@ const GradCertWorkshop = ({ students, currentClass, user, activeSection, onSwitc
   const [speechId, setSpeechId]       = useState('g-journey');
   const [searchQuery, setSearchQuery] = useState('');
   const [downloading, setDownloading] = useState(false);
+  // null = 使用模板，string = 用户自定义文本
+  const [customSpeech, setCustomSpeech] = useState(null);
   const cardRef = useRef(null);
 
   // 收集所有毕业宠物（按学生分组）
@@ -348,7 +350,11 @@ const GradCertWorkshop = ({ students, currentClass, user, activeSection, onSwitc
     };
   }, [current, currentClass]);
 
-  const speechBody = speechCtx ? fillGradSpeech(speechTmpl, speechCtx) : '';
+  // 切换宠物时重置自定义寄语，让模板重新生效
+  useEffect(() => { setCustomSpeech(null); }, [selectedKey]);
+
+  const templateSpeech = speechCtx ? fillGradSpeech(speechTmpl, speechCtx) : '';
+  const speechBody     = customSpeech !== null ? customSpeech : templateSpeech;
 
   // 证书编号
   const certNo = useMemo(() => {
@@ -583,28 +589,67 @@ const GradCertWorkshop = ({ students, currentClass, user, activeSection, onSwitc
         <div className="cw-speech-strip hw-no-print">
           <div className="cw-speech-header">
             <span className="cw-speech-title">毕业寄语</span>
-            <span className="cw-speech-meta">· 已选「{speechTmpl.name}」· 自动填充姓名 / 宠物 / 经验</span>
+            <span className="cw-speech-meta">
+              {customSpeech !== null
+                ? '· 自定义模式'
+                : `· 已选「${speechTmpl.name}」· 自动填充姓名 / 宠物 / 经验`}
+            </span>
+            <div style={{ flex: 1 }} />
+            {customSpeech !== null ? (
+              <button
+                type="button"
+                className="cw-speech-edit-btn cw-speech-edit-btn--active"
+                onClick={() => setCustomSpeech(null)}
+              >
+                ↩ 还原模板
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="cw-speech-edit-btn"
+                onClick={() => setCustomSpeech(templateSpeech)}
+                disabled={!current}
+              >
+                ✎ 自定义
+              </button>
+            )}
           </div>
-          <div className="cw-speech-scroll">
-            {GRAD_SPEECH_TEMPLATES.map((st) => {
-              const on = speechId === st.id;
-              const preview = speechCtx ? fillGradSpeech(st, speechCtx) : st.body;
-              return (
-                <button
-                  key={st.id}
-                  type="button"
-                  className={`cw-speech-card ${on ? 'active' : ''}`}
-                  onClick={() => setSpeechId(st.id)}
-                >
-                  <div className="cw-speech-card-row">
-                    <span className="cw-speech-card-name">{st.name}</span>
-                    <span className="cw-speech-card-tone">{st.tone}</span>
-                  </div>
-                  <div className="cw-speech-card-preview">{preview}</div>
-                </button>
-              );
-            })}
-          </div>
+          {/* 自定义编辑区 */}
+          {customSpeech !== null && (
+            <div className="cw-speech-custom">
+              <textarea
+                className="cw-speech-textarea"
+                value={customSpeech}
+                onChange={(e) => setCustomSpeech(e.target.value)}
+                maxLength={500}
+                placeholder="在此输入自定义寄语…"
+              />
+              <div className="cw-speech-char-count">{customSpeech.length} / 500</div>
+            </div>
+          )}
+          {/* 模板卡片列表（自定义模式下收起） */}
+          {customSpeech === null && (
+            <div className="cw-speech-scroll">
+              {GRAD_SPEECH_TEMPLATES.map((st) => {
+                const on = speechId === st.id;
+                const preview = speechCtx ? fillGradSpeech(st, speechCtx) : st.body;
+                return (
+                  <button
+                    key={st.id}
+                    type="button"
+                    className={`cw-speech-card ${on ? 'active' : ''}`}
+                    onClick={() => { setSpeechId(st.id); setCustomSpeech(null); }}
+                  >
+                    <div className="cw-speech-card-row">
+                      <span className="cw-speech-card-name">{st.name}</span>
+                      <span className="cw-speech-card-tone">{st.tone}</span>
+                    </div>
+                    <div className="cw-speech-card-preview">{preview}</div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
       </div>{/* end gc-right */}

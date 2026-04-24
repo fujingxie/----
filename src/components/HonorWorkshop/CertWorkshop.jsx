@@ -396,6 +396,8 @@ const CertWorkshop = ({ students, currentClass, user, activeSection, onSwitchSec
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [certDate, setCertDate]             = useState(todayStr);
   const [downloading, setDownloading]       = useState(false);
+  // null = 使用模板，string = 用户自定义文本
+  const [customSpeech, setCustomSpeech]     = useState(null);
   const cardRef = useRef(null);
 
   const rtype     = useMemo(() => RANKING_TYPES.find((r) => r.id === rankingTypeId) || RANKING_TYPES[0], [rankingTypeId]);
@@ -415,8 +417,12 @@ const CertWorkshop = ({ students, currentClass, user, activeSection, onSwitchSec
     return { name: entry.name, pet: entry.pet, ranking: rtype.label, rank_label: rankLabel(entry.rank), value: entry.value, metric: rtype.metric, period: '本学期' };
   }, [entry, rtype]);
 
-  const speechBody   = speechCtx ? fillSpeech(speechTmpl, speechCtx) : '';
-  const rankingLabel = entry ? `${rtype.label} · ${rankLabel(entry.rank)}` : rtype.label;
+  // 切换学生时重置自定义寄语，让模板重新生效
+  useEffect(() => { setCustomSpeech(null); }, [entry?.studentId]);
+
+  const templateSpeech = speechCtx ? fillSpeech(speechTmpl, speechCtx) : '';
+  const speechBody     = customSpeech !== null ? customSpeech : templateSpeech;
+  const rankingLabel   = entry ? `${rtype.label} · ${rankLabel(entry.rank)}` : rtype.label;
   const awarder      = user?.nickname || user?.username || '老师';
 
   // 下载 PNG（html2canvas）
@@ -624,28 +630,67 @@ const CertWorkshop = ({ students, currentClass, user, activeSection, onSwitchSec
             <div className="cw-speech-strip hw-no-print">
               <div className="cw-speech-header">
                 <span className="cw-speech-title">话术模板</span>
-                <span className="cw-speech-meta">· 已选「{speechTmpl.name}」· 自动填充姓名 / 宠物 / 名次</span>
+                <span className="cw-speech-meta">
+                  {customSpeech !== null
+                    ? '· 自定义模式'
+                    : `· 已选「${speechTmpl.name}」· 自动填充姓名 / 宠物 / 名次`}
+                </span>
+                <div style={{ flex: 1 }} />
+                {customSpeech !== null ? (
+                  <button
+                    type="button"
+                    className="cw-speech-edit-btn cw-speech-edit-btn--active"
+                    onClick={() => setCustomSpeech(null)}
+                  >
+                    ↩ 还原模板
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="cw-speech-edit-btn"
+                    onClick={() => setCustomSpeech(templateSpeech)}
+                    disabled={!entry}
+                  >
+                    ✎ 自定义
+                  </button>
+                )}
               </div>
-              <div className="cw-speech-scroll">
-                {SPEECH_TEMPLATES.map((st) => {
-                  const on = speechId === st.id;
-                  const preview = speechCtx ? fillSpeech(st, speechCtx) : st.body;
-                  return (
-                    <button
-                      key={st.id}
-                      type="button"
-                      className={`cw-speech-card ${on ? 'active' : ''}`}
-                      onClick={() => setSpeechId(st.id)}
-                    >
-                      <div className="cw-speech-card-row">
-                        <span className="cw-speech-card-name">{st.name}</span>
-                        <span className="cw-speech-card-tone">{st.tone}</span>
-                      </div>
-                      <div className="cw-speech-card-preview">{preview}</div>
-                    </button>
-                  );
-                })}
-              </div>
+              {/* 自定义编辑区 */}
+              {customSpeech !== null && (
+                <div className="cw-speech-custom">
+                  <textarea
+                    className="cw-speech-textarea"
+                    value={customSpeech}
+                    onChange={(e) => setCustomSpeech(e.target.value)}
+                    maxLength={500}
+                    placeholder="在此输入自定义寄语…"
+                  />
+                  <div className="cw-speech-char-count">{customSpeech.length} / 500</div>
+                </div>
+              )}
+              {/* 模板卡片列表（自定义模式下收起） */}
+              {customSpeech === null && (
+                <div className="cw-speech-scroll">
+                  {SPEECH_TEMPLATES.map((st) => {
+                    const on = speechId === st.id;
+                    const preview = speechCtx ? fillSpeech(st, speechCtx) : st.body;
+                    return (
+                      <button
+                        key={st.id}
+                        type="button"
+                        className={`cw-speech-card ${on ? 'active' : ''}`}
+                        onClick={() => { setSpeechId(st.id); setCustomSpeech(null); }}
+                      >
+                        <div className="cw-speech-card-row">
+                          <span className="cw-speech-card-name">{st.name}</span>
+                          <span className="cw-speech-card-tone">{st.tone}</span>
+                        </div>
+                        <div className="cw-speech-card-preview">{preview}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </>
         )}
