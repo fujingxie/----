@@ -412,8 +412,45 @@ const CertWorkshop = ({ students, currentClass, user, activeSection, onSwitchSec
     }
   }, [entry, rtype.label]);
 
-  // 打印
-  const handlePrint = useCallback(() => { window.print(); }, []);
+  // 打印（新窗口，只含证书卡片，避免打印整个页面布局）
+  const handlePrint = useCallback(() => {
+    if (!cardRef.current || !entry) return;
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) return;
+
+    // outerHTML 保留所有 inline style，base href 让相对路径图片也能加载
+    const cardHtml = cardRef.current.outerHTML;
+
+    printWin.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${entry.name} · 荣誉证书</title>
+  <base href="${window.location.origin}">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&family=Noto+Sans+SC:wght@400;600;700&display=swap">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; background: #fff;
+    }
+    @page { size: A4 landscape; margin: 8mm; }
+    img { max-width: 100%; }
+  </style>
+</head>
+<body>
+  ${cardHtml}
+  <script>
+    // 等字体 & 图片加载后再打印
+    window.onload = function () {
+      setTimeout(function () { window.print(); window.close(); }, 600);
+    };
+  </script>
+</body>
+</html>`);
+    printWin.document.close();
+  }, [entry]);
 
   return (
     <div className="cw-root">

@@ -1199,12 +1199,23 @@
   -webkit-box-orient: vertical;
 }
 
-/* 打印时隐藏 UI 元素 */
+/* 打印降级（当浏览器阻止新窗口弹出时，window.print() 作为 fallback） */
 @media print {
-  .hw-no-print { display: none !important; }
+  /* 隐藏所有 UI 铬层 */
+  .hw-no-print,
+  .sw2-rail,
+  .cw-filter-bar,
+  .cw-nav-bar,
+  .cw-speech-strip {
+    display: none !important;
+  }
+  /* 去掉纸张纹理背景，留白 */
   .cw-card-stage {
     background: none !important;
     padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
   .cert-card {
     page-break-inside: avoid;
