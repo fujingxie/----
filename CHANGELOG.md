@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-04-27 — 激活码管理优化
+
+**功能**：
+- 「永久会员」标签全面改为「超管账号」（选项列表 / 过滤器 / 用户表 / 管理日志格式化）
+- 有效天数输入框改为下拉选项：7 天 / 1 个月（30天） / 永久，单个创建与批量生成均生效
+- 激活码筛选区新增关键词搜索框，前端本地按激活码字符串实时过滤
+- 新增「批量删除」按钮：仅删除 `used_count = 0` 的未使用/已作废码，已使用的拒绝操作
+
+**修改范围**：
+- `src/components/Admin/AdminConsole.jsx` — 标签重命名、下拉替换、搜索输入、删除按钮
+- `src/components/Admin/AdminConsole.css` — `.batch-delete-btn.danger` 样式
+- `src-server/index.js` — 新增 `handleBatchDeleteActivationCodes` handler 与路由
+- `src/api/client.js` — 新增 `deleteAdminCodesBatch`
+- `src/App.jsx` — 新增 `handleAdminBatchDeleteCodes` + 传 prop
+
+**关键决策**：
+- 批量删除只删未使用码，保留审计记录（已使用的码不可删）
+- 服务端逐个校验 `used_count`，拒绝整批（而非跳过个别）以防误操作
+
+---
+
 ## 2026-04-24 — 荣誉工坊 Module 2 & 3（光荣榜证书 + 毕业证书）
 
 **功能**：
