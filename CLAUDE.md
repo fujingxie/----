@@ -105,6 +105,19 @@
 - 衰减只扣**本宠经验**，不扣累积经验
 - 周末/节假日可配置暂停
 
+## 线上操作必须经用户确认（重要）
+
+以下所有涉及线上环境的操作，**必须先告知用户、得到明确同意后才能执行**：
+
+- `git push`（推送到远端，触发 Cloudflare 自动构建部署）
+- `npm run db:init:remote`（对线上 D1 执行 migration）
+- 任何 `wrangler` 命令中带 `--remote` 或不带 `--local` 的（操作线上 D1 / KV / R2）
+- 直接调用线上 API 修改数据（如通过 curl / fetch 操作生产数据库）
+
+**本地操作**（`dev:web`、`dev:api`、`db:init:local`、`npm run build`、`npm run lint`）不受此限制，可自主执行。
+
+---
+
 ## 工作流（单人单 agent）
 
 1. **一个分支就够了**：直接在 `main` 上开发、提交。不再建 `claude/*` 分支或 worktree
@@ -114,6 +127,7 @@
    - commit message 用中文简述（动词开头：新增 / 修复 / 优化 / 重构）
    - 追加到 `CHANGELOG.md`（只增不改），重要功能额外在 `docs/plans/` 建设计文档
    - 更新 `STATUS.md`（覆盖，反映最新状态）
+   - **推送前先告知用户，得到确认再 `git push`**
 4. **设计先行**：复杂功能（3+ 文件）先让 agent 出 plan 并归档到 `docs/plans/YYYY-MM-DD-feature.md`，再动手
 
 ## 已知陷阱
