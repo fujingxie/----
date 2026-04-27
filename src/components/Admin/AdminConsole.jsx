@@ -44,7 +44,7 @@ const USER_LEVEL_OPTIONS = [
   { value: 'temporary', label: '临时体验' },
   { value: 'vip1', label: '会员一级' },
   { value: 'vip2', label: '会员二级' },
-  { value: 'permanent', label: '永久会员' },
+  { value: 'permanent', label: '超管账号' },
 ];
 
 const USER_ROLE_OPTIONS = [
@@ -67,7 +67,13 @@ const USER_REGISTER_SOURCE_OPTIONS = [
 const CODE_LEVEL_OPTIONS = [
   { value: 'vip1', label: '会员一级' },
   { value: 'vip2', label: '会员二级' },
-  { value: 'permanent', label: '永久会员' },
+  { value: 'permanent', label: '超管账号' },
+];
+
+const EXPIRES_IN_DAYS_OPTIONS = [
+  { value: '7',  label: '7 天' },
+  { value: '30', label: '1 个月' },
+  { value: '',   label: '永久' },
 ];
 
 const CODE_STATUS_OPTIONS = [
@@ -81,14 +87,14 @@ const CODE_LEVEL_FILTER_OPTIONS = [
   { value: 'all', label: '全部等级' },
   { value: 'vip1', label: '会员一级' },
   { value: 'vip2', label: '会员二级' },
-  { value: 'permanent', label: '永久会员' },
+  { value: 'permanent', label: '超管账号' },
 ];
 
 const TOOLBOX_LEVEL_OPTIONS = [
   { value: 'temporary', label: '全员可用' },
   { value: 'vip1', label: '会员一级' },
   { value: 'vip2', label: '会员二级' },
-  { value: 'permanent', label: '永久会员' },
+  { value: 'permanent', label: '超管账号' },
 ];
 
 const TOOLBOX_TOOL_OPTIONS = [
@@ -179,7 +185,7 @@ const formatAdminLogDetail = (detail) => {
     .replace(/temporary/g, '临时体验')
     .replace(/vip1/g, '会员一级')
     .replace(/vip2/g, '会员二级')
-    .replace(/permanent/g, '永久会员')
+    .replace(/permanent/g, '超管账号')
     .replace(/activation_code/g, '激活码注册')
     .replace(/free_register/g, '免激活注册')
     .replace(/channel_register/g, '渠道免激活注册')
@@ -236,6 +242,7 @@ function AdminConsole({
   onUpdateCode,
   onBatchUpdateCodes,
   onBatchRevokeCodes,
+  onBatchDeleteCodes,
 }) {
   const [query, setQuery] = useState('');
   const [codeForm, setCodeForm] = useState(EMPTY_CODE_FORM);
@@ -244,6 +251,7 @@ function AdminConsole({
   const [logFilter, setLogFilter] = useState('all');
   const [codeStatusFilter, setCodeStatusFilter] = useState('all');
   const [codeLevelFilter, setCodeLevelFilter] = useState('all');
+  const [codeSearch, setCodeSearch] = useState('');
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [selectedCodeId, setSelectedCodeId] = useState(null);
   const [adminDetailUser, setAdminDetailUser] = useState(null);
@@ -489,19 +497,15 @@ function AdminConsole({
   }, [adminLogs, logFilter, logQuery, logDateRange]);
 
   const filteredCodes = useMemo(() => {
+    const q = codeSearch.trim().toUpperCase();
     const baseList = activationCodes.filter((code) => {
-      if (codeStatusFilter !== 'all' && code.status !== codeStatusFilter) {
-        return false;
-      }
-
-      if (codeLevelFilter !== 'all' && code.level !== codeLevelFilter) {
-        return false;
-      }
-
+      if (codeStatusFilter !== 'all' && code.status !== codeStatusFilter) return false;
+      if (codeLevelFilter !== 'all' && code.level !== codeLevelFilter) return false;
+      if (q && !code.code.includes(q)) return false;
       return true;
     });
     return sortBy(baseList, codeSort);
-  }, [activationCodes, codeLevelFilter, codeStatusFilter, codeSort]);
+  }, [activationCodes, codeLevelFilter, codeStatusFilter, codeSearch, codeSort]);
 
   const channelStatsByCode = useMemo(() => {
     const summary = {};
@@ -1604,6 +1608,15 @@ function AdminConsole({
                   ))}
                 </select>
               </label>
+              <label className="admin-filter-field">
+                <span>搜索激活码</span>
+                <input
+                  className="glass-input compact"
+                  placeholder="输入关键词..."
+                  value={codeSearch}
+                  onChange={(event) => { setCodeSearch(event.target.value); setCodePage(1); }}
+                />
+              </label>
             </div>
             <div className="admin-code-actions-row">
               <button className="select-all-btn" onClick={toggleSelectAllCodes} type="button">
@@ -1658,6 +1671,17 @@ function AdminConsole({
               >
                 批量作废 ({selectedCodeIds.length})
               </button>
+              <button
+                className="batch-delete-btn danger"
+                disabled={selectedCodeIds.length === 0 || isMutating}
+                onClick={async () => {
+                  await onBatchDeleteCodes(selectedCodeIds);
+                  setSelectedCodeIds([]);
+                }}
+                type="button"
+              >
+                批量删除 ({selectedCodeIds.length})
+              </button>
             </div>
           </div>
 
@@ -1702,14 +1726,17 @@ function AdminConsole({
               </label>
               <label className="admin-field">
                 <span>有效天数</span>
-                <input
+                <select
                   className="glass-input compact"
-                  type="number"
-                  min="1"
                   value={codeForm.expires_in_days}
                   onChange={(event) => setCodeForm((prev) => ({ ...prev, expires_in_days: event.target.value }))}
-                  placeholder="例如 30"
-                />
+                >
+                  {EXPIRES_IN_DAYS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="admin-field">
                 <span>可使用次数</span>
@@ -1767,14 +1794,17 @@ function AdminConsole({
               </label>
               <label className="admin-field">
                 <span>有效天数</span>
-                <input
+                <select
                   className="glass-input compact"
-                  type="number"
-                  min="1"
                   value={batchForm.expires_in_days}
                   onChange={(event) => setBatchForm((prev) => ({ ...prev, expires_in_days: event.target.value }))}
-                  placeholder="例如 30"
-                />
+                >
+                  {EXPIRES_IN_DAYS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="admin-field">
                 <span>可使用次数</span>

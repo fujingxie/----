@@ -1277,3 +1277,13 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* 激活码批量删除按钮（比作废更重的红） */
+.batch-delete-btn.danger {
+  background: rgba(220, 38, 38, 0.15);
+  color: #dc2626;
+}
+
+.batch-delete-btn.danger:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.25);
+}

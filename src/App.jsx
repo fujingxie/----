@@ -54,6 +54,7 @@ import {
   redeemShopItem,
   resetAdminUserPassword,
   revokeAdminCodesBatch,
+  deleteAdminCodesBatch,
   undoLog,
   updatePassword,
   updateFreeRegisterConfig,
@@ -1859,6 +1860,32 @@ function App() {
     }
   };
 
+  const handleAdminBatchDeleteCodes = async (codeIds) => {
+    if (!user || !isSuperAdmin || codeIds.length === 0) return;
+
+    const confirmed = await requestConfirm({
+      title: '批量删除激活码',
+      message: `确定要彻底删除这 ${codeIds.length} 个激活码吗？删除后无法恢复，已使用的码不受影响。`,
+      tone: 'danger',
+      confirmLabel: '确认删除',
+    });
+
+    if (!confirmed) return;
+
+    setIsMutating(true);
+    setAppErrorMessage('');
+    try {
+      await deleteAdminCodesBatch({ userId: user.id, codeIds });
+      await refreshAdminConsole();
+      notify(`已删除 ${codeIds.length} 个激活码`);
+    } catch (err) {
+      setAppErrorMessage(err.message);
+      throw err;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
   const handleAdminBatchRevokeCodes = async (codeIds) => {
     if (!user || !isSuperAdmin || codeIds.length === 0) {
       return;
@@ -2331,6 +2358,7 @@ function App() {
               onUpdateCode={handleAdminUpdateCode}
               onBatchUpdateCodes={handleAdminBatchUpdateCodes}
               onBatchRevokeCodes={handleAdminBatchRevokeCodes}
+              onBatchDeleteCodes={handleAdminBatchDeleteCodes}
             />
           )}
         </section>

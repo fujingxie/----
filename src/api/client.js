@@ -327,6 +327,12 @@ export const revokeAdminCodesBatch = ({ userId, codeIds }) =>
     body: JSON.stringify({ userId, codeIds }),
   });
 
+export const deleteAdminCodesBatch = ({ userId, codeIds }) =>
+  request('/admin/codes/batch-delete', {
+    method: 'POST',
+    body: JSON.stringify({ userId, codeIds }),
+  });
+
 export const updateAdminCodesBatch = ({ userId, codeIds, updates }) =>
   request('/admin/codes/batch-update', {
     method: 'POST',

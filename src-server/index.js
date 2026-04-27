@@ -5249,6 +5249,49 @@ async function handleBatchUpdateActivationCodes(db, request) {
   return json({ success: true });
 }
 
+async function handleBatchDeleteActivationCodes(db, request) {
+  const body = await readBody(request);
+  const userId = parseId(body.userId);
+  const codeIds = Array.isArray(body.codeIds)
+    ? Array.from(new Set(body.codeIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)))
+    : [];
+
+  if (!userId) return error('缺少有效的教师身份');
+  if (codeIds.length === 0) return error('请至少选择一个激活码');
+
+  await assertSuperAdmin(db, userId);
+
+  const placeholders = codeIds.map(() => '?').join(', ');
+  const result = await db
+    .prepare(`SELECT id, code, used_count FROM activation_codes WHERE id IN (${placeholders})`)
+    .bind(...codeIds)
+    .all();
+
+  const targetCodes = result.results || [];
+  if (targetCodes.length !== codeIds.length) return error('部分激活码不存在');
+
+  // 已使用的激活码不允许删除
+  const usedCodes = targetCodes.filter((c) => Number(c.used_count || 0) > 0);
+  if (usedCodes.length > 0) {
+    return error(
+      `包含 ${usedCodes.length} 个已使用的激活码（${usedCodes.slice(0, 3).map((c) => c.code).join('、')}${usedCodes.length > 3 ? ' 等' : ''}），不可删除`,
+    );
+  }
+
+  await db
+    .prepare(`DELETE FROM activation_codes WHERE id IN (${placeholders})`)
+    .bind(...codeIds)
+    .run();
+
+  await appendAdminLog(db, {
+    userId,
+    actionType: '激活码管理',
+    detail: `批量删除了 ${targetCodes.length} 个未使用激活码：${targetCodes.slice(0, 8).map((c) => c.code).join('、')}${targetCodes.length > 8 ? ' 等' : ''}`,
+  });
+
+  return json({ success: true });
+}
+
 async function handleBatchRevokeActivationCodes(db, request) {
   const body = await readBody(request);
   const userId = parseId(body.userId);
@@ -5510,6 +5553,10 @@ export default {
 
       if (path === '/api/admin/codes' && request.method === 'POST') {
         return await handleCreateActivationCode(db, request);
+      }
+
+      if (path === '/api/admin/codes/batch-delete' && request.method === 'POST') {
+        return await handleBatchDeleteActivationCodes(db, request);
       }
 
       if (path === '/api/admin/codes/batch-revoke' && request.method === 'POST') {
