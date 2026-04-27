@@ -4400,8 +4400,8 @@ async function handleCreateCustomPet(db, request) {
     return error('宠物名称不能为空', 400);
   }
 
-  if (!['animal', 'plant', 'dinosaur', 'robot'].includes(category)) {
-    return error('无效的分类', 400);
+  if (!category) {
+    return error('分类不能为空', 400);
   }
 
   if (imageKeys.some((item) => !item)) {

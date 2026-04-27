@@ -121,7 +121,7 @@ function AdminPetsPanel({ currentUser }) {
     } finally {
       setSaving(false);
     }
-  }, [currentUser?.id, formData, isFormComplete, loadPets, resetForm, saving]);
+  }, [currentUser?.id, customCategory, formData, isFormComplete, loadPets, resetForm, saving]);
 
   const handleDelete = useCallback(async (petId) => {
     if (!window.confirm('确认删除此宠物？已领养该宠物的学生不受影响。')) {
