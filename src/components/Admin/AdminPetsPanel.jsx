@@ -7,6 +7,7 @@ const CATEGORY_OPTIONS = [
   { value: 'plant', label: '植物' },
   { value: 'dinosaur', label: '恐龙' },
   { value: 'robot', label: '机器人' },
+  { value: '__custom__', label: '自定义…' },
 ];
 
 const EMPTY_FORM = {
@@ -26,6 +27,7 @@ function AdminPetsPanel({ currentUser }) {
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState(EMPTY_FORM);
+  const [customCategory, setCustomCategory] = useState('');
   const [uploading, setUploading] = useState({});
   const [saving, setSaving] = useState(false);
 
@@ -61,6 +63,7 @@ function AdminPetsPanel({ currentUser }) {
 
   const resetForm = useCallback(() => {
     setFormData(EMPTY_FORM);
+    setCustomCategory('');
     setUploading({});
     setSaving(false);
   }, []);
@@ -92,10 +95,16 @@ function AdminPetsPanel({ currentUser }) {
 
     try {
       setSaving(true);
+      // 若选了自定义，取输入框里的值；为空时降级为 'custom'
+      const finalCategory =
+        formData.category === '__custom__'
+          ? (customCategory.trim() || 'custom')
+          : formData.category;
+
       await createCustomPet({
         userId: currentUser.id,
         name: formData.name.trim(),
-        category: formData.category,
+        category: finalCategory,
         imageLv1: formData.imageLv1,
         imageLv2: formData.imageLv2,
         imageLv3: formData.imageLv3,
@@ -171,7 +180,13 @@ function AdminPetsPanel({ currentUser }) {
               <select
                 className="glass-input"
                 value={formData.category}
-                onChange={(event) => setFormData((prev) => ({ ...prev, category: event.target.value }))}
+                onChange={(event) => {
+                  setFormData((prev) => ({ ...prev, category: event.target.value }));
+                  // 切换离「自定义」时清空输入内容
+                  if (event.target.value !== '__custom__') {
+                    setCustomCategory('');
+                  }
+                }}
               >
                 {CATEGORY_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -180,6 +195,19 @@ function AdminPetsPanel({ currentUser }) {
                 ))}
               </select>
             </label>
+            {formData.category === '__custom__' && (
+              <label className="admin-field">
+                <span>自定义分类名</span>
+                <input
+                  className="glass-input"
+                  type="text"
+                  maxLength={20}
+                  placeholder="例如：神兽、海洋生物…"
+                  value={customCategory}
+                  onChange={(event) => setCustomCategory(event.target.value)}
+                />
+              </label>
+            )}
           </div>
 
           <div className="pet-image-upload-grid">
